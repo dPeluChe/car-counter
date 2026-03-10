@@ -1,64 +1,106 @@
-# 🚗 Car Counter
+# Car Counter
 
-Effortlessly count cars in videos using YOLOv8-powered computer vision program for streamlined traffic monitoring.
+Prototipo de conteo y tracking de vehiculos para videos de trafico, con foco actual en glorietas y tomas aereas.
 
-## 🌐 Overview
+## Estado actual
 
-This Python script uses computer vision techniques to count vehicles in a traffic cam video. The implementation is based on the YOLO (You Only Look Once) object detection model, integrated with a SORT (Simple Online and Realtime Tracking) algorithm for tracking.
+El flujo mas avanzado del repo hoy es:
 
-## 🚀  Features
+- `setup_glorieta.py`: configurador interactivo para videos de glorieta
+- `main_glorieta.py`: conteo de rutas A→B por zonas poligonales
 
-- **Object Detection:** Utilizes the YOLO model to detect vehicles in the video.
+Ese flujo ya incluye:
 
-- **Tracking:** Implements the SORT algorithm for real-time tracking of detected vehicles.
+- tracking nativo con `ByteTrack` o `BoT-SORT`
+- fallback a `SORT` cuando hace falta
+- modo `SAHI` para autos pequenos en tomas aereas
+- configuracion de `imgsz`
+- vista global de deteccion
+- calibracion local reescalada
+- filtros geometricos derivados de multiples muestras de vehiculos
 
-- **Counting:** Tracks and counts vehicles crossing predefined lines in the video.
+## Setup
 
-- **Visualization:** Displays the output with graphical overlays indicating the total count and count in specific directions.
+```bash
+python -m venv env
+source env/bin/activate
+pip install -r requirements.txt
+```
 
+## Flujo recomendado para glorieta
 
-## 🛠️ Prerequisites
+1. Abrir el configurador:
 
-Make sure you have the following dependencies installed:
+```bash
+python setup_glorieta.py --video assets/glorieta_fast.MP4
+```
 
-- [Ultralytics YOLO](https://github.com/ultralytics/yolov5)
+2. En el paso 1:
 
-- OpenCV (`cv2`)
+- usa `Vista Global`
+- ajusta `imgsz` si hace falta
+- marca varios autos y 1-2 camiones con `Agregar muestra vehiculo`
+- valida un auto puntual con `Probar YOLO`
 
-- `cvzone`
+3. En el paso 2:
 
-- `SORT` (Simple Online and Realtime Tracking)
+- dibuja un poligono por cada boca calle de entrada/salida
 
-## 🏗️ Setup
+4. En el paso 3:
 
-1. **Clone the repository:**
+- revisa tiles SAHI
+- guarda `config_glorieta.json`
 
-   ```bash
-   git clone https://github.com/serialdotai/car-counter.git
-   cd car-counter
-   ```
+5. Ejecutar el conteo:
 
-2. **Install the required packages:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+```bash
+python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4
+```
 
-3. **Download the YOLO weights file `yolov8l.pt` and place it in a yolo weights directory.**
+## Modos utiles
 
+Demo recomendado para vista aerea:
 
-4. **Run the script:**
-    ```bash
-    python main.py
-    ```
+```bash
+python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4
+```
 
-## ⚙️ Configuration
-Adjust the following parameters in the script as needed:  
-- `lineUp` and `lineDown`: Define the lines for counting vehicles in the video.
-- `mask`: Set the mask image for region of interest.
+Modo rapido sin SAHI:
 
-## 📹 Output
-The processed video will be saved as `result.mp4` in the same directory.
+```bash
+python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4 --no-sahi
+```
 
-## 🙌  Acknowledgments
-- [Ultralytics YOLO](https://github.com/ultralytics/yolov5)
-- ```SORT```
+Smoke test sin ventana:
+
+```bash
+python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4 --headless --max-frames 50 --no-save
+```
+
+## Parametros importantes
+
+- `conf_threshold`: recall vs precision
+- `imgsz`: resolucion de inferencia YOLO
+- `slice_width` / `slice_height`: tamano de tile SAHI
+- `overlap_ratio`: solapamiento SAHI
+- `sample_constraints`: filtros geometricos aprendidos de las muestras del configurador
+
+## Notas practicas
+
+- Para esta glorieta aerea, `imgsz` alto mejora mucho la deteccion.
+- La vista global prioriza recall; luego las muestras ayudan a quitar techos, arboles u objetos grandes.
+- El conteo real usa los filtros geometricos guardados por el configurador.
+
+## Documentacion relacionada
+
+- `ROUNDABOUT_GUIDE.md`
+- `SAHI.md`
+- `QUICKSTART_SAHI.md`
+
+## Dependencias clave
+
+- `ultralytics`
+- `opencv-python`
+- `sahi`
+- `lap`
+- `filterpy`

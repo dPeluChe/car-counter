@@ -13,7 +13,12 @@ torchvision>=0.8.1
 tqdm>=4.64.0
 filterpy==1.4.5
 scikit-image>=0.21.0
+lap>=0.5.12
 customtkinter
 #PIL
 #imageTK
 #authtoken
+
+# SAHI - Slicing Aided Hyper Inference (for enhanced small object detection)
+# See SAHI.md for detailed documentation
+sahi>=0.11.14
