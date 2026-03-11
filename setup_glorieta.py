@@ -99,6 +99,11 @@ class SetupGlorieta(tk.Tk):
         self.vehicle_samples = []
         self.calib_confirmed = False
         self.calib_test_passed = False
+        self.conf_car = tk.DoubleVar(value=0.10)  # TODO-017: confianza por clase
+        self.conf_motorbike = tk.DoubleVar(value=0.10)
+        self.conf_bus = tk.DoubleVar(value=0.10)
+        self.conf_truck = tk.DoubleVar(value=0.10)
+        self._conf_per_class_modified = False
 
         # Zonas
         self.zones = {}               # { name: [(x,y)...] }
@@ -248,6 +253,21 @@ class SetupGlorieta(tk.Tk):
         self.lbl_conf_val.pack()
         self.conf_threshold.trace_add("write", self._update_conf_label)
         self._update_conf_label()
+
+        tk.Frame(self.panel_step0, bg="#313244", height=1).pack(fill="x", pady=4)
+        self._lbl(self.panel_step0, "Confianza por clase (opcional):", color="#A6ADC8")
+        for _n, _v in [("car", self.conf_car), ("moto", self.conf_motorbike),
+                       ("bus", self.conf_bus), ("truck", self.conf_truck)]:
+            _r = tk.Frame(self.panel_step0, bg="#181825")
+            _r.pack(fill="x")
+            tk.Label(_r, text=f"  {_n}:", bg="#181825", fg="#A6ADC8",
+                     font=("Arial", 9), width=6, anchor="w").pack(side="left")
+            tk.Scale(_r, from_=0.05, to=0.95, resolution=0.05,
+                     variable=_v, orient="horizontal",
+                     bg="#181825", fg="#CDD6F4", troughcolor="#313244",
+                     highlightthickness=0,
+                     command=lambda _: self._on_per_class_conf_modified()
+                     ).pack(side="left", fill="x", expand=True)
 
         self._lbl(self.panel_step0, "Resolución de inferencia (imgsz):", color="#CDD6F4")
         tk.Scale(self.panel_step0, from_=640, to=1920, resolution=160,
@@ -466,8 +486,16 @@ class SetupGlorieta(tk.Tk):
                  font=font, justify="left", anchor="w",
                  wraplength=270).pack(fill="x", pady=2)
 
+    def _on_per_class_conf_modified(self):
+        """Marca que al menos un slider de confianza por clase fue tocado (TODO-017)."""
+        self._conf_per_class_modified = True
+
     def _update_conf_label(self, *_):
         self.lbl_conf_val.config(text=f"Valor: {self.conf_threshold.get():.2f}")
+        if not self._conf_per_class_modified:
+            val = self.conf_threshold.get()
+            for v in (self.conf_car, self.conf_motorbike, self.conf_bus, self.conf_truck):
+                v.set(val)
 
     def _update_imgsz_label(self, *_):
         self.lbl_imgsz_val.config(text=f"Valor: {self.infer_imgsz.get()} px")
@@ -566,6 +594,9 @@ class SetupGlorieta(tk.Tk):
         sc = s.get("sample_constraints")
         if sc:
             self._loaded_sample_constraints = sc  # OBS-1: guardar para fallback
+            self.lbl_samples_info.config(
+                text=f"Muestras: cargadas  w[{sc['min_width']}–{sc['max_width']}] h[{sc['min_height']}–{sc['max_height']}]"
+            )
         if "min_area" in s:
             self.min_area.set(int(s["min_area"]))
             self.lbl_min_area.config(text=f"{self.min_area.get()} px²")
@@ -574,6 +605,13 @@ class SetupGlorieta(tk.Tk):
             self.lbl_max_area.config(text=f"{self.max_area.get()} px²")
         if "conf_threshold" in s:
             self.conf_threshold.set(float(s["conf_threshold"]))
+        cp = s.get("conf_per_class")  # TODO-017: cargar confianza por clase
+        if cp:
+            if "car" in cp:       self.conf_car.set(float(cp["car"]))
+            if "motorbike" in cp: self.conf_motorbike.set(float(cp["motorbike"]))
+            if "bus" in cp:       self.conf_bus.set(float(cp["bus"]))
+            if "truck" in cp:     self.conf_truck.set(float(cp["truck"]))
+            self._conf_per_class_modified = True
         if "imgsz" in s:
             self.infer_imgsz.set(int(s["imgsz"]))
 
@@ -765,6 +803,19 @@ class SetupGlorieta(tk.Tk):
 
     def _draw_calib_overlay(self):
         """Dibuja el recuadro de calibración en el canvas."""
+        # TODO-016: bounding boxes de muestras de vehículos
+        for i, sample in enumerate(self.vehicle_samples):
+            b = sample["bbox"]
+            bx1, by1 = self._img_to_screen(b[0], b[1])
+            bx2, by2 = self._img_to_screen(b[2], b[3])
+            self.canvas.create_rectangle(bx1, by1, bx2, by2,
+                                          outline="#A6E3A1", fill="", width=2, dash=(5, 3))
+            self.canvas.create_text(
+                (bx1 + bx2) / 2, min(by1, by2) - 8,
+                text=f"#{i+1} {sample['width']}×{sample['height']}",
+                fill="#A6E3A1", font=("Arial", 8, "bold")
+            )
+
         if self.calib_rect_start and self.calib_rect_end:
             sx1, sy1 = self._img_to_screen(*self.calib_rect_start)
             sx2, sy2 = self._img_to_screen(*self.calib_rect_end)
@@ -782,12 +833,16 @@ class SetupGlorieta(tk.Tk):
 
     def _draw_zones_overlay(self):
         """Dibuja zonas guardadas + polígono actual."""
+        selected = self.selected_zone.get() if hasattr(self, "selected_zone") else ""
         for idx, (name, pts) in enumerate(self.zones.items()):
             color = ZONE_COLORS[idx % len(ZONE_COLORS)]
             screen_pts = [self._img_to_screen(p[0], p[1]) for p in pts]
             flat = [coord for pt in screen_pts for coord in pt]
             if len(flat) >= 4:
-                self.canvas.create_polygon(flat, outline=color, fill=color + "44", width=2)
+                is_sel = (name == selected)  # TODO-013
+                self.canvas.create_polygon(flat, outline=color,
+                                            fill=color + ("88" if is_sel else "44"),
+                                            width=4 if is_sel else 2)
                 cx = sum(p[0] for p in screen_pts) / len(screen_pts)
                 cy = sum(p[1] for p in screen_pts) / len(screen_pts)
                 self.canvas.create_text(cx, cy, text=name, fill=color,
@@ -868,6 +923,26 @@ class SetupGlorieta(tk.Tk):
             self.current_zone_pts.append((ix, iy))
             self.btn_undo_point.config(state="normal")  # TODO-012: hay puntos para deshacer
             self._redraw()
+        elif self.current_step == 1 and not self.zone_drawing and not self.pan_mode:
+            # TODO-013: selección de zona por clic izquierdo
+            ix, iy = self._screen_to_img(event.x, event.y)
+            clicked = None
+            for name, pts in self.zones.items():
+                arr = np.array(pts, dtype=np.int32)
+                if cv2.pointPolygonTest(arr, (float(ix), float(iy)), False) >= 0:
+                    clicked = name
+                    break
+            if clicked:
+                self.selected_zone.set(clicked)
+                keys = list(self.zones.keys())
+                idx = keys.index(clicked)
+                self.zones_listbox.selection_clear(0, "end")
+                self.zones_listbox.selection_set(idx)
+                self.zones_listbox.see(idx)
+            else:
+                self.selected_zone.set("")
+                self.zones_listbox.selection_clear(0, "end")
+            self._redraw()
 
     def _on_drag(self, event):
         if self.pan_mode and self.drag_start:
@@ -944,12 +1019,14 @@ class SetupGlorieta(tk.Tk):
         self.status_var.set(
             "Muestra agregada. Marca 5 autos y 1-2 vehículos grandes para afinar filtros."
         )
+        self._redraw()  # TODO-016: mostrar bbox de nueva muestra en canvas
 
     def _clear_vehicle_samples(self):
         self.vehicle_samples = []
         self._update_samples_label()
         self.lbl_calib_status.config(text="⚠  Muestras limpiadas", fg="#F9E2AF")
         self.status_var.set("Muestras limpiadas")
+        self._redraw()  # TODO-016: limpiar bboxes del canvas
 
     def _sample_constraints(self):
         if not self.vehicle_samples:
@@ -1580,6 +1657,14 @@ class SetupGlorieta(tk.Tk):
                 "imgsz": self.infer_imgsz.get(),
                 "sample_constraints": self._sample_constraints(),
                 "sample_count": len(self.vehicle_samples),
+                **({
+                    "conf_per_class": {
+                        "car": round(self.conf_car.get(), 2),
+                        "motorbike": round(self.conf_motorbike.get(), 2),
+                        "bus": round(self.conf_bus.get(), 2),
+                        "truck": round(self.conf_truck.get(), 2),
+                    }
+                } if self._conf_per_class_modified else {}),  # TODO-017
             },
             "sahi": {
                 "slice_width": self.slice_w.get(),
