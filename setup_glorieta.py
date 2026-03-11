@@ -105,6 +105,12 @@ class SetupGlorieta(tk.Tk):
         self.current_zone_name = tk.StringVar(value="Norte")
         self.display_frame_zones = None  # Frame con zonas dibujadas para mostrar
 
+        # Preview en movimiento (TODO-007)
+        self._preview_playing = False
+        self._preview_job = None
+        self._preview_cap = None
+        self._preview_frame_idx = 0
+
         # SAHI
         self.slice_w = tk.IntVar(value=512)
         self.slice_h = tk.IntVar(value=512)
@@ -118,6 +124,7 @@ class SetupGlorieta(tk.Tk):
 
         # ── UI ──────────────────────────────────────
         self._build_ui()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)  # OBS-3: liberar recursos al cerrar
         self._load_video_and_model()
 
     # ──────────────────────────────────────────────
@@ -330,6 +337,13 @@ class SetupGlorieta(tk.Tk):
         self.btn_del_zone.pack(fill="x", pady=2)
 
         tk.Frame(self.panel_step1, bg="#313244", height=1).pack(fill="x", pady=8)
+        self.btn_preview = tk.Button(self.panel_step1, text="▶  Reproducir zonas",
+                                     command=self._toggle_zone_preview,
+                                     bg="#F9E2AF", fg="#11111B", font=("Arial", 10, "bold"),
+                                     relief="flat", pady=6)
+        self.btn_preview.pack(fill="x", pady=4)
+
+        tk.Frame(self.panel_step1, bg="#313244", height=1).pack(fill="x", pady=8)
         self._lbl(self.panel_step1, "Zonas guardadas:", color="#CDD6F4")
 
         self.zones_frame = tk.Frame(self.panel_step1, bg="#181825")
@@ -497,6 +511,65 @@ class SetupGlorieta(tk.Tk):
             "Repite la calibración en este frame."
         )
 
+    def _load_from_config(self, path):
+        """Carga zonas, settings y parámetros SAHI/tracker de un JSON existente (TODO-008)."""
+        try:
+            with open(path) as f:
+                cfg = json.load(f)
+        except Exception as e:
+            messagebox.showerror("Error cargando config", str(e))
+            return
+
+        # ── Video (solo si el usuario no pasó --video explícitamente) ────────────
+        cfg_video = cfg.get("video_path", "")
+        if cfg_video and cfg_video != self.video_path \
+                and os.path.isfile(cfg_video) and self.video_path == DEFAULT_VIDEO:
+            self.video_path = cfg_video
+            self._load_frame()
+
+        # ── Zonas ──────────────────────────────────────────────────
+        raw_zones = cfg.get("zones", {})
+        if raw_zones:
+            self.zones = {name: [list(p) for p in pts] for name, pts in raw_zones.items()}
+            self._refresh_zones_list()
+            self._redraw_zones()
+
+        # ── Preservar config completo para merge al guardar (OBS-2) ──────
+        self._loaded_config = cfg
+
+        # ── Settings ─────────────────────────────────────────────
+        s = cfg.get("settings", {})
+        sc = s.get("sample_constraints")
+        if sc:
+            self._loaded_sample_constraints = sc  # OBS-1: guardar para fallback
+        if "min_area" in s:
+            self.min_area.set(int(s["min_area"]))
+            self.lbl_min_area.config(text=f"{self.min_area.get()} px²")
+        if "max_area" in s:
+            self.max_area.set(int(s["max_area"]))
+            self.lbl_max_area.config(text=f"{self.max_area.get()} px²")
+        if "conf_threshold" in s:
+            self.conf_threshold.set(float(s["conf_threshold"]))
+        if "imgsz" in s:
+            self.infer_imgsz.set(int(s["imgsz"]))
+
+        # ── SAHI ────────────────────────────────────────────────
+        sahi = cfg.get("sahi", {})
+        if "slice_width" in sahi:   self.slice_w.set(int(sahi["slice_width"]))
+        if "slice_height" in sahi:  self.slice_h.set(int(sahi["slice_height"]))
+        if "overlap_ratio" in sahi: self.overlap.set(float(sahi["overlap_ratio"]))
+
+        # ── Tracker ──────────────────────────────────────────────
+        t = cfg.get("tracker", {})
+        if "max_age" in t:       self.max_age.set(int(t["max_age"]))
+        if "min_hits" in t:      self.min_hits.set(int(t["min_hits"]))
+        if "iou_threshold" in t: self.iou_thresh.set(float(t["iou_threshold"]))
+
+        n = len(self.zones)
+        self.status_var.set(
+            f"✅ Config cargada: {n} zona{'s' if n != 1 else ''} — {os.path.basename(path)}"
+        )
+
     def _choose_video(self):
         path = filedialog.askopenfilename(
             title="Seleccionar video",
@@ -510,10 +583,16 @@ class SetupGlorieta(tk.Tk):
     # ──────────────────────────────────────────────
     # Navegación entre pasos
     # ──────────────────────────────────────────────
+    def _on_close(self):
+        """Libera el VideoCapture del preview antes de destruir la ventana (OBS-3)."""
+        self._stop_zone_preview()
+        self.destroy()
+
     def _go_to_step(self, idx):
         self._activate_step(idx)
 
     def _activate_step(self, idx):
+        self._stop_zone_preview()  # TODO-007: detener preview al cambiar de paso
         self.current_step = idx
         # Highlight active tab
         for i, btn in enumerate(self.tab_btns):
@@ -844,7 +923,7 @@ class SetupGlorieta(tk.Tk):
 
     def _sample_constraints(self):
         if not self.vehicle_samples:
-            return None
+            return getattr(self, "_loaded_sample_constraints", None)  # OBS-1: fallback a constraints cargadas
         widths = [s["width"] for s in self.vehicle_samples]
         heights = [s["height"] for s in self.vehicle_samples]
         areas = [s["area"] for s in self.vehicle_samples]
@@ -1232,6 +1311,7 @@ class SetupGlorieta(tk.Tk):
     # PASO 2: Zonas
     # ──────────────────────────────────────────────
     def _start_zone_draw(self):
+        self._stop_zone_preview()  # TODO-007: pausar preview al empezar a dibujar
         name = self.current_zone_name.get().strip()
         if not name:
             messagebox.showwarning("Zona", "Escribe un nombre para la zona.")
@@ -1306,6 +1386,81 @@ class SetupGlorieta(tk.Tk):
         self.display_frame_zones = base
         self._redraw()
 
+    def _toggle_zone_preview(self):
+        """Inicia o pausa el preview de zonas en movimiento (TODO-007)."""
+        if self._preview_playing:
+            self._stop_zone_preview()
+        else:
+            self._start_zone_preview()
+
+    def _start_zone_preview(self):
+        """Abre el video y empieza a avanzar frames con las zonas superpuestas."""
+        if self.zone_drawing:
+            self.status_var.set("⚠ Termina de dibujar la zona actual antes de reproducir.")
+            return
+        self._preview_playing = True
+        self._preview_frame_idx = self.current_frame_idx
+        self._preview_cap = cv2.VideoCapture(self.video_path)
+        self._preview_cap.set(cv2.CAP_PROP_POS_FRAMES, self._preview_frame_idx)
+        self.btn_preview.config(text="⏸  Pausar", bg="#F38BA8", fg="#11111B")
+        self.status_var.set("▶ Reproduciendo con zonas — ⏸ para pausar")
+        self._zone_preview_tick()
+
+    def _stop_zone_preview(self):
+        """Pausa el preview y restaura el frame estático con zonas."""
+        if not self._preview_playing and self._preview_job is None:
+            return
+        self._preview_playing = False
+        if self._preview_job is not None:
+            self.after_cancel(self._preview_job)
+            self._preview_job = None
+        if self._preview_cap is not None:
+            self._preview_cap.release()
+            self._preview_cap = None
+        if hasattr(self, "btn_preview") and self.btn_preview:
+            self.btn_preview.config(text="▶  Reproducir zonas", bg="#F9E2AF", fg="#11111B")
+        self._redraw_zones()
+
+    def _zone_preview_tick(self):
+        """Avanza el video 5 frames y actualiza el canvas (llamado vía after())."""
+        if not self._preview_playing or self._preview_cap is None:
+            return
+        SKIP = 5  # frames a saltar por tick para mayor fluidez en Tkinter
+        for _ in range(SKIP - 1):
+            self._preview_cap.grab()
+        ret, frame = self._preview_cap.read()
+        self._preview_frame_idx += SKIP
+
+        if not ret or self._preview_frame_idx >= self.total_frames:
+            # Llegó al final → reiniciar en loop
+            self._preview_frame_idx = 0
+            self._preview_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            self._preview_job = self.after(80, self._zone_preview_tick)
+            return
+
+        # Renderizar frame con zonas superpuestas (OBS-2: un solo overlay + un solo addWeighted)
+        base = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        overlay = base.copy()
+        zone_meta = []
+        for idx, (name, pts) in enumerate(self.zones.items()):
+            color_hex = ZONE_COLORS[idx % len(ZONE_COLORS)].lstrip("#")
+            r, g, b = int(color_hex[0:2], 16), int(color_hex[2:4], 16), int(color_hex[4:6], 16)
+            np_pts = np.array(pts, dtype=np.int32)
+            cv2.fillPoly(overlay, [np_pts], (r, g, b))
+            zone_meta.append((name, pts, (r, g, b)))
+        base = cv2.addWeighted(base, 0.75, overlay, 0.25, 0)
+        for name, pts, color in zone_meta:
+            np_pts = np.array(pts, dtype=np.int32)
+            cv2.polylines(base, [np_pts], True, color, 2)
+            cx = int(np.mean([p[0] for p in pts]))
+            cy = int(np.mean([p[1] for p in pts]))
+            cv2.putText(base, name, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+
+        self.display_frame_zones = base
+        self._redraw()
+        self.status_var.set(f"▶ Frame {self._preview_frame_idx}/{self.total_frames}  |  ⏸ para pausar")
+        self._preview_job = self.after(80, self._zone_preview_tick)  # ~12 fps efectivos
+
     def _confirm_zones(self):
         if not self.zones:
             messagebox.showwarning("Zonas", "Define al menos 2 zonas (una entrada, una salida).")
@@ -1362,6 +1517,14 @@ class SetupGlorieta(tk.Tk):
             "model_path": MODEL_PATH,
         }
 
+        # OBS-2: preservar campos extra del JSON original que el configurador no gestiona
+        if hasattr(self, "_loaded_config"):
+            for section in ("settings", "sahi", "tracker"):
+                loaded = self._loaded_config.get(section, {})
+                for key, val in loaded.items():
+                    if key not in config.get(section, {}):
+                        config.setdefault(section, {})[key] = val
+
         try:
             with open(OUTPUT_CONFIG, "w") as f:
                 json.dump(config, f, indent=2)
@@ -1387,7 +1550,7 @@ if __name__ == "__main__":
     parser.add_argument("--video", type=str, default=DEFAULT_VIDEO,
                         help="Ruta al video de la glorieta")
     parser.add_argument("--config", type=str, default=OUTPUT_CONFIG,
-                        help="Archivo de configuración de salida")
+                        help="Archivo de configuración (entrada y salida). Si existe, se carga automáticamente.")
     args = parser.parse_args()
 
     OUTPUT_CONFIG = args.config
@@ -1395,5 +1558,7 @@ if __name__ == "__main__":
     if args.video != DEFAULT_VIDEO:
         app.video_path = args.video
         app._load_frame()
+    if os.path.isfile(args.config):  # TODO-008: cargar config existente
+        app._load_from_config(args.config)
 
     app.mainloop()

@@ -116,6 +116,8 @@ tracker_cfg      = config.get("tracker", {})
 VIDEO_PATH   = args.video  or config.get("video_path", "assets/glorieta_normal.mp4")
 MODEL_PATH   = args.model  or config.get("model_path", "models/yolo/yolov11l.pt")
 CONF_THRESH  = settings.get("conf_threshold", 0.10)
+CONF_PER_CLASS = settings.get("conf_per_class", {})             # TODO-005: umbral por clase
+EFFECTIVE_CONF = min(min(CONF_PER_CLASS.values()), CONF_THRESH) if CONF_PER_CLASS else CONF_THRESH  # TODO-005
 INFER_IMGSZ  = args.imgsz or settings.get("imgsz", 1600)
 MIN_AREA     = settings.get("min_area", 0)
 MAX_AREA     = settings.get("max_area", 999999)
@@ -142,6 +144,9 @@ print(f"🎯  Tracker:  {args.tracker}")
 print(f"🗺   Zonas:    {list(zones_config.keys())}")
 print(f"\n⚙️   Detección:")
 print(f"    Confianza: {CONF_THRESH}  |  ImgSz: {INFER_IMGSZ}  |  Área: [{MIN_AREA}–{MAX_AREA}] px²")
+if CONF_PER_CLASS:
+    print(f"    Conf por clase: { {k: v for k, v in sorted(CONF_PER_CLASS.items())} }")
+    print(f"    Conf efectiva para YOLO: {EFFECTIVE_CONF}")
 if sample_constraints:
     print(f"    Filtro geom: w[{MIN_WIDTH}–{MAX_WIDTH}] h[{MIN_HEIGHT}–{MAX_HEIGHT}] aspect[{MIN_ASPECT:.2f}–{MAX_ASPECT:.2f}]")
 if USE_SAHI:
@@ -205,7 +210,7 @@ if USE_SAHI:
         detection_model_sahi = AutoDetectionModel.from_pretrained(
             model_type="yolov8",
             model_path=MODEL_PATH,
-            confidence_threshold=CONF_THRESH,
+            confidence_threshold=EFFECTIVE_CONF,  # TODO-005: mínimo entre clases
             device=args.device,
         )
         print("✅  SAHI listo")
@@ -331,6 +336,10 @@ def bbox_iou(box_a, box_b):
     area_b = max(0, bx2 - bx1) * max(0, by2 - by1)
     denom = area_a + area_b - inter_area
     return inter_area / denom if denom > 0 else 0.0
+
+def _conf_for(cls_name):
+    """Retorna el umbral de confianza para una clase (TODO-005)."""
+    return CONF_PER_CLASS.get(cls_name, CONF_THRESH)
 
 def passes_geometry_filter(x1, y1, x2, y2):
     width = max(1, x2 - x1)
@@ -472,11 +481,14 @@ def format_time(s):
     return f"{h}h {m}m {s}s" if h else (f"{m}m {s}s" if m else f"{s}s")
 
 def draw_zones(frame):
+    overlay = frame.copy()  # TODO-004: un solo overlay para todas las zonas
+    zone_meta = []
     for idx, (name, pts) in enumerate(zones_np.items()):
         color = ZONE_COLORS_BGR[idx % len(ZONE_COLORS_BGR)]
-        overlay = frame.copy()
         cv2.fillPoly(overlay, [pts], color)
-        cv2.addWeighted(overlay, 0.18, frame, 0.82, 0, frame)
+        zone_meta.append((name, pts, color))
+    cv2.addWeighted(overlay, 0.18, frame, 0.82, 0, frame)  # TODO-004: un solo blend
+    for name, pts, color in zone_meta:
         cv2.polylines(frame, [pts], True, color, 2)
         cx = int(np.mean(pts[:, 0]))
         cy = int(np.mean(pts[:, 1]))
@@ -569,6 +581,8 @@ try:
                 conf_val = pred.score.value
                 if cls_name not in VEHICLE_CLASSES:
                     continue
+                if conf_val < _conf_for(cls_name):  # TODO-005
+                    continue
                 x1, y1, x2, y2 = int(bbox.minx), int(bbox.miny), int(bbox.maxx), int(bbox.maxy)
                 if not passes_geometry_filter(x1, y1, x2, y2):
                     continue
@@ -576,7 +590,7 @@ try:
                 det_classes.append(cls_name)
             detections = np.array(det_list) if det_list else np.empty((0, 5))  # TODO-001
         elif TRACKER_BACKEND == "sort":
-            results = model_yolo(frame, conf=CONF_THRESH, verbose=False, classes=[2, 3, 5, 7], imgsz=INFER_IMGSZ)
+            results = model_yolo(frame, conf=EFFECTIVE_CONF, verbose=False, classes=[2, 3, 5, 7], imgsz=INFER_IMGSZ)  # TODO-005
             det_list = []  # TODO-001: acumular en lista, convertir una sola vez
             for r in results:
                 for box in r.boxes:
@@ -585,6 +599,8 @@ try:
                     cls_name = COCO_NAMES[cls_id] if cls_id < len(COCO_NAMES) else ""
                     conf_val = float(box.conf[0])
                     if cls_name not in VEHICLE_CLASSES:
+                        continue
+                    if conf_val < _conf_for(cls_name):  # TODO-005
                         continue
                     if not passes_geometry_filter(x1, y1, x2, y2):
                         continue
@@ -619,7 +635,7 @@ try:
             # FastPath: ByteTrack/BoT-SORT nativo — model.track() con persist=True
             track_results = model_yolo.track(
                 frame,
-                conf=CONF_THRESH,
+                conf=EFFECTIVE_CONF,  # TODO-005: mínimo entre clases
                 imgsz=INFER_IMGSZ,
                 tracker=TRACKER_YAML,
                 persist=True,
@@ -637,6 +653,8 @@ try:
                     tid = int(box.id[0])
                     cls_id = int(box.cls[0])
                     cls_name = COCO_NAMES[cls_id] if cls_id < len(COCO_NAMES) else "car"
+                    if float(box.conf[0]) < _conf_for(cls_name):  # TODO-005
+                        continue
                     tracked_boxes.append((x1, y1, x2, y2, tid, cls_name))
             detections = np.array([[b[0], b[1], b[2], b[3], 1.0] for b in tracked_boxes]) \
                 if tracked_boxes else np.empty((0, 5))

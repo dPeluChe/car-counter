@@ -159,3 +159,114 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 - [x] `--output-json custom.json` funciona
 - [x] `--no-save` sin `--output-json` explicito no genera JSON
 - [x] CSV opcional con `--output-csv`
+
+---
+
+## DONE-008: Filtro de confianza diferenciado por clase (TODO-005)
+
+**Fecha:** 2026-03-11
+**Archivo:** `main_glorieta.py`
+
+### Que se hizo
+
+- Campo opcional `conf_per_class` en `config_glorieta.json` con umbrales por clase
+- `EFFECTIVE_CONF` = minimo de todos los umbrales (se pasa al modelo, luego se filtra por clase en post-proceso)
+- Helper `_conf_for(cls_name)` retorna umbral especifico o global como fallback
+- Filtro aplicado en los 3 paths: SAHI (L581), SORT (L600), ByteTrack nativo (L653)
+- Print de umbrales por clase al inicio de ejecucion
+- Backward compatible: sin `conf_per_class` usa `conf_threshold` global
+
+### Criterios cumplidos
+
+- [x] Configs existentes sin `conf_per_class` siguen funcionando igual
+- [x] Con `conf_per_class` definido, cada clase usa su propio umbral
+- [x] El filtro se aplica en los 3 paths de deteccion
+- [x] Se imprime en consola los umbrales por clase al inicio
+- [x] Smoke test pasa
+
+---
+
+## DONE-009: Preview de zonas sobre video en movimiento (TODO-007)
+
+**Fecha:** 2026-03-11
+**Archivo:** `setup_glorieta.py`
+
+### Que se hizo
+
+- Boton "Reproducir zonas" en paso 2 (Zonas) del configurador
+- Video avanza ~12fps (skip 5 frames, tick 80ms) con zonas dibujadas encima
+- Toggle pausa/reproduccion con cambio visual del boton
+- Preview se detiene automaticamente al cambiar de paso o empezar a dibujar zona
+- Al llegar al final del video, reinicia en loop (no crashea)
+- VideoCapture se libera correctamente al pausar
+
+### Criterios cumplidos
+
+- [x] Existe boton de reproduccion en el paso de zonas
+- [x] El video avanza mostrando las zonas superpuestas
+- [x] Se puede pausar y retomar
+- [x] Las zonas ya dibujadas se mantienen visibles durante la reproduccion
+- [x] No crashea si se llega al final del video
+
+---
+
+## DONE-010: Documentar README con estado actual post-limpieza (TODO-011)
+
+**Fecha:** 2026-03-11
+**Archivo:** `README.md`
+
+### Que se hizo
+
+- Actualizada seccion "Documentacion relacionada" con referencias correctas
+- Removidas referencias a `SAHI.md` y `QUICKSTART_SAHI.md` en raiz
+- Agregadas referencias a `docs/TASK_TODO.md` y `docs/TASK_COMPLETED.md`
+- Nota sobre docs archivados en `docs/archived/`
+
+### Criterios cumplidos
+
+- [x] No hay links rotos a archivos que no existen en su ubicacion referenciada
+- [x] Los comandos de ejemplo funcionan tal cual estan escritos
+- [x] La seccion de documentacion refleja la estructura actual del repo
+
+---
+
+## DONE-011: Overlay de zonas optimizado (TODO-004)
+
+**Fecha:** 2026-03-11
+**Archivo:** `main_glorieta.py`
+**Funcion:** `draw_zones()`
+
+### Que se hizo
+
+- Un solo `frame.copy()` → todos los `fillPoly` en el overlay → un solo `addWeighted`
+- Segunda pasada para `polylines` + `putText` sin copias adicionales
+- Alpha ajustado de 0.25 a 0.18 para compensar cambio de multi-pass a single-pass
+
+### Criterios cumplidos
+
+- [x] Solo existe un `frame.copy()` y un `addWeighted` en `draw_zones`
+- [x] La visualizacion es visualmente equivalente (colores semi-transparentes por zona)
+- [x] Smoke test pasa
+
+---
+
+## DONE-012: Cargar configuracion existente en el configurador (TODO-008)
+
+**Fecha:** 2026-03-11
+**Archivo:** `setup_glorieta.py`
+
+### Que se hizo
+
+- Flag `--config` para cargar JSON existente al iniciar el configurador
+- `_load_from_config(path)` carga: zonas, settings, SAHI, tracker, video_path
+- `sample_constraints` cargadas como fallback (`_loaded_sample_constraints`) para evitar perdida al guardar sin nuevas muestras
+- Campos extra del JSON original preservados al guardar (merge por seccion, solo campos ausentes)
+- Sin `--config` o si el archivo no existe, comportamiento identico al original
+
+### Criterios cumplidos
+
+- [x] `--config` carga correctamente zonas, settings, sahi de un JSON existente
+- [x] Las zonas cargadas se visualizan en el canvas
+- [x] Se pueden agregar nuevas zonas o eliminar existentes
+- [x] Guardar genera un JSON valido con los cambios (sin perder sample_constraints ni campos extra)
+- [x] Sin `--config` el comportamiento es identico al actual

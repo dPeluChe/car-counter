@@ -93,9 +93,12 @@ python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fa
 
 ## Documentacion relacionada
 
-- `ROUNDABOUT_GUIDE.md`
-- `SAHI.md`
-- `QUICKSTART_SAHI.md`
+- `ROUNDABOUT_GUIDE.md` — Guia de uso para glorietas
+- `OPTIMIZATION_GUIDE.md` — Ajuste de rendimiento y parametros
+- `docs/TASK_TODO.md` — Backlog de mejoras pendientes
+- `docs/TASK_COMPLETED.md` — Historial de cambios completados
+
+> `SAHI.md` y `QUICKSTART_SAHI.md` están archivados en `docs/archived/`
 
 ## Dependencias clave
 
