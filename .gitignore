@@ -52,7 +52,14 @@ Thumbs.db
 # Video artifacts
 *.mp4
 *.mov
+*.MP4
+*.MOV
 
-#Models
+# Models
 models/
 *.pt
+
+# Local environment
+.envrc
+.python-version
+env.bak/

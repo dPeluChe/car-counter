@@ -1,24 +1,13 @@
-cvzone==1.5.6
 ultralytics>=8.3.0,<9
-hydra-core>=1.2.0
-matplotlib>=3.7.0
 numpy>=1.24.0
 opencv-python==4.10.0.84
 Pillow>=7.1.2
 PyYAML>=5.3.1
-requests>=2.23.0
-scipy>=1.10.0
 torch>=1.7.0
 torchvision>=0.8.1
 tqdm>=4.64.0
 filterpy==1.4.5
-scikit-image>=0.21.0
 lap>=0.5.12
-customtkinter
-#PIL
-#imageTK
-#authtoken
 
-# SAHI - Slicing Aided Hyper Inference (for enhanced small object detection)
-# See SAHI.md for detailed documentation
+# SAHI - Slicing Aided Hyper Inference (deteccion mejorada en tomas aereas)
 sahi>=0.11.14

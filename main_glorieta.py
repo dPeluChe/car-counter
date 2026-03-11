@@ -89,10 +89,6 @@ print("🎯  CONTADOR DE GLORIETA — Car Counter Demo")
 print("=" * 65)
 
 config_path = args.config
-if not os.path.exists(config_path) and config_path == "config_glorieta.json" and os.path.exists("config.json"):
-    print("⚠️   No se encontró config_glorieta.json — usando config.json como fallback")
-    config_path = "config.json"
-
 if not os.path.exists(config_path):
     print(f"❌  No se encontró: {config_path}")
     print("   Ejecuta primero: python setup_glorieta.py")
