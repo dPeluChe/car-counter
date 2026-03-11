@@ -86,6 +86,8 @@ parser.add_argument("--no-output-json", dest="no_output_json", action="store_tru
                     help="No guardar JSON de resultados al terminar")
 parser.add_argument("--output-csv", type=str, default=None,
                     help="Ruta del CSV de rutas (opcional)")
+parser.add_argument("--demo-mode", dest="demo_mode", action="store_true",
+                    help="Panel scoreboard grande para demos y presentaciones (TODO-009)")
 args = parser.parse_args()
 
 # Si --no-save y --output-json no fue especificado explícitamente, suprimir JSON también
@@ -131,7 +133,9 @@ MAX_ASPECT   = sample_constraints.get("max_aspect", 999999.0)
 SLICE_W          = sahi_cfg.get("slice_width",  512)
 SLICE_H          = sahi_cfg.get("slice_height", 512)
 OVERLAP          = sahi_cfg.get("overlap_ratio", 0.2)
+NMS_THRESHOLD_SAHI = sahi_cfg.get("nms_threshold", 0.3)  # TODO-010: NMS post-SAHI
 TRACKER_YAML     = f"{args.tracker}.yaml"
+DEMO_MODE        = args.demo_mode  # TODO-009
 MIN_ORIGIN_FRAMES = settings.get("min_origin_frames", 3)  # frames para confirmar zona origen
 MIN_DEST_FRAMES   = settings.get("min_dest_frames",   3)  # frames para confirmar zona destino (TODO-003)
 
@@ -150,7 +154,7 @@ if CONF_PER_CLASS:
 if sample_constraints:
     print(f"    Filtro geom: w[{MIN_WIDTH}–{MAX_WIDTH}] h[{MIN_HEIGHT}–{MAX_HEIGHT}] aspect[{MIN_ASPECT:.2f}–{MAX_ASPECT:.2f}]")
 if USE_SAHI:
-    print(f"\n🔬  SAHI:    tiles {SLICE_W}×{SLICE_H}  overlap {OVERLAP*100:.0f}%")
+    print(f"\n🔬  SAHI:    tiles {SLICE_W}×{SLICE_H}  overlap {OVERLAP*100:.0f}%  NMS-IoU {NMS_THRESHOLD_SAHI}")
 else:
     print(f"\n⚡  Modo rápido (sin SAHI)")
 print("=" * 65)
@@ -336,6 +340,24 @@ def bbox_iou(box_a, box_b):
     area_b = max(0, bx2 - bx1) * max(0, by2 - by1)
     denom = area_a + area_b - inter_area
     return inter_area / denom if denom > 0 else 0.0
+
+def apply_nms(det_list, det_classes, iou_threshold):
+    """Greedy NMS post-SAHI (TODO-010). Ordena por conf desc y suprime solapadas (IoU > threshold)."""
+    if not det_list:
+        return det_list, det_classes
+    order = sorted(range(len(det_list)), key=lambda i: -det_list[i][4])
+    keep = []
+    suppressed = set()
+    for i in order:
+        if i in suppressed:
+            continue
+        keep.append(i)
+        for j in order:
+            if j == i or j in suppressed:
+                continue
+            if bbox_iou(det_list[i][:4], det_list[j][:4]) > iou_threshold:
+                suppressed.add(j)
+    return [det_list[k] for k in keep], [det_classes[k] for k in keep]
 
 def _conf_for(cls_name):
     """Retorna el umbral de confianza para una clase (TODO-005)."""
@@ -532,6 +554,51 @@ def draw_routes_panel(frame, routes, n_active):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 255, 100), 1, cv2.LINE_AA)
         y += line_h
 
+def draw_scoreboard(frame, routes, n_active):
+    """Panel scoreboard grande para --demo-mode (TODO-009). Posición: top-right."""
+    total_confirmed = sum(routes.values()) if routes else 0
+    sorted_routes = sorted(routes.items(), key=lambda x: -x[1]) if routes else []
+
+    pad = 14
+    row_h = 34
+    panel_h = pad + 62 + row_h * max(len(sorted_routes), 1) + pad
+    panel_w = 390
+    x0 = max(0, VID_W - panel_w - 12)
+    y0 = 10
+
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (x0, y0), (x0 + panel_w, y0 + panel_h), (8, 8, 8), -1)
+    cv2.addWeighted(overlay, 0.65, frame, 0.35, 0, frame)
+    cv2.rectangle(frame, (x0, y0), (x0 + panel_w, y0 + panel_h), (90, 90, 90), 1)
+
+    # ── Contador total grande ─────────────────────────────────────────
+    cv2.putText(frame, f"TOTAL: {total_vehicles_ever}",
+                (x0 + pad, y0 + 40), cv2.FONT_HERSHEY_SIMPLEX, 1.05,
+                (60, 255, 255), 2, cv2.LINE_AA)
+    cv2.putText(frame, f"rutas: {total_confirmed}  activos: {n_active}",
+                (x0 + pad, y0 + 60), cv2.FONT_HERSHEY_SIMPLEX, 0.48,
+                (160, 160, 100), 1, cv2.LINE_AA)
+    cv2.line(frame, (x0 + pad, y0 + 68), (x0 + panel_w - pad, y0 + 68), (70, 70, 70), 1)
+
+    # ── Filas de rutas con color de zona origen ─────────────────────
+    max_count = max(routes.values(), default=1)
+    y = y0 + 76
+    for route, count in sorted_routes:
+        pct = count / total_confirmed * 100 if total_confirmed > 0 else 0
+        origin = route.split("\u2192")[0].strip()
+        color = (150, 200, 150)
+        for zi, zn in enumerate(zone_names):
+            if zn == origin:
+                color = ZONE_COLORS_BGR[zi % len(ZONE_COLORS_BGR)]
+                break
+        bar_w = max(2, int((panel_w - pad * 2 - 100) * count / max_count))
+        cv2.rectangle(frame, (x0 + pad, y + 17), (x0 + pad + bar_w, y + 24), color, -1)
+        cv2.putText(frame, route, (x0 + pad, y + 14),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.62, color, 1, cv2.LINE_AA)
+        cv2.putText(frame, f"{count}  ({pct:.0f}%)", (x0 + panel_w - 94, y + 14),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.60, (220, 220, 100), 1, cv2.LINE_AA)
+        y += row_h
+
 def draw_hud(frame, frame_num, total_f, fps_avg, detections, n_routes_total):
     """HUD inferior con info de procesamiento."""
     h = frame.shape[0]
@@ -588,6 +655,8 @@ try:
                     continue
                 det_list.append([x1, y1, x2, y2, conf_val])
                 det_classes.append(cls_name)
+            if NMS_THRESHOLD_SAHI > 0 and det_list:  # TODO-010: NMS post-SAHI
+                det_list, det_classes = apply_nms(det_list, det_classes, NMS_THRESHOLD_SAHI)
             detections = np.array(det_list) if det_list else np.empty((0, 5))  # TODO-001
         elif TRACKER_BACKEND == "sort":
             results = model_yolo(frame, conf=EFFECTIVE_CONF, verbose=False, classes=[2, 3, 5, 7], imgsz=INFER_IMGSZ)  # TODO-005
@@ -710,7 +779,10 @@ try:
             cv2.putText(frame, label, (x1, max(12, y1 - 5)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.42, color, 1, cv2.LINE_AA)
 
-        draw_routes_panel(frame, routes_matrix, len(tracked_boxes))
+        if DEMO_MODE:  # TODO-009
+            draw_scoreboard(frame, routes_matrix, len(tracked_boxes))
+        else:
+            draw_routes_panel(frame, routes_matrix, len(tracked_boxes))
 
         # FPS
         elapsed = time.time() - t0

@@ -270,3 +270,51 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 - [x] Se pueden agregar nuevas zonas o eliminar existentes
 - [x] Guardar genera un JSON valido con los cambios (sin perder sample_constraints ni campos extra)
 - [x] Sin `--config` el comportamiento es identico al actual
+
+---
+
+## DONE-013: Scoreboard grande para demos (TODO-009)
+
+**Fecha:** 2026-03-11
+**Archivo:** `main_glorieta.py`
+**Funcion:** `draw_scoreboard()`
+
+### Que se hizo
+
+- Flag `--demo-mode` en argparse activa panel scoreboard grande
+- `draw_scoreboard()` renderiza en top-right: contador TOTAL grande (scale 1.05), rutas confirmadas, activos
+- Colores de cada ruta extraidos del nombre de zona origen → `ZONE_COLORS_BGR`
+- Barras de progreso proporcionales al conteo de cada ruta
+- Sin `--demo-mode`, se usa `draw_routes_panel()` identico al original
+
+### Criterios cumplidos
+
+- [x] `--demo-mode` activa el panel grande
+- [x] Sin el flag, la visualizacion es identica a la actual
+- [x] El contador total es visible a distancia en una pantalla 1080p
+- [x] Los colores de ruta corresponden a los colores de zona
+- [x] No se superpone con las zonas ni con los bounding boxes
+
+---
+
+## DONE-014: NMS adicional post-SAHI (TODO-010)
+
+**Fecha:** 2026-03-11
+**Archivo:** `main_glorieta.py`
+
+### Que se hizo
+
+- `apply_nms(det_list, det_classes, iou_threshold)` implementa greedy NMS por conf descendente
+- Reutiliza `bbox_iou()` existente para calcular solapamiento
+- Se aplica solo en el path SAHI, despues de recolectar detecciones y antes de convertir a numpy
+- Umbral configurable desde JSON: `sahi.nms_threshold` (default 0.3)
+- `NMS_THRESHOLD_SAHI > 0` como condicion — poner 0 desactiva el NMS extra
+- Print del umbral al inicio junto con la info SAHI
+
+### Criterios cumplidos
+
+- [x] Existe funcion `apply_nms(det_list, det_classes, iou_threshold)`
+- [x] Se aplica solo en el path SAHI
+- [x] El umbral es configurable desde el config JSON (campo `sahi.nms_threshold`)
+- [x] Reduce duplicados sin eliminar detecciones legitimas cercanas
+- [x] Smoke test pasa
