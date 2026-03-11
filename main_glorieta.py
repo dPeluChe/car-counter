@@ -29,6 +29,7 @@ Uso:
   python main_glorieta.py --benchmark    # Guardar métricas de rendimiento
 """
 
+import csv
 import cv2
 import json
 import math
@@ -79,7 +80,17 @@ parser.add_argument("--max-frames", type=int, default=None,
 parser.add_argument("--tracker", type=str, default="bytetrack",
                     choices=["bytetrack", "botsort", "sort"],
                     help="Algoritmo de tracking: bytetrack (default), botsort o sort fallback")
+parser.add_argument("--output-json", type=str, default="results_glorieta.json",
+                    help="Ruta del JSON de resultados al terminar (default: results_glorieta.json)")
+parser.add_argument("--no-output-json", dest="no_output_json", action="store_true",
+                    help="No guardar JSON de resultados al terminar")
+parser.add_argument("--output-csv", type=str, default=None,
+                    help="Ruta del CSV de rutas (opcional)")
 args = parser.parse_args()
+
+# Si --no-save y --output-json no fue especificado explícitamente, suprimir JSON también
+if args.no_save and args.output_json == "results_glorieta.json":
+    args.no_output_json = True
 
 # ─────────────────────────────────────────────
 # Cargar configuración
@@ -115,10 +126,12 @@ MIN_HEIGHT   = sample_constraints.get("min_height", 0)
 MAX_HEIGHT   = sample_constraints.get("max_height", 999999)
 MIN_ASPECT   = sample_constraints.get("min_aspect", 0.0)
 MAX_ASPECT   = sample_constraints.get("max_aspect", 999999.0)
-SLICE_W      = sahi_cfg.get("slice_width",  512)
-SLICE_H      = sahi_cfg.get("slice_height", 512)
-OVERLAP      = sahi_cfg.get("overlap_ratio", 0.2)
-TRACKER_YAML = f"{args.tracker}.yaml"
+SLICE_W          = sahi_cfg.get("slice_width",  512)
+SLICE_H          = sahi_cfg.get("slice_height", 512)
+OVERLAP          = sahi_cfg.get("overlap_ratio", 0.2)
+TRACKER_YAML     = f"{args.tracker}.yaml"
+MIN_ORIGIN_FRAMES = settings.get("min_origin_frames", 3)  # frames para confirmar zona origen
+MIN_DEST_FRAMES   = settings.get("min_dest_frames",   3)  # frames para confirmar zona destino (TODO-003)
 
 USE_SAHI = not args.no_sahi
 
@@ -291,6 +304,7 @@ tracks_info = {}
 routes_matrix = {}   # { 'Norte → Sur': count }
 
 frame_count = 0
+total_vehicles_ever = 0  # TODO-002: IDs únicos vistos (persiste tras purga de tracks_info)
 start_time = time.time()
 fps_samples = []
 benchmark_data = []
@@ -369,28 +383,34 @@ def update_route_state(trk_id, cx, cy, cls_name="unknown"):
 
     Estados:
       Sin registro    → primera vez que vemos este ID
-      origin          → vehículo detectado en zona A, confirmado (≥MIN_ZONE_FRAMES)
+      origin          → vehículo detectado en zona A, confirmado (≥MIN_ORIGIN_FRAMES)
       transit         → vehículo salió de zona A, circula por la glorieta
       done            → llegó a zona B → ruta A→B contada (no vuelve a contar)
 
-    El umbral MIN_ZONE_FRAMES evita falsos positivos cuando un vehículo
-    roza brevemente una zona al pasar.
+    El umbral MIN_ORIGIN_FRAMES evita falsos positivos cuando un vehículo
+    roza brevemente una zona al pasar (origen).
+    El umbral MIN_DEST_FRAMES aplica el mismo anti-rebote al destino (TODO-003).
     """
-    MIN_ZONE_FRAMES = 3  # frames consecutivos en zona para confirmar origen
+    global total_vehicles_ever
     current_zone = get_zone_for_point(cx, cy)
 
     if trk_id not in tracks_info:
+        total_vehicles_ever += 1
         tracks_info[trk_id] = {
             "state": "origin" if current_zone else "new",
             "origin": current_zone,
             "class": cls_name,
             "zone_frames": 1 if current_zone else 0,
+            "last_seen_frame": frame_count,   # TODO-002
+            "dest_zone": None,                # TODO-003
+            "dest_frames": 0,                 # TODO-003
         }
         if current_zone:
             print(f"  🚗 ID={trk_id:>4}  entró en [{current_zone:>10}]  cls={cls_name}")
         return
 
     info = tracks_info[trk_id]
+    info["last_seen_frame"] = frame_count  # TODO-002: actualizar cada frame visible
 
     if info["state"] == "done":
         return  # ya contado, nada más que hacer
@@ -410,21 +430,35 @@ def update_route_state(trk_id, cx, cy, cls_name="unknown"):
             info["zone_frames"] = info.get("zone_frames", 0) + 1
         elif current_zone is None:
             # Salió de la zona de origen → en tránsito
-            if info.get("zone_frames", 0) >= MIN_ZONE_FRAMES:
+            if info.get("zone_frames", 0) >= MIN_ORIGIN_FRAMES:
                 info["state"] = "transit"
+                info["dest_zone"] = None
+                info["dest_frames"] = 0
             else:
                 # No tenía suficientes frames — descartamos como falso positivo
                 info["state"] = "new"
                 info["origin"] = None
         else:
             # Entró directamente en otra zona (glorieta pequeña) — contar
-            if info.get("zone_frames", 0) >= MIN_ZONE_FRAMES:
+            if info.get("zone_frames", 0) >= MIN_ORIGIN_FRAMES:
                 _register_route(trk_id, origin, current_zone)
         return
 
     if info["state"] == "transit":
         if current_zone and current_zone != info["origin"]:
-            _register_route(trk_id, info["origin"], current_zone)
+            # TODO-003: Anti-rebote destino — confirmar MIN_DEST_FRAMES consecutivos
+            if info.get("dest_zone") == current_zone:
+                info["dest_frames"] = info.get("dest_frames", 0) + 1
+                if info["dest_frames"] >= MIN_DEST_FRAMES:
+                    _register_route(trk_id, info["origin"], current_zone)
+            else:
+                # Nueva zona candidata destino — reiniciar contador
+                info["dest_zone"] = current_zone
+                info["dest_frames"] = 1
+        else:
+            # Fuera de toda zona destino válida — resetear anti-rebote
+            info["dest_zone"] = None
+            info["dest_frames"] = 0
 
 def _register_route(trk_id, origin, destination):
     route_key = f"{origin} → {destination}"
@@ -528,6 +562,7 @@ try:
                 postprocess_match_metric="IOS",
                 verbose=0,
             )
+            det_list = []  # TODO-001: acumular en lista, convertir una sola vez
             for pred in result_sahi.object_prediction_list:
                 bbox = pred.bbox
                 cls_name = pred.category.name
@@ -537,10 +572,12 @@ try:
                 x1, y1, x2, y2 = int(bbox.minx), int(bbox.miny), int(bbox.maxx), int(bbox.maxy)
                 if not passes_geometry_filter(x1, y1, x2, y2):
                     continue
-                detections = np.vstack((detections, [x1, y1, x2, y2, conf_val]))
+                det_list.append([x1, y1, x2, y2, conf_val])
                 det_classes.append(cls_name)
+            detections = np.array(det_list) if det_list else np.empty((0, 5))  # TODO-001
         elif TRACKER_BACKEND == "sort":
             results = model_yolo(frame, conf=CONF_THRESH, verbose=False, classes=[2, 3, 5, 7], imgsz=INFER_IMGSZ)
+            det_list = []  # TODO-001: acumular en lista, convertir una sola vez
             for r in results:
                 for box in r.boxes:
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
@@ -551,8 +588,9 @@ try:
                         continue
                     if not passes_geometry_filter(x1, y1, x2, y2):
                         continue
-                    detections = np.vstack((detections, [x1, y1, x2, y2, conf_val]))
+                    det_list.append([x1, y1, x2, y2, conf_val])
                     det_classes.append(cls_name)
+            detections = np.array(det_list) if det_list else np.empty((0, 5))  # TODO-001
 
         # ── Tracking ──────────────────────────────────────────────────────────
         # Modo sin SAHI: model.track() usa ByteTrack/BoT-SORT nativo de Ultralytics
@@ -607,6 +645,17 @@ try:
         for (x1, y1, x2, y2, trk_id, cls_name) in tracked_boxes:
             cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
             update_route_state(trk_id, cx, cy, cls_name)
+
+        # ── Purga de tracks viejos (TODO-002) ──────────────────────────────────
+        if frame_count % 120 == 0 and frame_count > 0:
+            stale_ids = [
+                tid for tid, tinfo in tracks_info.items()
+                if frame_count - tinfo.get("last_seen_frame", 0) > 200
+            ]
+            for tid in stale_ids:
+                del tracks_info[tid]
+            if stale_ids:
+                print(f"  🧹 Purgados {len(stale_ids)} tracks viejos — activos en memoria: {len(tracks_info)}")
 
         # ── Visualización ─────────────────────────────────────────────────────
         draw_zones(frame)
@@ -709,7 +758,7 @@ print(f"  Tiempo total:      {format_time(total_time)}")
 print(f"  FPS promedio:      {avg_fps:.2f}")
 
 print(f"\n🗺   Zonas configuradas: {', '.join(zone_names)}")
-print(f"🚗  Vehículos rastreados: {len(tracks_info)}")
+print(f"🚗  Vehículos rastreados: {total_vehicles_ever}")
 print(f"✅  Rutas completadas:   {sum(routes_matrix.values())}")
 
 if routes_matrix:
@@ -725,6 +774,38 @@ else:
     print("   1. Las zonas cubren correctamente las bocacalles")
     print("   2. El video tiene suficiente duración")
     print("   3. El conf_threshold no es demasiado alto")
+
+# ── Export de resultados (TODO-006) ───────────────────────────────────────────
+if not args.no_output_json:
+    results_data = {
+        "video": VIDEO_PATH,
+        "config": config_path,
+        "mode": "SAHI" if USE_SAHI else "YOLO",
+        "tracker": TRACKER_BACKEND,
+        "frames_processed": frame_count,
+        "total_frames": TOTAL_F,
+        "duration_seconds": round(DURATION, 2),
+        "processing_time_seconds": round(total_time, 2),
+        "fps_avg": round(avg_fps, 2),
+        "total_vehicles_tracked": total_vehicles_ever,
+        "total_routes_completed": sum(routes_matrix.values()),
+        "routes": dict(sorted(routes_matrix.items(), key=lambda x: -x[1])),
+        "zones": zone_names,
+    }
+    json_path = args.output_json
+    with open(json_path, "w", encoding="utf-8") as jf:
+        json.dump(results_data, jf, ensure_ascii=False, indent=2)
+    print(f"\n📄  Resultados JSON guardados: {json_path}")
+
+if args.output_csv:
+    with open(args.output_csv, "w", newline="", encoding="utf-8") as cf:
+        csv_writer = csv.writer(cf)
+        csv_writer.writerow(["ruta", "conteo", "porcentaje"])
+        total_r = sum(routes_matrix.values())
+        for route, count in sorted(routes_matrix.items(), key=lambda x: -x[1]):
+            pct = count / total_r * 100 if total_r > 0 else 0
+            csv_writer.writerow([route, count, f"{pct:.1f}"])
+    print(f"📊  Resultados CSV guardados: {args.output_csv}")
 
 # Guardar benchmark
 if args.benchmark and benchmark_data:
