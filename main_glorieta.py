@@ -348,14 +348,12 @@ def apply_nms(det_list, det_classes, iou_threshold):
     order = sorted(range(len(det_list)), key=lambda i: -det_list[i][4])
     keep = []
     suppressed = set()
-    for i in order:
+    for pos, i in enumerate(order):
         if i in suppressed:
             continue
         keep.append(i)
-        for j in order:
-            if j == i or j in suppressed:
-                continue
-            if bbox_iou(det_list[i][:4], det_list[j][:4]) > iou_threshold:
+        for j in order[pos + 1:]:
+            if j not in suppressed and bbox_iou(det_list[i][:4], det_list[j][:4]) > iou_threshold:
                 suppressed.add(j)
     return [det_list[k] for k in keep], [det_classes[k] for k in keep]
 
@@ -554,7 +552,7 @@ def draw_routes_panel(frame, routes, n_active):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 255, 100), 1, cv2.LINE_AA)
         y += line_h
 
-def draw_scoreboard(frame, routes, n_active):
+def draw_scoreboard(frame, routes, n_active, total_ever):
     """Panel scoreboard grande para --demo-mode (TODO-009). Posición: top-right."""
     total_confirmed = sum(routes.values()) if routes else 0
     sorted_routes = sorted(routes.items(), key=lambda x: -x[1]) if routes else []
@@ -572,7 +570,7 @@ def draw_scoreboard(frame, routes, n_active):
     cv2.rectangle(frame, (x0, y0), (x0 + panel_w, y0 + panel_h), (90, 90, 90), 1)
 
     # ── Contador total grande ─────────────────────────────────────────
-    cv2.putText(frame, f"TOTAL: {total_vehicles_ever}",
+    cv2.putText(frame, f"TOTAL: {total_ever}",
                 (x0 + pad, y0 + 40), cv2.FONT_HERSHEY_SIMPLEX, 1.05,
                 (60, 255, 255), 2, cv2.LINE_AA)
     cv2.putText(frame, f"rutas: {total_confirmed}  activos: {n_active}",
@@ -780,7 +778,7 @@ try:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.42, color, 1, cv2.LINE_AA)
 
         if DEMO_MODE:  # TODO-009
-            draw_scoreboard(frame, routes_matrix, len(tracked_boxes))
+            draw_scoreboard(frame, routes_matrix, len(tracked_boxes), total_vehicles_ever)
         else:
             draw_routes_panel(frame, routes_matrix, len(tracked_boxes))
 

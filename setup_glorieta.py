@@ -115,6 +115,7 @@ class SetupGlorieta(tk.Tk):
         self.slice_w = tk.IntVar(value=512)
         self.slice_h = tk.IntVar(value=512)
         self.overlap = tk.DoubleVar(value=0.2)
+        self.nms_threshold = tk.DoubleVar(value=0.3)
         self.max_age = tk.IntVar(value=40)
         self.min_hits = tk.IntVar(value=3)
         self.iou_thresh = tk.DoubleVar(value=0.2)
@@ -393,6 +394,12 @@ class SetupGlorieta(tk.Tk):
                  highlightthickness=0, command=lambda _: self._update_tile_preview()
                  ).pack(fill="x")
 
+        self._lbl(self.panel_step2, "NMS post-SAHI (IoU threshold):", color="#CDD6F4")
+        tk.Scale(self.panel_step2, from_=0.0, to=0.9, resolution=0.05,
+                 variable=self.nms_threshold, orient="horizontal",
+                 bg="#181825", fg="#CDD6F4", troughcolor="#313244",
+                 highlightthickness=0).pack(fill="x")
+
         self.lbl_tiles = tk.Label(self.panel_step2, text="Tiles por frame: —",
                                    bg="#181825", fg="#89B4FA", font=("Arial", 10))
         self.lbl_tiles.pack(pady=4)
@@ -555,9 +562,10 @@ class SetupGlorieta(tk.Tk):
 
         # ── SAHI ────────────────────────────────────────────────
         sahi = cfg.get("sahi", {})
-        if "slice_width" in sahi:   self.slice_w.set(int(sahi["slice_width"]))
-        if "slice_height" in sahi:  self.slice_h.set(int(sahi["slice_height"]))
-        if "overlap_ratio" in sahi: self.overlap.set(float(sahi["overlap_ratio"]))
+        if "slice_width" in sahi:    self.slice_w.set(int(sahi["slice_width"]))
+        if "slice_height" in sahi:   self.slice_h.set(int(sahi["slice_height"]))
+        if "overlap_ratio" in sahi:  self.overlap.set(float(sahi["overlap_ratio"]))
+        if "nms_threshold" in sahi:  self.nms_threshold.set(float(sahi["nms_threshold"]))
 
         # ── Tracker ──────────────────────────────────────────────
         t = cfg.get("tracker", {})
@@ -1507,6 +1515,7 @@ class SetupGlorieta(tk.Tk):
                 "slice_width": self.slice_w.get(),
                 "slice_height": self.slice_h.get(),
                 "overlap_ratio": round(self.overlap.get(), 2),
+                "nms_threshold": round(self.nms_threshold.get(), 2),
             },
             "tracker": {
                 "max_age": self.max_age.get(),
