@@ -318,3 +318,77 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 - [x] El umbral es configurable desde el config JSON (campo `sahi.nms_threshold`)
 - [x] Reduce duplicados sin eliminar detecciones legitimas cercanas
 - [x] Smoke test pasa
+
+---
+
+## DONE-015: Undo de ultimo punto al dibujar zonas (TODO-012)
+
+**Fecha:** 2026-03-11
+**Archivo:** `setup_glorieta.py`
+**Paso:** 2 (Zonas)
+
+### Que se hizo
+
+- Boton "↩ Deshacer ultimo punto" deshabilitado por defecto, se habilita al agregar puntos
+- `_undo_last_point()` hace pop del ultimo punto y redibuja
+- `Ctrl+Z` vinculado como shortcut global
+- Boton se deshabilita al cerrar zona, iniciar dibujo, o quedar sin puntos
+
+### Criterios cumplidos
+
+- [x] Existe boton "Deshacer punto" visible solo durante el dibujo de zona
+- [x] Cada clic elimina el ultimo punto y redibuja la linea parcial
+- [x] Si se deshacen todos los puntos, el estado queda limpio (sin puntos, boton deshabilitado)
+- [x] `Ctrl+Z` funciona como shortcut equivalente
+- [x] El boton se deshabilita cuando no se esta dibujando
+
+---
+
+## DONE-016: Visualizacion de grilla SAHI en el canvas (TODO-015)
+
+**Fecha:** 2026-03-11
+**Archivo:** `setup_glorieta.py`
+**Paso:** 3 (SAHI)
+
+### Que se hizo
+
+- `_draw_tile_overlay()` dibuja rectangulos dashed azules sobre el frame en el Paso 3
+- Toggle "Mostrar/Ocultar cuadricula" con boton y estado `_tile_grid_visible`
+- Conteo de tiles calculado y anotado en canvas + label
+- Grilla se actualiza en tiempo real al mover sliders (via `_update_tile_preview` → `_redraw`)
+- Grilla desaparece automaticamente al cambiar de paso
+
+### Criterios cumplidos
+
+- [x] La grilla de tiles se dibuja sobre el frame en el Paso 3
+- [x] Los tiles se actualizan en tiempo real al mover sliders
+- [x] Las zonas de overlap entre tiles se distinguen visualmente
+- [x] El conteo de tiles coincide con la formula real
+- [x] Al cambiar de paso la grilla desaparece
+
+---
+
+## DONE-017: Preview de detecciones YOLO sobre video con zonas (TODO-014)
+
+**Fecha:** 2026-03-11
+**Archivo:** `setup_glorieta.py`
+**Paso:** 2 (Zonas)
+
+### Que se hizo
+
+- Toggle "Detecciones YOLO: OFF/ON" junto al boton de reproduccion
+- YOLO corre en cada frame del preview cuando activo, dibuja boxes amarillos con label clase+conf
+- Usa `conf_threshold` e `imgsz` actuales del configurador
+- Boxes se dibujan ANTES de las zonas (zonas quedan encima)
+- Guard si modelo no cargado — avisa en status bar
+- SKIP dinamico: 15 frames con YOLO (compensa la lentitud), 5 sin YOLO
+- `_PREVIEW_VEH_NAMES` como constante de modulo (no recreado cada frame)
+
+### Criterios cumplidos
+
+- [x] Existe toggle "Mostrar detecciones" en el Paso 2
+- [x] Cuando activo, se dibujan bounding boxes de YOLO sobre el preview
+- [x] Se usan los parametros actuales del configurador (conf, imgsz)
+- [x] Las zonas siguen visibles encima de las detecciones
+- [x] El toggle se puede activar/desactivar sin detener el preview
+- [x] Sin el toggle, el preview funciona identico al actual (sin overhead de YOLO)

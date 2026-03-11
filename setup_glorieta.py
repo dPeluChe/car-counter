@@ -47,6 +47,8 @@ COCO_NAMES = [
     "teddy bear", "hair drier", "toothbrush"
 ]
 
+_PREVIEW_VEH_NAMES = {2: "car", 3: "moto", 5: "bus", 7: "truck"}  # OBS-2: constante de módulo
+
 ZONE_COLORS = [
     "#00FF88", "#FF6B6B", "#4ECDC4", "#FFE66D",
     "#A8E6CF", "#FF8B94", "#B8B8FF", "#FFA07A",
@@ -110,6 +112,7 @@ class SetupGlorieta(tk.Tk):
         self._preview_job = None
         self._preview_cap = None
         self._preview_frame_idx = 0
+        self._preview_show_detections = False  # TODO-014: toggle YOLO en preview
 
         # SAHI
         self.slice_w = tk.IntVar(value=512)
@@ -119,6 +122,7 @@ class SetupGlorieta(tk.Tk):
         self.max_age = tk.IntVar(value=40)
         self.min_hits = tk.IntVar(value=3)
         self.iou_thresh = tk.DoubleVar(value=0.2)
+        self._tile_grid_visible = True  # TODO-015: toggle de cuádrícula SAHI
 
         # Paso actual
         self.current_step = 0
@@ -126,6 +130,7 @@ class SetupGlorieta(tk.Tk):
         # ── UI ──────────────────────────────────────
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)  # OBS-3: liberar recursos al cerrar
+        self.bind("<Control-z>", lambda e: self._undo_last_point())  # TODO-012: deshacer punto
         self._load_video_and_model()
 
     # ──────────────────────────────────────────────
@@ -337,12 +342,23 @@ class SetupGlorieta(tk.Tk):
                                       bg="#313244", fg="#F38BA8", relief="flat", pady=4)
         self.btn_del_zone.pack(fill="x", pady=2)
 
+        self.btn_undo_point = tk.Button(self.panel_step1, text="↩  Deshacer último punto",
+                                        command=self._undo_last_point,
+                                        bg="#313244", fg="#F9E2AF", relief="flat", pady=4,
+                                        state="disabled")
+        self.btn_undo_point.pack(fill="x", pady=2)
+
         tk.Frame(self.panel_step1, bg="#313244", height=1).pack(fill="x", pady=8)
         self.btn_preview = tk.Button(self.panel_step1, text="▶  Reproducir zonas",
                                      command=self._toggle_zone_preview,
                                      bg="#F9E2AF", fg="#11111B", font=("Arial", 10, "bold"),
                                      relief="flat", pady=6)
         self.btn_preview.pack(fill="x", pady=4)
+
+        self.btn_det_toggle = tk.Button(self.panel_step1, text="🔍  Detecciones YOLO: OFF",
+                                        command=self._toggle_yolo_preview,
+                                        bg="#313244", fg="#6C7086", relief="flat", pady=4)
+        self.btn_det_toggle.pack(fill="x", pady=2)
 
         tk.Frame(self.panel_step1, bg="#313244", height=1).pack(fill="x", pady=8)
         self._lbl(self.panel_step1, "Zonas guardadas:", color="#CDD6F4")
@@ -426,9 +442,10 @@ class SetupGlorieta(tk.Tk):
 
         tk.Frame(self.panel_step2, bg="#313244", height=1).pack(fill="x", pady=6)
 
-        tk.Button(self.panel_step2, text="🔲  Ver cuadrícula de tiles",
-                  command=self._update_tile_preview,
-                  bg="#313244", fg="#CDD6F4", relief="flat", pady=4).pack(fill="x", pady=2)
+        self.btn_tile_grid = tk.Button(self.panel_step2, text="🔲  Ocultar cuádrícula",
+                                        command=self._toggle_tile_grid,
+                                        bg="#313244", fg="#89B4FA", relief="flat", pady=4)
+        self.btn_tile_grid.pack(fill="x", pady=2)
 
         self.btn_save = tk.Button(self.panel_step2, text="💾  GUARDAR config_glorieta.json",
                                   command=self._save_config,
@@ -793,34 +810,38 @@ class SetupGlorieta(tk.Tk):
                                          outline="#FFE66D", width=2)
 
     def _draw_tile_overlay(self):
-        """Dibuja la cuadrícula SAHI."""
+        """Dibuja la cuádrícula SAHI (TODO-015). Toggle via _tile_grid_visible."""
         if not self.img_w:
             return
-        sw = self.slice_w.get()
-        sh = self.slice_h.get()
-        ov = self.overlap.get()
-        step_x = int(sw * (1 - ov))
-        step_y = int(sh * (1 - ov))
-        if step_x <= 0 or step_y <= 0:
-            return
 
-        x = 0
-        cols = 0
-        while x < self.img_w:
-            y = 0
-            rows = 0
-            while y < self.img_h:
-                sx1, sy1 = self._img_to_screen(x, y)
-                sx2, sy2 = self._img_to_screen(min(x + sw, self.img_w), min(y + sh, self.img_h))
-                self.canvas.create_rectangle(sx1, sy1, sx2, sy2,
-                                              outline="#89B4FA", fill="", width=1, dash=(4, 4))
-                y += step_y
-                rows += 1
-            x += step_x
-            cols += 1
+        if self._tile_grid_visible:
+            sw = self.slice_w.get()
+            sh = self.slice_h.get()
+            ov = self.overlap.get()
+            step_x = int(sw * (1 - ov))
+            step_y = int(sh * (1 - ov))
+            if step_x > 0 and step_y > 0:
+                x = 0
+                cols = 0
+                while x < self.img_w:
+                    y = 0
+                    rows = 0
+                    while y < self.img_h:
+                        sx1, sy1 = self._img_to_screen(x, y)
+                        sx2, sy2 = self._img_to_screen(min(x + sw, self.img_w), min(y + sh, self.img_h))
+                        self.canvas.create_rectangle(sx1, sy1, sx2, sy2,
+                                                      outline="#89B4FA", fill="", width=1, dash=(4, 4))
+                        y += step_y
+                        rows += 1
+                    x += step_x
+                    cols += 1
 
-        count = cols * rows if rows > 0 else 0
-        # Also draw zones on this view
+                count = cols * rows if rows > 0 else 0
+                self.lbl_tiles.config(text=f"Tiles por frame: {count}  ({cols}×{rows})")
+                self.canvas.create_text(8, 8, text=f"Tiles: {count}  ({cols}×{rows})",
+                                         anchor="nw", fill="#89B4FA", font=("Arial", 10, "bold"))
+
+        # Zonas siempre encima de los tiles
         self._draw_zones_overlay()
 
     # ──────────────────────────────────────────────
@@ -845,6 +866,7 @@ class SetupGlorieta(tk.Tk):
                     self._close_current_zone()
                     return
             self.current_zone_pts.append((ix, iy))
+            self.btn_undo_point.config(state="normal")  # TODO-012: hay puntos para deshacer
             self._redraw()
 
     def _on_drag(self, event):
@@ -1331,6 +1353,7 @@ class SetupGlorieta(tk.Tk):
             self._refresh_zones_list()
 
         self.current_zone_pts = []
+        self.btn_undo_point.config(state="disabled")  # TODO-012: sin puntos aún
         self.zone_drawing = True
         self.canvas.config(cursor="crosshair")
         self.status_var.set(f"Dibujando zona '{name}' — clic para agregar puntos, clic cerca del primero para cerrar")
@@ -1343,6 +1366,7 @@ class SetupGlorieta(tk.Tk):
             return
         self.zones[name] = list(self.current_zone_pts)
         self.current_zone_pts = []
+        self.btn_undo_point.config(state="disabled")  # TODO-012: zona cerrada
         self.zone_drawing = False
         self.canvas.config(cursor="arrow")
         self._refresh_zones_list()
@@ -1375,6 +1399,18 @@ class SetupGlorieta(tk.Tk):
                 del self.zones[name]
                 self._refresh_zones_list()
                 self._redraw_zones()
+
+    def _undo_last_point(self):
+        """Elimina el último punto del polígono en curso — Ctrl+Z (TODO-012)."""
+        if not self.zone_drawing or not self.current_zone_pts:
+            return
+        self.current_zone_pts.pop()
+        self.btn_undo_point.config(state="normal" if self.current_zone_pts else "disabled")
+        n = len(self.current_zone_pts)
+        self.status_var.set(
+            f"↩ Punto eliminado — {n} punto{'s' if n != 1 else ''} restante{'s' if n != 1 else ''}"
+        )
+        self._redraw()
 
     def _redraw_zones(self):
         """Actualiza display_frame_zones con las zonas dibujadas."""
@@ -1433,7 +1469,7 @@ class SetupGlorieta(tk.Tk):
         """Avanza el video 5 frames y actualiza el canvas (llamado vía after())."""
         if not self._preview_playing or self._preview_cap is None:
             return
-        SKIP = 5  # frames a saltar por tick para mayor fluidez en Tkinter
+        SKIP = 15 if self._preview_show_detections else 5  # OBS-1: SKIP dinámico con YOLO
         for _ in range(SKIP - 1):
             self._preview_cap.grab()
         ret, frame = self._preview_cap.read()
@@ -1448,6 +1484,21 @@ class SetupGlorieta(tk.Tk):
 
         # Renderizar frame con zonas superpuestas (OBS-2: un solo overlay + un solo addWeighted)
         base = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        # TODO-014: YOLO boxes dibujados ANTES de zonas para que zonas queden encima
+        if self._preview_show_detections and self.model is not None:
+            results = self.model(
+                frame, conf=self.conf_threshold.get(), verbose=False,
+                classes=[2, 3, 5, 7], imgsz=self.infer_imgsz.get()
+            )
+            for r in results:
+                for box in r.boxes:
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    lbl = f"{_PREVIEW_VEH_NAMES.get(int(box.cls[0]), '?')} {float(box.conf[0]):.2f}"
+                    cv2.rectangle(base, (x1, y1), (x2, y2), (255, 200, 50), 2)
+                    cv2.putText(base, lbl, (x1, max(12, y1 - 4)),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 200, 50), 1, cv2.LINE_AA)
+
         overlay = base.copy()
         zone_meta = []
         for idx, (name, pts) in enumerate(self.zones.items()):
@@ -1466,8 +1517,26 @@ class SetupGlorieta(tk.Tk):
 
         self.display_frame_zones = base
         self._redraw()
-        self.status_var.set(f"▶ Frame {self._preview_frame_idx}/{self.total_frames}  |  ⏸ para pausar")
-        self._preview_job = self.after(80, self._zone_preview_tick)  # ~12 fps efectivos
+        det_tag = "  🔍 YOLO" if self._preview_show_detections else ""
+        self.status_var.set(f"▶{det_tag}  Frame {self._preview_frame_idx}/{self.total_frames}  |  ⏸ para pausar")
+        self._preview_job = self.after(80, self._zone_preview_tick)  # ~12 fps; más lento con YOLO
+
+    def _toggle_yolo_preview(self):
+        """Activa/desactiva detecciones YOLO en el preview de zonas (TODO-014)."""
+        if self.model is None:
+            self.status_var.set("⚠ Modelo YOLO no cargado — completa el Paso 1 primero.")
+            return
+        self._preview_show_detections = not self._preview_show_detections
+        if self._preview_show_detections:
+            self.btn_det_toggle.config(
+                text="🔍  Detecciones YOLO: ON  ⚠ más lento",
+                fg="#CBA6F7"
+            )
+        else:
+            self.btn_det_toggle.config(
+                text="🔍  Detecciones YOLO: OFF",
+                fg="#6C7086"
+            )
 
     def _confirm_zones(self):
         if not self.zones:
@@ -1485,16 +1554,17 @@ class SetupGlorieta(tk.Tk):
     def _update_tile_preview(self, *_):
         if not self.img_w:
             return
-        sw = self.slice_w.get()
-        sh = self.slice_h.get()
-        ov = self.overlap.get()
-        step_x = max(1, int(sw * (1 - ov)))
-        step_y = max(1, int(sh * (1 - ov)))
-        cols = math.ceil((self.img_w - sw) / step_x) + 1 if sw < self.img_w else 1
-        rows = math.ceil((self.img_h - sh) / step_y) + 1 if sh < self.img_h else 1
-        total = cols * rows
-        self.lbl_tiles.config(text=f"Tiles por frame: {total}  ({cols}×{rows})")
-        self._redraw_zones()  # also redraws tile overlay via _redraw → step 2
+        self._redraw()  # TODO-015: conteo y anotación ahora en _draw_tile_overlay
+
+    def _toggle_tile_grid(self):
+        """Muestra u oculta la cuádrícula de tiles SAHI (TODO-015)."""
+        self._tile_grid_visible = not self._tile_grid_visible
+        if self._tile_grid_visible:
+            self.btn_tile_grid.config(text="🔲  Ocultar cuádrícula", fg="#89B4FA")
+        else:
+            self.btn_tile_grid.config(text="🔳  Mostrar cuádrícula", fg="#6C7086")
+            self.lbl_tiles.config(text="Tiles por frame: —")
+        self._redraw()
 
     def _save_config(self):
         if not self.zones:
