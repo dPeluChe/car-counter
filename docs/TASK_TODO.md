@@ -7,54 +7,61 @@ Cada tarea tiene criterios de aceptacion claros para validacion.
 
 ---
 
-## TODO-016: Visualizacion de muestras de vehiculos en el canvas
+## TODO-018: Zonas de exclusion para vehiculos estacionados
 
-**Prioridad:** P2
-**Archivo:** `setup_glorieta.py`
-**Paso:** 1 (Calibracion)
+**Prioridad:** P0
+**Archivos:** `setup_glorieta.py`, `main_glorieta.py`
 
 ### Problema
 
-El configurador muestra "Muestras: N" como texto pero no dibuja los bounding boxes de las muestras marcadas sobre el canvas. Si se recarga un config con `--config`, no hay forma visual de saber que muestras se habian marcado previamente.
+YOLO detecta todos los vehiculos visibles, incluyendo estacionados que no forman parte del flujo de transito. Estos generan tracks innecesarios, ensucian la visualizacion, y consumen recursos de tracking. La maquina de estados no los cuenta como ruta, pero no hay forma de eliminarlos de la deteccion.
 
 ### Que hacer
 
-- Dibujar los bounding boxes de las muestras de vehiculos sobre el frame en el Paso 1
-- Cada muestra con un rectangulo semi-transparente y etiqueta (ancho x alto)
-- Las muestras cargadas desde config (via `sample_constraints`) mostrar un resumen visual de los rangos
+#### En el configurador (`setup_glorieta.py`):
+
+- Agregar un **Paso 0: Zonas de exclusion** antes del paso de Calibracion
+  - Misma mecanica de dibujo de poligonos que las zonas de calle (Paso 2)
+  - Color rojo/naranja para diferenciar visualmente de las zonas de entrada/salida
+  - Nombre por defecto: "Exclusion 1", "Exclusion 2", etc.
+  - Se pueden agregar, eliminar y editar
+  - Preview del video con las zonas de exclusion dibujadas (reutilizar patron del Paso 2)
+- Guardar las zonas de exclusion en el JSON como campo `exclusion_zones`:
+  ```json
+  "exclusion_zones": {
+    "Estacionamiento Norte": [[x1,y1], [x2,y2], ...],
+    "Estacionamiento Sur": [[x1,y1], [x2,y2], ...]
+  }
+  ```
+- **Vista Global** (Paso 1): filtrar detecciones cuyo centro caiga dentro de una zona de exclusion
+- **Preview con YOLO** (Paso 2): misma logica de filtrado
+
+#### En el conteo real (`main_glorieta.py`):
+
+- Cargar `exclusion_zones` del config JSON
+- Convertir a arrays numpy (mismo patron que `zones_np`)
+- En los 3 paths de deteccion (SAHI, SORT, ByteTrack), despues de pasar el filtro geometrico y antes de agregar a `det_list`/`tracked_boxes`: descartar detecciones cuyo centro `(cx, cy)` caiga dentro de cualquier zona de exclusion via `cv2.pointPolygonTest`
+- Dibujar las zonas de exclusion en el frame con color rojo semi-transparente (similar a `draw_zones` pero con color distinto)
+- Print al inicio: `Exclusion: N zonas (nombre1, nombre2, ...)`
 
 ### Criterios de aceptacion
 
-- [ ] Las muestras marcadas se dibujan como rectangulos sobre el frame
-- [ ] Cada muestra muestra sus dimensiones (ancho x alto px)
-- [ ] Al agregar/limpiar muestras, el canvas se actualiza inmediatamente
-- [ ] Las muestras persisten visualmente al cambiar de frame (si estan en coordenadas absolutas)
-- [ ] Si se cargo un config con `sample_constraints`, se muestra un resumen de los rangos en el sidebar
+#### Configurador:
+- [ ] Existe Paso 0 "Zonas de exclusion" con dibujo de poligonos
+- [ ] Se pueden agregar, eliminar y previsualizar zonas de exclusion
+- [ ] Las zonas de exclusion se dibujan en color rojo/naranja (diferenciable de zonas azules/verdes)
+- [ ] Vista Global filtra detecciones dentro de zonas de exclusion
+- [ ] Las zonas se guardan en el JSON como `exclusion_zones`
+- [ ] `--config` carga zonas de exclusion existentes
+
+#### Conteo real:
+- [ ] `main_glorieta.py` carga `exclusion_zones` del JSON
+- [ ] Detecciones con centro dentro de exclusion se descartan en los 3 paths
+- [ ] Las zonas de exclusion se dibujan en rojo semi-transparente en el frame
+- [ ] Se imprime la lista de zonas de exclusion al inicio
+- [ ] Configs sin `exclusion_zones` funcionan igual (backward compatible)
+- [ ] Smoke test pasa
 
 ---
 
-## TODO-017: Sliders de confianza por clase en el configurador
-
-**Prioridad:** P2
-**Archivo:** `setup_glorieta.py`
-**Paso:** 1 (Calibracion) o 3 (SAHI)
-
-### Problema
-
-El campo `conf_per_class` (TODO-005) solo se puede configurar editando el JSON a mano. El configurador tiene un solo slider de confianza global.
-
-### Que hacer
-
-- Agregar seccion expandible o grupo de sliders para las 4 clases vehiculares: car, motorbike, bus, truck
-- Si el usuario no toca los sliders individuales, no se genera `conf_per_class` (backward compatible)
-- Si ajusta al menos uno, se genera el campo completo en el JSON
-- Mostrar los valores actuales si se cargo un config que ya tiene `conf_per_class`
-
-### Criterios de aceptacion
-
-- [ ] Existen sliders individuales para car, motorbike, bus, truck
-- [ ] Por defecto usan el valor del slider global (no generan `conf_per_class`)
-- [ ] Al mover uno, se activa `conf_per_class` para todas las clases
-- [ ] El JSON guardado incluye `conf_per_class` solo si se modifico al menos un slider
-- [ ] Al cargar un config con `conf_per_class`, los sliders reflejan los valores
-- [ ] Backward compatible: configs sin `conf_per_class` funcionan igual
+_Tareas P2 completadas en iteracion 7 (TODO-013, TODO-016, TODO-017). Ver `TASK_COMPLETED.md`._

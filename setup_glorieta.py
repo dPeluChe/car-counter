@@ -1225,8 +1225,10 @@ class SetupGlorieta(tk.Tk):
 
         conf = self.conf_threshold.get()
         preview_conf = 0.05
-        self.status_var.set("Ejecutando vista global con SAHI…")
-        self.update()
+        self.config(cursor="watch")
+        self.btn_global_test.config(state="disabled", text="⏳  Procesando…")
+        self.status_var.set("🔄  Vista global — paso 1/2: inferencia YOLO…")
+        self.update_idletasks()
 
         yolo_detections, _ = self._predict_roi_boxes(
             self.frame_orig,
@@ -1235,12 +1237,18 @@ class SetupGlorieta(tk.Tk):
             use_sahi=False,
             force_imgsz=self.infer_imgsz.get(),
         )
+
+        self.status_var.set(f"🔄  Vista global — paso 2/2: inferencia SAHI… (YOLO encontró {len(yolo_detections)})")
+        self.update_idletasks()
+
         sahi_detections, _ = self._predict_roi_boxes(
             self.frame_orig,
             preview_conf,
             scale=1.0,
             use_sahi=True,
         )
+        self.config(cursor="")
+        self.btn_global_test.config(state="normal", text="🛰  Vista Global")
 
         filtered_yolo = [d for d in yolo_detections if self._passes_sample_constraints(d["bbox"])]
         filtered_sahi = [d for d in sahi_detections if self._passes_sample_constraints(d["bbox"])]
@@ -1291,8 +1299,10 @@ class SetupGlorieta(tk.Tk):
         if not (self.calib_rect_start and self.calib_rect_end):
             messagebox.showwarning("Calibración", "Primero dibuja un recuadro sobre un auto.")
             return
-        self.status_var.set("Ejecutando inferencia YOLO…")
-        self.update()
+        self.config(cursor="watch")
+        self.btn_yolo_test.config(state="disabled", text="⏳  Procesando…")
+        self.status_var.set("🔄  Ejecutando inferencia YOLO…")
+        self.update_idletasks()
 
         conf = self.conf_threshold.get()
         selected_box = (
@@ -1388,6 +1398,8 @@ class SetupGlorieta(tk.Tk):
         self.frame_rgb = cv2.cvtColor(display, cv2.COLOR_BGR2RGB)
         self._redraw()
 
+        self.config(cursor="")
+        self.btn_yolo_test.config(state="normal", text="👁  Probar YOLO")
         self.lbl_calib_status.config(
             text=status_msg,
             fg="#A6E3A1" if best_match else "#F38BA8"

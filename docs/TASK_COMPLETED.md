@@ -392,3 +392,75 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 - [x] Las zonas siguen visibles encima de las detecciones
 - [x] El toggle se puede activar/desactivar sin detener el preview
 - [x] Sin el toggle, el preview funciona identico al actual (sin overhead de YOLO)
+
+---
+
+## DONE-018: Seleccion visual de zona en el canvas (TODO-013)
+
+**Fecha:** 2026-03-11
+**Archivo:** `setup_glorieta.py`
+**Paso:** 2 (Zonas)
+
+### Que se hizo
+
+- Clic izquierdo sobre zona existente la selecciona (cv2.pointPolygonTest)
+- Zona seleccionada resaltada con borde grueso (4px) y fill mas opaco
+- Clic fuera de zonas deselecciona
+- Solo activo cuando no se esta dibujando zona nueva ni en modo pan
+- Coordenadas transformadas via _screen_to_img (funciona con zoom/pan)
+
+### Criterios cumplidos
+
+- [x] Clic sobre zona existente la selecciona en el listbox
+- [x] La zona seleccionada se resalta visualmente en el canvas
+- [x] Clic fuera de toda zona deselecciona
+- [x] No interfiere con el dibujo de zona nueva
+- [x] Funciona correctamente con zoom/pan activo
+
+---
+
+## DONE-019: Visualizacion de muestras de vehiculos en el canvas (TODO-016)
+
+**Fecha:** 2026-03-11
+**Archivo:** `setup_glorieta.py`
+**Paso:** 1 (Calibracion)
+
+### Que se hizo
+
+- Bounding boxes de muestras dibujados en _draw_calib_overlay (rectangulos dashed verdes)
+- Cada muestra etiquetada con numero y dimensiones (WxH)
+- _add_vehicle_sample y _clear_vehicle_samples llaman _redraw para actualizar inmediatamente
+- Constraints cargados desde config se muestran en lbl_samples_info con rangos w/h
+
+### Criterios cumplidos
+
+- [x] Las muestras marcadas se dibujan como rectangulos sobre el frame
+- [x] Cada muestra muestra sus dimensiones (ancho x alto px)
+- [x] Al agregar/limpiar muestras, el canvas se actualiza inmediatamente
+- [x] Las muestras persisten visualmente al cambiar de frame
+- [x] Si se cargo un config con sample_constraints, se muestra un resumen de los rangos en el sidebar
+
+---
+
+## DONE-020: Sliders de confianza por clase en el configurador (TODO-017)
+
+**Fecha:** 2026-03-11
+**Archivo:** `setup_glorieta.py`
+**Paso:** 1 (Calibracion)
+
+### Que se hizo
+
+- 4 sliders individuales (car, moto, bus, truck) debajo del slider global
+- Sincronizados con el slider global mientras no se modifiquen (_conf_per_class_modified)
+- conf_per_class solo se incluye en el JSON si al menos un slider fue tocado
+- _load_from_config carga valores existentes y marca el flag
+- Spread condicional en _save_config para backward compatibility
+
+### Criterios cumplidos
+
+- [x] Existen sliders individuales para car, motorbike, bus, truck
+- [x] Por defecto usan el valor del slider global (no generan conf_per_class)
+- [x] Al mover uno, se activa conf_per_class para todas las clases
+- [x] El JSON guardado incluye conf_per_class solo si se modifico al menos un slider
+- [x] Al cargar un config con conf_per_class, los sliders reflejan los valores
+- [x] Backward compatible
