@@ -3,7 +3,8 @@ setup_glorieta.py
 =================
 Herramienta interactiva de configuración para el contador de glorietas.
 
-Flujo guiado en 3 pasos:
+Flujo guiado en 4 pasos:
+  PASO 0 - EXCLUSIÓN: Define zonas donde no contar vehículos (estacionados, etc.)
   PASO 1 - CALIBRACIÓN: Dibuja un recuadro sobre un auto → YOLO lo valida → ajusta hasta confirmar
   PASO 2 - ZONAS: Dibuja polígonos de entrada/salida para cada calle de la glorieta
   PASO 3 - SAHI: Previsualiza la cuadrícula de tiles y ajusta parámetros → Guardar config.json
@@ -54,7 +55,10 @@ ZONE_COLORS = [
     "#A8E6CF", "#FF8B94", "#B8B8FF", "#FFA07A",
 ]
 
+EXCL_COLORS = ["#FF5555", "#FF9500", "#FF6B6B", "#FAB387"]
+
 STEP_TITLES = [
+    "PASO 0 — Zonas de Exclusión",
     "PASO 1 — Calibración de Detección",
     "PASO 2 — Definición de Zonas de Calle",
     "PASO 3 — Configuración SAHI y Guardar",
@@ -105,7 +109,14 @@ class SetupGlorieta(tk.Tk):
         self.conf_truck = tk.DoubleVar(value=0.10)
         self._conf_per_class_modified = False
 
-        # Zonas
+        # Zonas de exclusión (TODO-018)
+        self.exclusion_zones = {}      # { name: [(x,y)...] }
+        self.excl_current_pts = []
+        self.excl_drawing = False
+        self.excl_zone_name = tk.StringVar(value="Exclusion 1")
+        self.excl_selected = tk.StringVar(value="")
+
+        # Zonas de tránsito
         self.zones = {}               # { name: [(x,y)...] }
         self.current_zone_pts = []
         self.zone_drawing = False
@@ -205,6 +216,51 @@ class SetupGlorieta(tk.Tk):
 
     def _build_step_panels(self):
         """Construye los paneles laterales de cada paso (ocultos por defecto)."""
+        # ── Panel PASO 0: Zonas de Exclusión (TODO-018) ───────────────────────
+        self.panel_excl = tk.Frame(self.sidebar, bg="#181825", padx=12, pady=10)
+        self._lbl(self.panel_excl, "ZONAS DE EXCLUSIÓN", bold=True, color="#FF5555")
+        self._lbl(self.panel_excl,
+                  "Define polígonos para excluir\n"
+                  "vehículos estacionados u otras\n"
+                  "áreas sin flujo de tránsito.\n\n"
+                  "• Clic izq: agregar punto\n"
+                  "• Clic cerca del primero: cerrar\n"
+                  "• Paso opcional — puedes continuar\n"
+                  "  sin definir zonas", color="#A6ADC8")
+        self._lbl(self.panel_excl,
+                  "🚫 Detecciones dentro de estas zonas\nno se contarán como tránsito.",
+                  color="#F38BA8")
+        tk.Frame(self.panel_excl, bg="#313244", height=1).pack(fill="x", pady=8)
+
+        self._lbl(self.panel_excl, "Nombre de la zona:", color="#CDD6F4")
+        ttk.Entry(self.panel_excl, textvariable=self.excl_zone_name,
+                  font=("Arial", 11)).pack(fill="x", pady=4)
+
+        self.btn_new_excl = tk.Button(self.panel_excl, text="🚫  Nueva zona de exclusión",
+                                       command=self._start_excl_draw,
+                                       bg="#F38BA8", fg="#11111B", font=("Arial", 10, "bold"),
+                                       relief="flat", pady=6)
+        self.btn_new_excl.pack(fill="x", pady=4)
+
+        self.btn_del_excl = tk.Button(self.panel_excl, text="🗑  Eliminar zona seleccionada",
+                                       command=self._delete_excl_zone,
+                                       bg="#313244", fg="#F38BA8", relief="flat", pady=4)
+        self.btn_del_excl.pack(fill="x", pady=2)
+
+        tk.Frame(self.panel_excl, bg="#313244", height=1).pack(fill="x", pady=8)
+        self._lbl(self.panel_excl, "Zonas de exclusión:", color="#CDD6F4")
+        self.excl_listbox = tk.Listbox(self.panel_excl, bg="#11111B", fg="#F38BA8",
+                                        selectbackground="#45475A", font=("Arial", 10),
+                                        height=8, relief="flat", bd=0)
+        self.excl_listbox.pack(fill="both", expand=True)
+        self.excl_listbox.bind("<<ListboxSelect>>", self._on_excl_select)
+
+        self.btn_excl_ok = tk.Button(self.panel_excl, text="✅  Continuar →",
+                                      command=lambda: self._activate_step(1),
+                                      bg="#A6E3A1", fg="#11111B", font=("Arial", 10, "bold"),
+                                      relief="flat", pady=6)
+        self.btn_excl_ok.pack(fill="x", pady=8)
+
         # ── Panel PASO 1: Calibración ──────────────────────────────────────────
         self.panel_step0 = tk.Frame(self.sidebar, bg="#181825", padx=12, pady=10)
         self._lbl(self.panel_step0, "CALIBRACIÓN DE DETECCIÓN", bold=True, color="#CDD6F4")
@@ -572,7 +628,18 @@ class SetupGlorieta(tk.Tk):
             messagebox.showerror("Error cargando config", str(e))
             return
 
-        # ── Video (solo si el usuario no pasó --video explícitamente) ────────────
+        # ── Zonas de exclusión (TODO-018) ───────────────────────────
+        raw_excl = cfg.get("exclusion_zones", {})
+        if raw_excl:
+            self.exclusion_zones = {name: [list(p) for p in pts] for name, pts in raw_excl.items()}
+            self._refresh_excl_list()
+            # Actualizar nombre sugerido para evitar colisiones
+            n = len(self.exclusion_zones) + 1
+            while f"Exclusion {n}" in self.exclusion_zones:
+                n += 1
+            self.excl_zone_name.set(f"Exclusion {n}")
+
+        # ── Video (solo si el usuario no pasó --video explícitamente) ────────────────────
         cfg_video = cfg.get("video_path", "")
         if cfg_video and cfg_video != self.video_path \
                 and os.path.isfile(cfg_video) and self.video_path == DEFAULT_VIDEO:
@@ -665,22 +732,27 @@ class SetupGlorieta(tk.Tk):
                 btn.config(bg="#313244", fg="#A6ADC8", font=("Arial", 10))
 
         # Show correct panel
-        for panel in [self.panel_step0, self.panel_step1, self.panel_step2]:
+        for panel in [self.panel_excl, self.panel_step0, self.panel_step1, self.panel_step2]:
             panel.pack_forget()
-        panels = [self.panel_step0, self.panel_step1, self.panel_step2]
+        panels = [self.panel_excl, self.panel_step0, self.panel_step1, self.panel_step2]
         panels[idx].pack(fill="both", expand=True)
 
         # Update canvas behavior
-        if idx == 0:
+        if idx == 0:  # Exclusión
             self.canvas.config(cursor="crosshair")
             self.calib_drawing = False
             self.zone_drawing = False
-        elif idx == 1:
+            self.excl_drawing = False
+        elif idx == 1:  # Calibración
+            self.canvas.config(cursor="crosshair")
+            self.calib_drawing = False
+            self.zone_drawing = False
+        elif idx == 2:  # Zonas
             self.canvas.config(cursor="crosshair")
             self.calib_drawing = False
             self.zone_drawing = False
             self._redraw_zones()
-        elif idx == 2:
+        elif idx == 3:  # SAHI
             self.canvas.config(cursor="arrow")
             self.zone_drawing = False
             self.calib_drawing = False
@@ -714,7 +786,7 @@ class SetupGlorieta(tk.Tk):
     def _exit_pan_mode(self, _event=None):
         self.pan_mode = False
         self.drag_start = None
-        if self.current_step in (0, 1):
+        if self.current_step in (0, 1, 2):
             self.canvas.config(cursor="crosshair")
         else:
             self.canvas.config(cursor="arrow")
@@ -778,9 +850,9 @@ class SetupGlorieta(tk.Tk):
 
         # Choose display frame based on step
         src = self.frame_rgb
-        if self.current_step == 1 and self.display_frame_zones is not None:
+        if self.current_step == 2 and self.display_frame_zones is not None:
             src = self.display_frame_zones
-        elif self.current_step == 2 and self.display_frame_zones is not None:
+        elif self.current_step == 3 and self.display_frame_zones is not None:
             src = self.display_frame_zones
 
         crop = src[y1:y2, x1:x2]
@@ -795,14 +867,24 @@ class SetupGlorieta(tk.Tk):
 
         # Draw overlays depending on step
         if self.current_step == 0:
-            self._draw_calib_overlay()
+            self._draw_excl_overlay()
         elif self.current_step == 1:
-            self._draw_zones_overlay()
+            self._draw_calib_overlay()
         elif self.current_step == 2:
+            self._draw_zones_overlay()
+        elif self.current_step == 3:
             self._draw_tile_overlay()
 
     def _draw_calib_overlay(self):
         """Dibuja el recuadro de calibración en el canvas."""
+        # Zonas de exclusión en todos los pasos (ref visual)
+        for idx, (name, pts) in enumerate(self.exclusion_zones.items()):
+            ec = EXCL_COLORS[idx % len(EXCL_COLORS)]
+            sp = [self._img_to_screen(p[0], p[1]) for p in pts]
+            flat = [c for pt in sp for c in pt]
+            if len(flat) >= 4:
+                self.canvas.create_polygon(flat, outline=ec, fill=ec + "33", width=1)
+
         # TODO-016: bounding boxes de muestras de vehículos
         for i, sample in enumerate(self.vehicle_samples):
             b = sample["bbox"]
@@ -833,6 +915,14 @@ class SetupGlorieta(tk.Tk):
 
     def _draw_zones_overlay(self):
         """Dibuja zonas guardadas + polígono actual."""
+        # Zonas de exclusión primero (debajo de zonas de tránsito)
+        for idx, (name, pts) in enumerate(self.exclusion_zones.items()):
+            ec = EXCL_COLORS[idx % len(EXCL_COLORS)]
+            sp = [self._img_to_screen(p[0], p[1]) for p in pts]
+            flat = [c for pt in sp for c in pt]
+            if len(flat) >= 4:
+                self.canvas.create_polygon(flat, outline=ec, fill=ec + "33", width=1)
+
         selected = self.selected_zone.get() if hasattr(self, "selected_zone") else ""
         for idx, (name, pts) in enumerate(self.zones.items()):
             color = ZONE_COLORS[idx % len(ZONE_COLORS)]
@@ -900,10 +990,128 @@ class SetupGlorieta(tk.Tk):
         self._draw_zones_overlay()
 
     # ──────────────────────────────────────────────
-    # PASO 1: Calibración
+    # PASO 0: Zonas de Exclusión — métodos
     # ──────────────────────────────────────────────
+    def _is_in_exclusion(self, cx, cy):
+        """Retorna True si (cx, cy) cae dentro de alguna zona de exclusión (TODO-018)."""
+        for pts in self.exclusion_zones.values():
+            arr = np.array(pts, dtype=np.int32)
+            if cv2.pointPolygonTest(arr, (float(cx), float(cy)), False) >= 0:
+                return True
+        return False
+
+    def _draw_excl_overlay(self):
+        """Dibuja zonas de exclusión + polígono en curso."""
+        selected = self.excl_selected.get()
+        for idx, (name, pts) in enumerate(self.exclusion_zones.items()):
+            color = EXCL_COLORS[idx % len(EXCL_COLORS)]
+            sp = [self._img_to_screen(p[0], p[1]) for p in pts]
+            flat = [c for pt in sp for c in pt]
+            if len(flat) >= 4:
+                is_sel = (name == selected)
+                self.canvas.create_polygon(flat, outline=color,
+                                            fill=color + ("88" if is_sel else "44"),
+                                            width=4 if is_sel else 2)
+                cx = sum(p[0] for p in sp) / len(sp)
+                cy = sum(p[1] for p in sp) / len(sp)
+                self.canvas.create_text(cx, cy, text=f"🚫 {name}", fill=color,
+                                         font=("Arial", 10, "bold"))
+        if self.excl_current_pts:
+            sp = [self._img_to_screen(p[0], p[1]) for p in self.excl_current_pts]
+            for i in range(len(sp) - 1):
+                self.canvas.create_line(sp[i][0], sp[i][1], sp[i+1][0], sp[i+1][1],
+                                         fill="#FF5555", width=2)
+            for pt in sp:
+                self.canvas.create_oval(pt[0]-5, pt[1]-5, pt[0]+5, pt[1]+5,
+                                         fill="#FF5555", outline="white", width=1)
+            if len(sp) > 2:
+                self.canvas.create_oval(sp[0][0]-8, sp[0][1]-8, sp[0][0]+8, sp[0][1]+8,
+                                         outline="#FFE66D", width=2)
+
+    def _start_excl_draw(self):
+        name = self.excl_zone_name.get().strip()
+        if not name:
+            messagebox.showwarning("Exclusión", "Escribe un nombre para la zona.")
+            return
+        if name in self.exclusion_zones:
+            if not messagebox.askyesno("Zona existe", f"La zona '{name}' ya existe. ¿Sobreescribir?"):
+                return
+            del self.exclusion_zones[name]
+            self._refresh_excl_list()
+        self.excl_current_pts = []
+        self.excl_drawing = True
+        self.canvas.config(cursor="crosshair")
+        self.status_var.set(f"Dibujando exclusión '{name}' — clic para puntos, clic cerca del primero para cerrar")
+        self._redraw()
+
+    def _close_excl_zone(self):
+        name = self.excl_zone_name.get().strip()
+        if len(self.excl_current_pts) < 3:
+            messagebox.showwarning("Exclusión", "Se necesitan al menos 3 puntos.")
+            return
+        self.exclusion_zones[name] = list(self.excl_current_pts)
+        self.excl_current_pts = []
+        self.excl_drawing = False
+        self.canvas.config(cursor="crosshair")
+        self._refresh_excl_list()
+        self.status_var.set(f"Zona de exclusión '{name}' guardada ({len(self.exclusion_zones)} en total)")
+        n = len(self.exclusion_zones) + 1
+        while f"Exclusion {n}" in self.exclusion_zones:
+            n += 1
+        self.excl_zone_name.set(f"Exclusion {n}")
+        self._redraw()
+
+    def _refresh_excl_list(self):
+        self.excl_listbox.delete(0, "end")
+        for name in self.exclusion_zones:
+            self.excl_listbox.insert("end", f"  🚫 {name}  ({len(self.exclusion_zones[name])} pts)")
+
+    def _on_excl_select(self, event):
+        sel = self.excl_listbox.curselection()
+        if sel:
+            name = list(self.exclusion_zones.keys())[sel[0]]
+            self.excl_selected.set(name)
+
+    def _delete_excl_zone(self):
+        name = self.excl_selected.get()
+        if name and name in self.exclusion_zones:
+            if messagebox.askyesno("Eliminar", f"¿Eliminar zona de exclusión '{name}'?"):
+                del self.exclusion_zones[name]
+                self._refresh_excl_list()
+                self.excl_selected.set("")
+                self._redraw()
+
     def _on_press(self, event):
         if self.current_step == 0:
+            if self.pan_mode:
+                self.drag_start = (event.x, event.y)
+                return
+            ix, iy = self._screen_to_img(event.x, event.y)
+            if self.excl_drawing:
+                if len(self.excl_current_pts) > 2:
+                    p0 = self.excl_current_pts[0]
+                    if math.hypot(ix - p0[0], iy - p0[1]) < 20 / self.zoom:
+                        self._close_excl_zone()
+                        return
+                self.excl_current_pts.append((ix, iy))
+                self._redraw()
+            else:
+                clicked = None
+                for name, pts in self.exclusion_zones.items():
+                    arr = np.array(pts, dtype=np.int32)
+                    if cv2.pointPolygonTest(arr, (float(ix), float(iy)), False) >= 0:
+                        clicked = name
+                        break
+                if clicked:
+                    self.excl_selected.set(clicked)
+                    keys = list(self.exclusion_zones.keys())
+                    self.excl_listbox.selection_clear(0, "end")
+                    self.excl_listbox.selection_set(keys.index(clicked))
+                else:
+                    self.excl_selected.set("")
+                    self.excl_listbox.selection_clear(0, "end")
+                self._redraw()
+        elif self.current_step == 1:  # Calibración
             if self.pan_mode:
                 self.drag_start = (event.x, event.y)
                 return
@@ -911,9 +1119,8 @@ class SetupGlorieta(tk.Tk):
             self.calib_rect_start = (ix, iy)
             self.calib_rect_end = (ix, iy)
             self.calib_drawing = True
-        elif self.current_step == 1 and self.zone_drawing:
+        elif self.current_step == 2 and self.zone_drawing:
             ix, iy = self._screen_to_img(event.x, event.y)
-            # Check if close to first point → close polygon
             if len(self.current_zone_pts) > 2:
                 p0 = self.current_zone_pts[0]
                 dist = math.hypot(ix - p0[0], iy - p0[1])
@@ -923,7 +1130,7 @@ class SetupGlorieta(tk.Tk):
             self.current_zone_pts.append((ix, iy))
             self.btn_undo_point.config(state="normal")  # TODO-012: hay puntos para deshacer
             self._redraw()
-        elif self.current_step == 1 and not self.zone_drawing and not self.pan_mode:
+        elif self.current_step == 2 and not self.zone_drawing and not self.pan_mode:
             # TODO-013: selección de zona por clic izquierdo
             ix, iy = self._screen_to_img(event.x, event.y)
             clicked = None
@@ -952,7 +1159,7 @@ class SetupGlorieta(tk.Tk):
             self._clamp_pan()
             self._redraw()
             return
-        if self.current_step == 0 and self.calib_drawing:
+        if self.current_step == 1 and self.calib_drawing:
             ix, iy = self._screen_to_img(event.x, event.y)
             self.calib_rect_end = (ix, iy)
             self._redraw()
@@ -961,7 +1168,7 @@ class SetupGlorieta(tk.Tk):
         if self.pan_mode:
             self.drag_start = None
             return
-        if self.current_step == 0 and self.calib_drawing:
+        if self.current_step == 1 and self.calib_drawing:
             ix, iy = self._screen_to_img(event.x, event.y)
             self.calib_rect_end = (ix, iy)
             self.calib_drawing = False
@@ -1250,8 +1457,18 @@ class SetupGlorieta(tk.Tk):
         self.config(cursor="")
         self.btn_global_test.config(state="normal", text="🛰  Vista Global")
 
-        filtered_yolo = [d for d in yolo_detections if self._passes_sample_constraints(d["bbox"])]
-        filtered_sahi = [d for d in sahi_detections if self._passes_sample_constraints(d["bbox"])]
+        filtered_yolo = [
+            d for d in yolo_detections
+            if self._passes_sample_constraints(d["bbox"])
+            and not self._is_in_exclusion(
+                (d["bbox"][0] + d["bbox"][2]) / 2, (d["bbox"][1] + d["bbox"][3]) / 2)
+        ]
+        filtered_sahi = [
+            d for d in sahi_detections
+            if self._passes_sample_constraints(d["bbox"])
+            and not self._is_in_exclusion(
+                (d["bbox"][0] + d["bbox"][2]) / 2, (d["bbox"][1] + d["bbox"][3]) / 2)
+        ]
 
         if len(filtered_yolo) >= len(filtered_sahi):
             detections = filtered_yolo
@@ -1411,7 +1628,7 @@ class SetupGlorieta(tk.Tk):
 
     def _restore_original_frame(self):
         self.frame_rgb = cv2.cvtColor(self.frame_orig, cv2.COLOR_BGR2RGB)
-        if self.current_step == 0:
+        if self.current_step == 1:
             self._redraw()
 
     def _confirm_calib(self):
@@ -1424,7 +1641,7 @@ class SetupGlorieta(tk.Tk):
         self.calib_confirmed = True
         self.lbl_calib_status.config(text="✅  Calibración confirmada", fg="#A6E3A1")
         self.status_var.set("Calibración confirmada — pasando a Paso 2")
-        self.after(500, lambda: self._activate_step(1))
+        self.after(500, lambda: self._activate_step(2))
 
     # ──────────────────────────────────────────────
     # PASO 2: Zonas
@@ -1504,6 +1721,19 @@ class SetupGlorieta(tk.Tk):
     def _redraw_zones(self):
         """Actualiza display_frame_zones con las zonas dibujadas."""
         base = cv2.cvtColor(self.frame_orig, cv2.COLOR_BGR2RGB).copy()
+        # Exclusion zones first (semi-transparent red, drawn beneath traffic zones)
+        for idx, (name, pts) in enumerate(self.exclusion_zones.items()):
+            ec_hex = EXCL_COLORS[idx % len(EXCL_COLORS)].lstrip("#")
+            er, eg, eb = int(ec_hex[0:2], 16), int(ec_hex[2:4], 16), int(ec_hex[4:6], 16)
+            np_pts = np.array(pts, dtype=np.int32)
+            overlay = base.copy()
+            cv2.fillPoly(overlay, [np_pts], (er, eg, eb))
+            base = cv2.addWeighted(base, 0.80, overlay, 0.20, 0)
+            cv2.polylines(base, [np_pts], True, (er, eg, eb), 2)
+            cx = int(np.mean([p[0] for p in pts]))
+            cy = int(np.mean([p[1] for p in pts]))
+            cv2.putText(base, f"EXCL:{name}", (cx, cy),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (er, eg, eb), 2)
         for idx, (name, pts) in enumerate(self.zones.items()):
             color_hex = ZONE_COLORS[idx % len(ZONE_COLORS)].lstrip("#")
             r, g, b = int(color_hex[0:2], 16), int(color_hex[2:4], 16), int(color_hex[4:6], 16)
@@ -1583,6 +1813,9 @@ class SetupGlorieta(tk.Tk):
             for r in results:
                 for box in r.boxes:
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+                    if self._is_in_exclusion(cx, cy):  # TODO-018: filtrar exclusión
+                        continue
                     lbl = f"{_PREVIEW_VEH_NAMES.get(int(box.cls[0]), '?')} {float(box.conf[0]):.2f}"
                     cv2.rectangle(base, (x1, y1), (x2, y2), (255, 200, 50), 2)
                     cv2.putText(base, lbl, (x1, max(12, y1 - 4)),
@@ -1635,7 +1868,7 @@ class SetupGlorieta(tk.Tk):
             messagebox.showwarning("Zonas", "Necesitas al menos 2 zonas para detectar rutas.")
             return
         self.status_var.set(f"{len(self.zones)} zonas confirmadas — pasando a Paso 3")
-        self.after(300, lambda: self._activate_step(2))
+        self.after(300, lambda: self._activate_step(3))
 
     # ──────────────────────────────────────────────
     # PASO 3: SAHI + Guardar
@@ -1661,6 +1894,7 @@ class SetupGlorieta(tk.Tk):
             return
 
         config = {
+            "exclusion_zones": {name: pts for name, pts in self.exclusion_zones.items()},  # TODO-018
             "zones": {name: pts for name, pts in self.zones.items()},
             "settings": {
                 "min_area": self.min_area.get(),
@@ -1704,14 +1938,16 @@ class SetupGlorieta(tk.Tk):
         try:
             with open(OUTPUT_CONFIG, "w") as f:
                 json.dump(config, f, indent=2)
+            excl_info = f" · {len(self.exclusion_zones)} excl" if self.exclusion_zones else ""
             self.lbl_save_status.config(
-                text=f"✅ Guardado: {OUTPUT_CONFIG}\n{len(self.zones)} zonas · SAHI {self.slice_w.get()}×{self.slice_h.get()}",
+                text=f"✅ Guardado: {OUTPUT_CONFIG}\n{len(self.zones)} zonas{excl_info} · SAHI {self.slice_w.get()}×{self.slice_h.get()}",
                 fg="#A6E3A1"
             )
             self.status_var.set(f"✅ Configuración guardada en {OUTPUT_CONFIG}")
+            excl_msg = f"\nExclusión: {', '.join(self.exclusion_zones.keys())}\n" if self.exclusion_zones else ""
             messagebox.showinfo("Guardado",
                                 f"Configuración guardada exitosamente en:\n{OUTPUT_CONFIG}\n\n"
-                                f"Zonas: {', '.join(self.zones.keys())}\n\n"
+                                f"Zonas: {', '.join(self.zones.keys())}\n{excl_msg}\n"
                                 f"Siguiente paso:\n  python main_glorieta.py")
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo guardar:\n{e}")

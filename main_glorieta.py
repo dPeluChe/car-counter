@@ -111,6 +111,7 @@ with open(config_path, "r") as f:
     config = json.load(f)
 
 zones_config     = config.get("zones", {})
+excl_config      = config.get("exclusion_zones", {})  # TODO-018
 settings         = config.get("settings", {})
 sahi_cfg         = config.get("sahi", {})
 tracker_cfg      = config.get("tracker", {})
@@ -146,7 +147,10 @@ print(f"📹  Video:    {VIDEO_PATH}")
 print(f"🤖  Modelo:   {MODEL_PATH}")
 print(f"🎯  Tracker:  {args.tracker}")
 print(f"🗺   Zonas:    {list(zones_config.keys())}")
-print(f"\n⚙️   Detección:")
+if excl_config:
+    print(f"🚫  Exclusión: {len(excl_config)} zona{'s' if len(excl_config) != 1 else ''} ({', '.join(excl_config.keys())})")  # TODO-018
+
+print("\n⚙️   Detección:")
 print(f"    Confianza: {CONF_THRESH}  |  ImgSz: {INFER_IMGSZ}  |  Área: [{MIN_AREA}–{MAX_AREA}] px²")
 if CONF_PER_CLASS:
     print(f"    Conf por clase: { {k: v for k, v in sorted(CONF_PER_CLASS.items())} }")
@@ -360,6 +364,16 @@ def apply_nms(det_list, det_classes, iou_threshold):
 def _conf_for(cls_name):
     """Retorna el umbral de confianza para una clase (TODO-005)."""
     return CONF_PER_CLASS.get(cls_name, CONF_THRESH)
+
+# TODO-018: zonas de exclusión
+_exclusion_np = {name: np.array(pts, dtype=np.int32) for name, pts in excl_config.items()}
+
+def in_exclusion_zone(cx, cy):
+    """Retorna True si el centro (cx, cy) cae dentro de alguna zona de exclusión."""
+    for pts in _exclusion_np.values():
+        if cv2.pointPolygonTest(pts, (float(cx), float(cy)), False) >= 0:
+            return True
+    return False
 
 def passes_geometry_filter(x1, y1, x2, y2):
     width = max(1, x2 - x1)
@@ -651,6 +665,8 @@ try:
                 x1, y1, x2, y2 = int(bbox.minx), int(bbox.miny), int(bbox.maxx), int(bbox.maxy)
                 if not passes_geometry_filter(x1, y1, x2, y2):
                     continue
+                if in_exclusion_zone((x1 + x2) / 2, (y1 + y2) / 2):  # TODO-018
+                    continue
                 det_list.append([x1, y1, x2, y2, conf_val])
                 det_classes.append(cls_name)
             if NMS_THRESHOLD_SAHI > 0 and det_list:  # TODO-010: NMS post-SAHI
@@ -670,6 +686,8 @@ try:
                     if conf_val < _conf_for(cls_name):  # TODO-005
                         continue
                     if not passes_geometry_filter(x1, y1, x2, y2):
+                        continue
+                    if in_exclusion_zone((x1 + x2) / 2, (y1 + y2) / 2):  # TODO-018
                         continue
                     det_list.append([x1, y1, x2, y2, conf_val])
                     det_classes.append(cls_name)
@@ -717,6 +735,8 @@ try:
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
                     if not passes_geometry_filter(x1, y1, x2, y2):
                         continue
+                    if in_exclusion_zone((x1 + x2) / 2, (y1 + y2) / 2):  # TODO-018
+                        continue
                     tid = int(box.id[0])
                     cls_id = int(box.cls[0])
                     cls_name = COCO_NAMES[cls_id] if cls_id < len(COCO_NAMES) else "car"
@@ -743,6 +763,14 @@ try:
                 print(f"  🧹 Purgados {len(stale_ids)} tracks viejos — activos en memoria: {len(tracks_info)}")
 
         # ── Visualización ─────────────────────────────────────────────────────
+        # TODO-018: exclusion zones en rojo semi-transparente (ANTES de zonas de tránsito)
+        if _exclusion_np:
+            _excl_overlay = frame.copy()
+            for _ep in _exclusion_np.values():
+                cv2.fillPoly(_excl_overlay, [_ep], (60, 60, 220))
+            cv2.addWeighted(_excl_overlay, 0.22, frame, 0.78, 0, frame)
+            for _ep in _exclusion_np.values():
+                cv2.polylines(frame, [_ep], True, (60, 60, 220), 2)
         draw_zones(frame)
 
         for (x1, y1, x2, y2, trk_id, cls_name) in tracked_boxes:

@@ -464,3 +464,51 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 - [x] El JSON guardado incluye conf_per_class solo si se modifico al menos un slider
 - [x] Al cargar un config con conf_per_class, los sliders reflejan los valores
 - [x] Backward compatible
+
+---
+
+## DONE-021: Zonas de exclusion para vehiculos estacionados (TODO-018)
+
+**Fecha:** 2026-03-11
+**Archivos:** `setup_glorieta.py`, `main_glorieta.py`
+
+### Que se hizo
+
+#### Configurador (`setup_glorieta.py`):
+- Paso 0 "Zonas de Exclusion" con panel completo: nombre, dibujo de poligonos, listbox, seleccion, eliminacion
+- EXCL_COLORS rojo/naranja para diferenciar visualmente de zonas de transito
+- `_draw_excl_overlay()` dibuja zonas + poligono en curso con feedback visual (primer punto resaltado)
+- `_start_excl_draw()`, `_close_excl_zone()`, `_delete_excl_zone()`, `_refresh_excl_list()`
+- Click-to-select zonas de exclusion en canvas
+- `_is_in_exclusion(cx, cy)` filtra detecciones en Vista Global y Preview YOLO (Paso 2)
+- `_load_from_config()` carga `exclusion_zones` del JSON y actualiza nombre sugerido
+- `_save_config()` guarda `exclusion_zones` en el JSON
+- Zonas de exclusion visibles como referencia en Pasos 1, 2 y 3
+- Docstring actualizado de 3 a 4 pasos
+- Mensaje de guardado incluye conteo de zonas de exclusion
+
+#### Conteo real (`main_glorieta.py`):
+- Carga `exclusion_zones` del config JSON con `config.get("exclusion_zones", {})`
+- `_exclusion_np` pre-convierte a numpy arrays (una sola vez al inicio)
+- `in_exclusion_zone(cx, cy)` helper con `cv2.pointPolygonTest`
+- Filtrado en los 3 paths: SAHI (L668), SORT (L690), ByteTrack (L738)
+- Visualizacion rojo semi-transparente con `fillPoly` + `addWeighted` + `polylines`
+- Print al inicio: `Exclusion: N zonas (nombre1, nombre2, ...)`
+
+### Criterios cumplidos
+
+#### Configurador:
+- [x] Existe Paso 0 "Zonas de exclusion" con dibujo de poligonos
+- [x] Se pueden agregar, eliminar y previsualizar zonas de exclusion
+- [x] Las zonas de exclusion se dibujan en color rojo/naranja (diferenciable de zonas azules/verdes)
+- [x] Vista Global filtra detecciones dentro de zonas de exclusion
+- [x] Las zonas se guardan en el JSON como `exclusion_zones`
+- [x] `--config` carga zonas de exclusion existentes
+
+#### Conteo real:
+- [x] `main_glorieta.py` carga `exclusion_zones` del JSON
+- [x] Detecciones con centro dentro de exclusion se descartan en los 3 paths
+- [x] Las zonas de exclusion se dibujan en rojo semi-transparente en el frame
+- [x] Se imprime la lista de zonas de exclusion al inicio
+- [x] Configs sin `exclusion_zones` funcionan igual (backward compatible)
+- [x] Smoke test: no hay config de prueba en el repo, validacion estructural del codigo
