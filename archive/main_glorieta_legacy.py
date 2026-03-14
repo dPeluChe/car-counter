@@ -39,6 +39,16 @@ import argparse
 import importlib.util
 import numpy as np
 from carcounter.paths import paths
+from carcounter.constants import COCO_NAMES, VEHICLE_CLASSES, VEHICLE_CLASS_IDS, ZONE_COLORS_BGR
+from carcounter.geometry import (
+    point_in_zone, bbox_iou, apply_nms, passes_geometry_filter,
+    in_exclusion_zone, point_to_line_side, point_line_distance,
+)
+from carcounter.tracking import attach_classes_to_tracks
+from carcounter.drawing import (
+    draw_zones, draw_lines, draw_exclusion_zones,
+    draw_routes_panel, draw_scoreboard, draw_hud, format_time,
+)
 
 # ─────────────────────────────────────────────
 # CLI
@@ -174,36 +184,6 @@ print("=" * 65)
 
 DISPLAY_ENABLED = not args.headless
 
-# ─────────────────────────────────────────────
-# COCO class names
-# ─────────────────────────────────────────────
-COCO_NAMES = [
-    "person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat",
-    "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat",
-    "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella",
-    "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat",
-    "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup",
-    "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli",
-    "carrot", "hot dog", "pizza", "donut", "cake", "chair", "sofa", "pottedplant", "bed",
-    "diningtable", "toilet", "tvmonitor", "laptop", "mouse", "remote", "keyboard", "cell phone",
-    "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors",
-    "teddy bear", "hair drier", "toothbrush"
-]
-VEHICLE_CLASSES = {"car", "truck", "bus", "motorbike"}
-
-# ─────────────────────────────────────────────
-# Colores por zona (BGR para OpenCV)
-# ─────────────────────────────────────────────
-ZONE_COLORS_BGR = [
-    (136, 255, 0),    # verde
-    (107, 107, 255),  # rojo-coral
-    (205, 196, 78),   # cian
-    (109, 230, 255),  # amarillo
-    (207, 230, 168),  # verde menta
-    (148, 139, 255),  # salmon
-    (255, 184, 184),  # lavanda
-    (122, 160, 255),  # azul claro
-]
 
 # ─────────────────────────────────────────────
 # Cargar modelo YOLO (con tracker nativo)
@@ -347,94 +327,20 @@ benchmark_data = []
 # ─────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────
-def point_in_zone(x, y, zone_pts):
-    return cv2.pointPolygonTest(zone_pts, (float(x), float(y)), False) >= 0
-
-def bbox_iou(box_a, box_b):
-    ax1, ay1, ax2, ay2 = box_a
-    bx1, by1, bx2, by2 = box_b
-    inter_x1 = max(ax1, bx1)
-    inter_y1 = max(ay1, by1)
-    inter_x2 = min(ax2, bx2)
-    inter_y2 = min(ay2, by2)
-    inter_w = max(0, inter_x2 - inter_x1)
-    inter_h = max(0, inter_y2 - inter_y1)
-    inter_area = inter_w * inter_h
-    if inter_area <= 0:
-        return 0.0
-    area_a = max(0, ax2 - ax1) * max(0, ay2 - ay1)
-    area_b = max(0, bx2 - bx1) * max(0, by2 - by1)
-    denom = area_a + area_b - inter_area
-    return inter_area / denom if denom > 0 else 0.0
-
-def apply_nms(det_list, det_classes, iou_threshold):
-    """Greedy NMS post-SAHI (TODO-010). Ordena por conf desc y suprime solapadas (IoU > threshold)."""
-    if not det_list:
-        return det_list, det_classes
-    order = sorted(range(len(det_list)), key=lambda i: -det_list[i][4])
-    keep = []
-    suppressed = set()
-    for pos, i in enumerate(order):
-        if i in suppressed:
-            continue
-        keep.append(i)
-        for j in order[pos + 1:]:
-            if j not in suppressed and bbox_iou(det_list[i][:4], det_list[j][:4]) > iou_threshold:
-                suppressed.add(j)
-    return [det_list[k] for k in keep], [det_classes[k] for k in keep]
-
 def _conf_for(cls_name):
-    """Retorna el umbral de confianza para una clase (TODO-005)."""
+    """Retorna el umbral de confianza para una clase."""
     return CONF_PER_CLASS.get(cls_name, CONF_THRESH)
 
 # TODO-018: zonas de exclusión
 _exclusion_np = {name: np.array(pts, dtype=np.int32) for name, pts in excl_config.items()}
 
-def in_exclusion_zone(cx, cy):
-    """Retorna True si el centro (cx, cy) cae dentro de alguna zona de exclusión."""
-    for pts in _exclusion_np.values():
-        if cv2.pointPolygonTest(pts, (float(cx), float(cy)), False) >= 0:
-            return True
-    return False
-
-def passes_geometry_filter(x1, y1, x2, y2):
-    width = max(1, x2 - x1)
-    height = max(1, y2 - y1)
-    area = width * height
-    aspect = width / float(height)
-    if MIN_AREA > 0 and area < MIN_AREA:
-        return False
-    if MAX_AREA < 999999 and area > MAX_AREA:
-        return False
-    if MIN_WIDTH > 0 and width < MIN_WIDTH:
-        return False
-    if MAX_WIDTH < 999999 and width > MAX_WIDTH:
-        return False
-    if MIN_HEIGHT > 0 and height < MIN_HEIGHT:
-        return False
-    if MAX_HEIGHT < 999999 and height > MAX_HEIGHT:
-        return False
-    if MIN_ASPECT > 0 and aspect < MIN_ASPECT:
-        return False
-    if MAX_ASPECT < 999999 and aspect > MAX_ASPECT:
-        return False
-    return True
-
-def attach_classes_to_tracks(track_rows, det_rows, det_classes):
-    labeled_tracks = []
-    for row in track_rows:
-        x1, y1, x2, y2, tid = map(int, row)
-        best_idx = -1
-        best_iou = 0.0
-        for idx, det in enumerate(det_rows):
-            det_box = tuple(map(int, det[:4]))
-            score = bbox_iou((x1, y1, x2, y2), det_box)
-            if score > best_iou:
-                best_iou = score
-                best_idx = idx
-        cls_name = det_classes[best_idx] if best_idx >= 0 and best_idx < len(det_classes) else "car"
-        labeled_tracks.append((x1, y1, x2, y2, tid, cls_name))
-    return labeled_tracks
+# Constraints dict para passes_geometry_filter
+_geo_constraints = {
+    "min_area": MIN_AREA, "max_area": MAX_AREA,
+    "min_width": MIN_WIDTH, "max_width": MAX_WIDTH,
+    "min_height": MIN_HEIGHT, "max_height": MAX_HEIGHT,
+    "min_aspect": MIN_ASPECT, "max_aspect": MAX_ASPECT,
+}
 
 def get_zone_for_point(x, y):
     for name, pts in zones_np.items():
@@ -531,17 +437,6 @@ def _register_route(trk_id, origin, destination):
     tracks_info[trk_id]["state"] = "done"
     print(f"  ✅ ID={trk_id:>4}  ruta: {route_key}  (total={routes_matrix[route_key]})")
 
-def _point_to_line_side(px, py, x1, y1, x2, y2):
-    """Retorna >0 si el punto está 'abajo/derecha' de la línea, <0 si 'arriba/izquierda'."""
-    return (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
-
-def _point_line_distance(px, py, x1, y1, x2, y2):
-    """Distancia perpendicular del punto a la línea definida por (x1,y1)-(x2,y2)."""
-    dx, dy = x2 - x1, y2 - y1
-    length = math.hypot(dx, dy)
-    if length == 0:
-        return math.hypot(px - x1, py - y1)
-    return abs(dx * (y1 - py) - (x1 - px) * dy) / length
 
 def update_line_crossing_state(trk_id, cx, cy, cls_name="unknown"):
     """
@@ -575,13 +470,13 @@ def update_line_crossing_state(trk_id, cx, cy, cls_name="unknown"):
         tol = line["tolerance"]
 
         # ¿Está cerca de la línea?
-        dist = _point_line_distance(cx, cy, x1, y1, x2, y2)
+        dist = point_line_distance(cx, cy, x1, y1, x2, y2)
         if dist > tol:
             continue
 
         # ¿Cruzó? Comparar signo del cross product entre frame anterior y actual
-        side_prev = _point_to_line_side(cx, prev_cy, x1, y1, x2, y2)
-        side_now = _point_to_line_side(cx, cy, x1, y1, x2, y2)
+        side_prev = point_to_line_side(cx, prev_cy, x1, y1, x2, y2)
+        side_now = point_to_line_side(cx, cy, x1, y1, x2, y2)
 
         if side_prev * side_now < 0:  # cambio de signo = cruzó la línea
             direction = "↓" if cy > prev_cy else "↑"
@@ -594,134 +489,6 @@ def update_line_crossing_state(trk_id, cx, cy, cls_name="unknown"):
                 routes_matrix[crossing_key] = routes_matrix.get(crossing_key, 0) + 1
                 print(f"  ✅ ID={trk_id:>4}  cruzó: {crossing_key}  cls={cls_name}  (total={routes_matrix[crossing_key]})")
 
-def draw_lines(frame):
-    """Dibuja las líneas de cruce con color y nombre."""
-    for idx, line in enumerate(_counting_lines):
-        color = ZONE_COLORS_BGR[idx % len(ZONE_COLORS_BGR)]
-        pt1 = tuple(line["pt1"])
-        pt2 = tuple(line["pt2"])
-        cv2.line(frame, pt1, pt2, color, 3)
-        # Nombre de la línea
-        mx = (pt1[0] + pt2[0]) // 2
-        my = (pt1[1] + pt2[1]) // 2
-        cv2.putText(frame, line["name"], (mx + 5, my - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA)
-        # Flechas de dirección
-        cv2.putText(frame, "↑↓", (mx + 5, my + 20),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
-
-def format_time(s):
-    h, r = divmod(int(s), 3600)
-    m, s = divmod(r, 60)
-    return f"{h}h {m}m {s}s" if h else (f"{m}m {s}s" if m else f"{s}s")
-
-def draw_zones(frame):
-    overlay = frame.copy()  # TODO-004: un solo overlay para todas las zonas
-    zone_meta = []
-    for idx, (name, pts) in enumerate(zones_np.items()):
-        color = ZONE_COLORS_BGR[idx % len(ZONE_COLORS_BGR)]
-        cv2.fillPoly(overlay, [pts], color)
-        zone_meta.append((name, pts, color))
-    cv2.addWeighted(overlay, 0.18, frame, 0.82, 0, frame)  # TODO-004: un solo blend
-    for name, pts, color in zone_meta:
-        cv2.polylines(frame, [pts], True, color, 2)
-        cx = int(np.mean(pts[:, 0]))
-        cy = int(np.mean(pts[:, 1]))
-        cv2.putText(frame, name, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX,
-                    0.65, color, 2, cv2.LINE_AA)
-
-def draw_routes_panel(frame, routes, n_active):
-    """Panel semitransparente con la matriz de rutas A→B."""
-    if not routes:
-        return
-
-    pad = 10
-    line_h = 22
-    sorted_routes = sorted(routes.items(), key=lambda x: -x[1])
-    panel_h = pad * 2 + line_h * (len(sorted_routes) + 2)
-    panel_w = 280
-    x0, y0 = 10, 10
-
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (x0, y0), (x0 + panel_w, y0 + panel_h), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
-
-    cv2.rectangle(frame, (x0, y0), (x0 + panel_w, y0 + panel_h), (80, 80, 80), 1)
-
-    cv2.putText(frame, "RUTAS DETECTADAS", (x0 + pad, y0 + pad + 14),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1, cv2.LINE_AA)
-    cv2.putText(frame, f"Activos: {n_active}", (x0 + pad + 160, y0 + pad + 14),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (180, 180, 100), 1, cv2.LINE_AA)
-
-    y = y0 + pad + line_h + 4
-    total = sum(routes.values())
-    for route, count in sorted_routes:
-        pct = count / total * 100 if total > 0 else 0
-        bar_w = int((panel_w - pad * 2 - 90) * count / max(routes.values()))
-        cv2.rectangle(frame, (x0 + pad, y + 4), (x0 + pad + bar_w, y + 16),
-                      (60, 120, 60), -1)
-        cv2.putText(frame, f"{route}:", (x0 + pad, y + 14),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.42, (200, 255, 200), 1, cv2.LINE_AA)
-        cv2.putText(frame, f"{count}  ({pct:.0f}%)",
-                    (x0 + panel_w - 80, y + 14),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 255, 100), 1, cv2.LINE_AA)
-        y += line_h
-
-def draw_scoreboard(frame, routes, n_active, total_ever):
-    """Panel scoreboard grande para --demo-mode (TODO-009). Posición: top-right."""
-    total_confirmed = sum(routes.values()) if routes else 0
-    sorted_routes = sorted(routes.items(), key=lambda x: -x[1]) if routes else []
-
-    pad = 14
-    row_h = 34
-    panel_h = pad + 62 + row_h * max(len(sorted_routes), 1) + pad
-    panel_w = 390
-    x0 = max(0, VID_W - panel_w - 12)
-    y0 = 10
-
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (x0, y0), (x0 + panel_w, y0 + panel_h), (8, 8, 8), -1)
-    cv2.addWeighted(overlay, 0.65, frame, 0.35, 0, frame)
-    cv2.rectangle(frame, (x0, y0), (x0 + panel_w, y0 + panel_h), (90, 90, 90), 1)
-
-    # ── Contador total grande ─────────────────────────────────────────
-    cv2.putText(frame, f"TOTAL: {total_ever}",
-                (x0 + pad, y0 + 40), cv2.FONT_HERSHEY_SIMPLEX, 1.05,
-                (60, 255, 255), 2, cv2.LINE_AA)
-    cv2.putText(frame, f"rutas: {total_confirmed}  activos: {n_active}",
-                (x0 + pad, y0 + 60), cv2.FONT_HERSHEY_SIMPLEX, 0.48,
-                (160, 160, 100), 1, cv2.LINE_AA)
-    cv2.line(frame, (x0 + pad, y0 + 68), (x0 + panel_w - pad, y0 + 68), (70, 70, 70), 1)
-
-    # ── Filas de rutas con color de zona origen ─────────────────────
-    max_count = max(routes.values(), default=1)
-    y = y0 + 76
-    for route, count in sorted_routes:
-        pct = count / total_confirmed * 100 if total_confirmed > 0 else 0
-        origin = route.split("\u2192")[0].strip()
-        color = (150, 200, 150)
-        for zi, zn in enumerate(zone_names):
-            if zn == origin:
-                color = ZONE_COLORS_BGR[zi % len(ZONE_COLORS_BGR)]
-                break
-        bar_w = max(2, int((panel_w - pad * 2 - 100) * count / max_count))
-        cv2.rectangle(frame, (x0 + pad, y + 17), (x0 + pad + bar_w, y + 24), color, -1)
-        cv2.putText(frame, route, (x0 + pad, y + 14),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.62, color, 1, cv2.LINE_AA)
-        cv2.putText(frame, f"{count}  ({pct:.0f}%)", (x0 + panel_w - 94, y + 14),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.60, (220, 220, 100), 1, cv2.LINE_AA)
-        y += row_h
-
-def draw_hud(frame, frame_num, total_f, fps_avg, detections, n_routes_total):
-    """HUD inferior con info de procesamiento."""
-    h = frame.shape[0]
-    progress = frame_num / total_f if total_f > 0 else 0
-    bar_w = int(VID_W * progress)
-    cv2.rectangle(frame, (0, h - 6), (bar_w, h), (80, 200, 80), -1)
-
-    info = f"Frame {frame_num}/{total_f}  FPS:{fps_avg:.1f}  Det:{detections}  Rutas:{n_routes_total}"
-    cv2.putText(frame, info, (10, h - 12), cv2.FONT_HERSHEY_SIMPLEX,
-                0.5, (200, 200, 200), 1, cv2.LINE_AA)
 
 # ─────────────────────────────────────────────
 # Main loop
@@ -764,9 +531,9 @@ try:
                 if conf_val < _conf_for(cls_name):  # TODO-005
                     continue
                 x1, y1, x2, y2 = int(bbox.minx), int(bbox.miny), int(bbox.maxx), int(bbox.maxy)
-                if not passes_geometry_filter(x1, y1, x2, y2):
+                if not passes_geometry_filter(x1, y1, x2, y2, _geo_constraints):
                     continue
-                if in_exclusion_zone((x1 + x2) / 2, (y1 + y2) / 2):  # TODO-018
+                if in_exclusion_zone((x1 + x2) / 2, (y1 + y2) / 2, _exclusion_np):  # TODO-018
                     continue
                 det_list.append([x1, y1, x2, y2, conf_val])
                 det_classes.append(cls_name)
@@ -786,9 +553,9 @@ try:
                         continue
                     if conf_val < _conf_for(cls_name):  # TODO-005
                         continue
-                    if not passes_geometry_filter(x1, y1, x2, y2):
+                    if not passes_geometry_filter(x1, y1, x2, y2, _geo_constraints):
                         continue
-                    if in_exclusion_zone((x1 + x2) / 2, (y1 + y2) / 2):  # TODO-018
+                    if in_exclusion_zone((x1 + x2) / 2, (y1 + y2) / 2, _exclusion_np):  # TODO-018
                         continue
                     det_list.append([x1, y1, x2, y2, conf_val])
                     det_classes.append(cls_name)
@@ -834,9 +601,9 @@ try:
                     if box.id is None:
                         continue
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    if not passes_geometry_filter(x1, y1, x2, y2):
+                    if not passes_geometry_filter(x1, y1, x2, y2, _geo_constraints):
                         continue
-                    if in_exclusion_zone((x1 + x2) / 2, (y1 + y2) / 2):  # TODO-018
+                    if in_exclusion_zone((x1 + x2) / 2, (y1 + y2) / 2, _exclusion_np):  # TODO-018
                         continue
                     tid = int(box.id[0])
                     cls_id = int(box.cls[0])
@@ -868,18 +635,11 @@ try:
                 print(f"  🧹 Purgados {len(stale_ids)} tracks viejos — activos en memoria: {len(tracks_info)}")
 
         # ── Visualización ─────────────────────────────────────────────────────
-        # TODO-018: exclusion zones en rojo semi-transparente (ANTES de zonas de tránsito)
-        if _exclusion_np:
-            _excl_overlay = frame.copy()
-            for _ep in _exclusion_np.values():
-                cv2.fillPoly(_excl_overlay, [_ep], (60, 60, 220))
-            cv2.addWeighted(_excl_overlay, 0.22, frame, 0.78, 0, frame)
-            for _ep in _exclusion_np.values():
-                cv2.polylines(frame, [_ep], True, (60, 60, 220), 2)
+        draw_exclusion_zones(frame, _exclusion_np)
         if COUNTING_MODE == "lines":
-            draw_lines(frame)
+            draw_lines(frame, _counting_lines)
         else:
-            draw_zones(frame)
+            draw_zones(frame, zones_np)
 
         for (x1, y1, x2, y2, trk_id, cls_name) in tracked_boxes:
             cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
@@ -914,7 +674,7 @@ try:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.42, color, 1, cv2.LINE_AA)
 
         if DEMO_MODE:  # TODO-009
-            draw_scoreboard(frame, routes_matrix, len(tracked_boxes), total_vehicles_ever)
+            draw_scoreboard(frame, routes_matrix, len(tracked_boxes), total_vehicles_ever, VID_W, zone_names)
         else:
             draw_routes_panel(frame, routes_matrix, len(tracked_boxes))
 
@@ -926,7 +686,7 @@ try:
 
         if args.show_fps or USE_SAHI:
             draw_hud(frame, frame_count, TOTAL_F, fps_avg, len(tracked_boxes),
-                     sum(routes_matrix.values()))
+                     sum(routes_matrix.values()), VID_W)
 
         # Progreso en consola cada 60 frames
         if frame_count % 60 == 0:

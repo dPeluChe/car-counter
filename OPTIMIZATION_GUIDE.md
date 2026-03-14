@@ -5,8 +5,8 @@
 Todos los parametros se configuran con el configurador interactivo y se guardan en el JSON:
 
 ```bash
-python setup_glorieta.py --video assets/glorieta_fast.MP4
-python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4
+python setup.py --video assets/mi_video.mp4
+python main.py --config config/config.json --video assets/mi_video.mp4
 ```
 
 Ya no se usan flags CLI para confianza, tracker, etc. — todo va en el JSON config.

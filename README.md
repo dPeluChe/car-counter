@@ -1,29 +1,45 @@
 # Car Counter
 
-Prototipo de conteo y tracking de vehiculos para videos de trafico, con foco actual en glorietas y tomas aereas.
+Conteo y tracking de vehiculos con YOLO + tracking para videos de trafico.
+Soporta glorietas, intersecciones, aforo simple por cruce de linea y tomas aereas.
 
-## Estado actual
+## Arquitectura
 
-El flujo mas avanzado del repo hoy es:
+```
+main.py              # Motor de conteo (entry point)
+setup.py             # Configurador interactivo (Tkinter)
+carcounter/          # Paquete core
+  constants.py       #   Clases COCO, colores, IDs
+  geometry.py        #   Point-in-polygon, IoU, NMS, filtros
+  counting.py        #   Maquina de estados (zones + lines)
+  tracking.py        #   Asociacion clase-track
+  drawing.py         #   Dibujo OpenCV (zonas, HUD, scoreboard)
+  detection.py       #   Wrapper SAHI + filtros post-deteccion
+  calibration.py     #   ROI, escala, muestras, constraints geometricos
+  config_io.py       #   Lectura/escritura de config.json
+  export.py          #   Export JSON/CSV de resultados
+  paths.py           #   Resolucion centralizada de rutas
+  sort.py            #   SORT tracker (fallback)
+setup_panels/        # Mixins del configurador GUI
+  canvas.py          #   Zoom, pan, redraw, overlays compartidos
+  step0_exclusion.py #   Paso 0: zonas de exclusion
+  step1_calibration.py # Paso 1: calibracion YOLO
+  step2_zones.py     #   Paso 2: zonas/lineas de conteo
+  step3_sahi.py      #   Paso 3: SAHI + guardado
+```
 
-- `setup_glorieta.py`: configurador interactivo para videos de glorieta
-- `main_glorieta.py`: conteo de rutas A→B por zonas poligonales
+## Features
 
-Ese flujo ya incluye:
-
-- tracking nativo con `ByteTrack` o `BoT-SORT`
-- fallback a `SORT` cuando hace falta
-- modo `SAHI` para autos pequenos en tomas aereas
-- configuracion de `imgsz`
-- vista global de deteccion con feedback de progreso
-- calibracion local reescalada
-- filtros geometricos derivados de multiples muestras de vehiculos
-- zonas de exclusion para vehiculos estacionados (Paso 0)
-- umbrales de confianza por clase (car, moto, bus, truck)
+- Dos modos de conteo: zonas A->B (rutas) y cruce de linea (aforo)
+- Tracking nativo con ByteTrack o BoT-SORT (fallback SORT)
+- SAHI para vehiculos pequenos en tomas aereas
+- Zonas de exclusion para vehiculos estacionados
+- Umbrales de confianza por clase (car, moto, bus, truck)
+- Filtros geometricos aprendidos del configurador
 - NMS post-SAHI configurable
-- modo demo con scoreboard grande
-- exportacion de resultados en JSON y CSV
-- preview de zonas con video en vivo y detecciones YOLO opcionales
+- Modo demo con scoreboard grande
+- Exportacion JSON y CSV
+- Preview de zonas con detecciones YOLO en vivo
 
 ## Setup
 
@@ -33,124 +49,77 @@ source env/bin/activate
 pip install -r requirements.txt
 ```
 
-## Flujo recomendado para glorieta
+## Flujo
 
-1. Abrir el configurador:
-
-```bash
-python setup_glorieta.py --video assets/glorieta_fast.MP4
-```
-
-Para cargar una configuracion existente:
+1. Configurar:
 
 ```bash
-python setup_glorieta.py --video assets/glorieta_fast.MP4 --config config_glorieta.json
+python setup.py --video assets/mi_video.mp4
 ```
 
-2. En el paso 0 (opcional):
-
-- dibuja poligonos sobre areas con vehiculos estacionados u objetos fijos
-- estas zonas se excluiran de la deteccion en todos los pasos siguientes
-
-3. En el paso 1:
-
-- usa `Vista Global`
-- ajusta `imgsz` si hace falta
-- marca varios autos y 1-2 camiones con `Agregar muestra vehiculo`
-- ajusta confianza por clase si una clase tiene muchos falsos positivos
-- valida un auto puntual con `Probar YOLO`
-
-4. En el paso 2:
-
-- dibuja un poligono por cada boca calle de entrada/salida
-- usa el preview de video para validar que las zonas capturan el flujo
-- activa `YOLO` en el preview para ver detecciones en vivo
-
-5. En el paso 3:
-
-- revisa tiles SAHI
-- ajusta NMS threshold si hay detecciones duplicadas
-- guarda `config_glorieta.json`
-
-6. Ejecutar el conteo:
+Cargar config existente:
 
 ```bash
-python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4
+python setup.py --video assets/mi_video.mp4 --config config/config.json
 ```
 
-## Modos utiles
+2. Paso 0: zonas de exclusion (opcional)
+3. Paso 1: calibracion YOLO (vista global, muestras, confianza por clase)
+4. Paso 2: zonas poligonales o lineas de cruce
+5. Paso 3: parametros SAHI -> guardar config.json
 
-Demo recomendado para vista aerea:
+6. Ejecutar:
 
 ```bash
-python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4
+python main.py --config config/config.json --video assets/mi_video.mp4
 ```
 
-Modo demo con scoreboard grande:
+## Modos
 
 ```bash
-python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4 --demo-mode
+# Estandar
+python main.py --config config/config.json --video assets/video.mp4
+
+# Demo (scoreboard grande)
+python main.py --config config/config.json --video assets/video.mp4 --demo-mode
+
+# Rapido sin SAHI
+python main.py --config config/config.json --video assets/video.mp4 --no-sahi
+
+# Smoke test
+python main.py --config config/config.json --video assets/video.mp4 --headless --max-frames 50 --no-save
+
+# Exportar
+python main.py --config config/config.json --video assets/video.mp4 --output-json results.json --output-csv routes.csv
 ```
 
-Modo rapido sin SAHI:
+## Config JSON
 
-```bash
-python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4 --no-sahi
-```
+Generado por el configurador:
 
-Smoke test sin ventana:
+- `counting_mode`: "zones" o "lines"
+- `zones`: poligonos de entrada/salida
+- `lines`: lineas de cruce con tolerancia
+- `exclusion_zones`: areas excluidas
+- `settings.conf_threshold`: umbral global
+- `settings.conf_per_class`: umbrales por clase
+- `settings.imgsz`: resolucion YOLO
+- `settings.sample_constraints`: filtros geometricos
+- `sahi.slice_width/height`: tamano de tile
+- `sahi.nms_threshold`: NMS post-SAHI
 
-```bash
-python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4 --headless --max-frames 50 --no-save
-```
+## CLI flags (main.py)
 
-Exportar resultados:
-
-```bash
-python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4 --output-json results.json --output-csv routes.csv
-```
-
-## Parametros importantes
-
-### En el JSON config (generado por el configurador)
-
-- `conf_threshold`: recall vs precision (global)
-- `conf_per_class`: umbrales individuales por clase (car, motorbike, bus, truck)
-- `imgsz`: resolucion de inferencia YOLO
-- `sample_constraints`: filtros geometricos aprendidos de las muestras del configurador
-- `exclusion_zones`: poligonos donde no se cuentan vehiculos
-- `min_origin_frames` / `min_dest_frames`: anti-bounce para zonas origen/destino
-- `slice_width` / `slice_height`: tamano de tile SAHI
-- `overlap_ratio`: solapamiento SAHI
-- `nms_threshold`: NMS post-SAHI para eliminar duplicados
-
-### CLI flags de main_glorieta.py
-
-- `--no-sahi`: desactivar SAHI (mas rapido)
+- `--no-sahi`: sin SAHI (mas rapido)
 - `--tracker bytetrack|botsort|sort`: algoritmo de tracking
-- `--demo-mode`: scoreboard grande para presentaciones
-- `--headless`: sin ventana (para servidores o CI)
-- `--max-frames N`: procesar solo N frames
-- `--no-save`: no guardar video de salida
-- `--show-fps`: mostrar FPS en pantalla
-- `--benchmark`: guardar metricas de rendimiento
+- `--demo-mode`: scoreboard grande
+- `--headless`: sin ventana
+- `--max-frames N`: limitar frames
+- `--no-save`: no guardar video
+- `--show-fps`: mostrar FPS
+- `--benchmark`: guardar metricas
 
-## Notas practicas
-
-- Para glorietas aereas, `imgsz` alto mejora mucho la deteccion.
-- La vista global prioriza recall; luego las muestras ayudan a quitar techos, arboles u objetos grandes.
-- Las zonas de exclusion eliminan vehiculos estacionados de la deteccion y el tracking.
-- El conteo real usa los filtros geometricos guardados por el configurador.
-- Configs anteriores (sin `exclusion_zones` o `conf_per_class`) siguen siendo compatibles.
-
-## Documentacion relacionada
-
-- `ROUNDABOUT_GUIDE.md` — Guia de uso para glorietas
-- `OPTIMIZATION_GUIDE.md` — Ajuste de rendimiento y parametros
-- `docs/TASK_TODO.md` — Backlog de mejoras pendientes
-- `docs/TASK_COMPLETED.md` — Historial de cambios completados
-
-## Dependencias clave
+## Dependencias
 
 - `ultralytics`
 - `opencv-python`

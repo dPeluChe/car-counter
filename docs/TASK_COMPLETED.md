@@ -1,6 +1,6 @@
 # Tareas Completadas
 
-Registro de tareas finalizadas del proyecto Car Counter (glorieta).
+Registro de tareas finalizadas del proyecto Car Counter.
 
 ---
 
@@ -8,7 +8,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 
 **Fecha:** 2025-12-08
 **Commit:** `58d6dda`
-**Archivos:** `main_glorieta.py`, `setup_glorieta.py`
+**Archivos:** `main.py`, `setup.py`
 
 ### Que se hizo
 
@@ -22,7 +22,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 - Muestras de vehiculos para derivar filtros geometricos (ancho, alto, aspect ratio)
 - Calibracion local reescalada sobre recorte del frame
 - Parametro `imgsz` configurable para mejorar deteccion aerea
-- Generacion de `config_glorieta.json` con todos los parametros
+- Generacion de `config/config.json` con todos los parametros
 - CLI completo con flags: `--no-sahi`, `--tracker`, `--headless`, `--benchmark`, `--max-frames`
 - Panel visual de rutas detectadas en tiempo real
 - HUD con progreso, FPS, detecciones
@@ -30,8 +30,8 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 
 ### Criterios cumplidos
 
-- [x] `main_glorieta.py` y `setup_glorieta.py` compilan sin error
-- [x] Smoke test: `python main_glorieta.py --headless --max-frames 50 --no-save`
+- [x] `main.py` y `setup.py` compilan sin error
+- [x] Smoke test: `python main.py --headless --max-frames 50 --no-save`
 - [x] Configuracion guardada es JSON valido con zonas, settings, sahi, tracker
 
 ---
@@ -66,11 +66,11 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 - Dependencias eliminadas de `requirements.txt`:
   - `cvzone`, `hydra-core`, `matplotlib`, `scipy`, `requests`, `scikit-image`, `customtkinter`
 - `.gitignore` actualizado: `.envrc`, `.python-version`, `env.bak/`, `*.MP4`, `*.MOV`
-- Eliminado fallback a `config.json` en `main_glorieta.py`
+- Eliminado fallback a `config.json` en `main.py`
 
 ### Criterios cumplidos
 
-- [x] No quedan imports rotos en `main_glorieta.py` ni `setup_glorieta.py`
+- [x] No quedan imports rotos en `main.py` ni `setup.py`
 - [x] `requirements.txt` solo contiene dependencias usadas
 - [x] Archivos locales no se trackean en git
 
@@ -79,7 +79,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 ## DONE-004: Optimizar acumulacion de detecciones (TODO-001)
 
 **Fecha:** 2026-03-11
-**Archivo:** `main_glorieta.py`
+**Archivo:** `main.py`
 
 ### Que se hizo
 
@@ -98,7 +98,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 ## DONE-005: Purga de tracks viejos (TODO-002)
 
 **Fecha:** 2026-03-11
-**Archivo:** `main_glorieta.py`
+**Archivo:** `main.py`
 
 ### Que se hizo
 
@@ -119,7 +119,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 ## DONE-006: Anti-rebote en zona destino (TODO-003)
 
 **Fecha:** 2026-03-11
-**Archivo:** `main_glorieta.py`
+**Archivo:** `main.py`
 
 ### Que se hizo
 
@@ -143,7 +143,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 ## DONE-007: Export de resultados a JSON/CSV (TODO-006)
 
 **Fecha:** 2026-03-11
-**Archivo:** `main_glorieta.py`
+**Archivo:** `main.py`
 
 ### Que se hizo
 
@@ -165,11 +165,11 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 ## DONE-008: Filtro de confianza diferenciado por clase (TODO-005)
 
 **Fecha:** 2026-03-11
-**Archivo:** `main_glorieta.py`
+**Archivo:** `main.py`
 
 ### Que se hizo
 
-- Campo opcional `conf_per_class` en `config_glorieta.json` con umbrales por clase
+- Campo opcional `conf_per_class` en `config/config.json` con umbrales por clase
 - `EFFECTIVE_CONF` = minimo de todos los umbrales (se pasa al modelo, luego se filtra por clase en post-proceso)
 - Helper `_conf_for(cls_name)` retorna umbral especifico o global como fallback
 - Filtro aplicado en los 3 paths: SAHI (L581), SORT (L600), ByteTrack nativo (L653)
@@ -189,7 +189,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 ## DONE-009: Preview de zonas sobre video en movimiento (TODO-007)
 
 **Fecha:** 2026-03-11
-**Archivo:** `setup_glorieta.py`
+**Archivo:** `setup.py`
 
 ### Que se hizo
 
@@ -233,7 +233,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 ## DONE-011: Overlay de zonas optimizado (TODO-004)
 
 **Fecha:** 2026-03-11
-**Archivo:** `main_glorieta.py`
+**Archivo:** `main.py`
 **Funcion:** `draw_zones()`
 
 ### Que se hizo
@@ -253,7 +253,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 ## DONE-012: Cargar configuracion existente en el configurador (TODO-008)
 
 **Fecha:** 2026-03-11
-**Archivo:** `setup_glorieta.py`
+**Archivo:** `setup.py`
 
 ### Que se hizo
 
@@ -276,7 +276,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 ## DONE-013: Scoreboard grande para demos (TODO-009)
 
 **Fecha:** 2026-03-11
-**Archivo:** `main_glorieta.py`
+**Archivo:** `main.py`
 **Funcion:** `draw_scoreboard()`
 
 ### Que se hizo
@@ -300,7 +300,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 ## DONE-014: NMS adicional post-SAHI (TODO-010)
 
 **Fecha:** 2026-03-11
-**Archivo:** `main_glorieta.py`
+**Archivo:** `main.py`
 
 ### Que se hizo
 
@@ -324,7 +324,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 ## DONE-015: Undo de ultimo punto al dibujar zonas (TODO-012)
 
 **Fecha:** 2026-03-11
-**Archivo:** `setup_glorieta.py`
+**Archivo:** `setup.py`
 **Paso:** 2 (Zonas)
 
 ### Que se hizo
@@ -347,7 +347,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 ## DONE-016: Visualizacion de grilla SAHI en el canvas (TODO-015)
 
 **Fecha:** 2026-03-11
-**Archivo:** `setup_glorieta.py`
+**Archivo:** `setup.py`
 **Paso:** 3 (SAHI)
 
 ### Que se hizo
@@ -371,7 +371,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 ## DONE-017: Preview de detecciones YOLO sobre video con zonas (TODO-014)
 
 **Fecha:** 2026-03-11
-**Archivo:** `setup_glorieta.py`
+**Archivo:** `setup.py`
 **Paso:** 2 (Zonas)
 
 ### Que se hizo
@@ -398,7 +398,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 ## DONE-018: Seleccion visual de zona en el canvas (TODO-013)
 
 **Fecha:** 2026-03-11
-**Archivo:** `setup_glorieta.py`
+**Archivo:** `setup.py`
 **Paso:** 2 (Zonas)
 
 ### Que se hizo
@@ -422,7 +422,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 ## DONE-019: Visualizacion de muestras de vehiculos en el canvas (TODO-016)
 
 **Fecha:** 2026-03-11
-**Archivo:** `setup_glorieta.py`
+**Archivo:** `setup.py`
 **Paso:** 1 (Calibracion)
 
 ### Que se hizo
@@ -445,7 +445,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 ## DONE-020: Sliders de confianza por clase en el configurador (TODO-017)
 
 **Fecha:** 2026-03-11
-**Archivo:** `setup_glorieta.py`
+**Archivo:** `setup.py`
 **Paso:** 1 (Calibracion)
 
 ### Que se hizo
@@ -470,11 +470,11 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 ## DONE-021: Zonas de exclusion para vehiculos estacionados (TODO-018)
 
 **Fecha:** 2026-03-11
-**Archivos:** `setup_glorieta.py`, `main_glorieta.py`
+**Archivos:** `setup.py`, `main.py`
 
 ### Que se hizo
 
-#### Configurador (`setup_glorieta.py`):
+#### Configurador (`setup.py`):
 - Paso 0 "Zonas de Exclusion" con panel completo: nombre, dibujo de poligonos, listbox, seleccion, eliminacion
 - EXCL_COLORS rojo/naranja para diferenciar visualmente de zonas de transito
 - `_draw_excl_overlay()` dibuja zonas + poligono en curso con feedback visual (primer punto resaltado)
@@ -487,7 +487,7 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 - Docstring actualizado de 3 a 4 pasos
 - Mensaje de guardado incluye conteo de zonas de exclusion
 
-#### Conteo real (`main_glorieta.py`):
+#### Conteo real (`main.py`):
 - Carga `exclusion_zones` del config JSON con `config.get("exclusion_zones", {})`
 - `_exclusion_np` pre-convierte a numpy arrays (una sola vez al inicio)
 - `in_exclusion_zone(cx, cy)` helper con `cv2.pointPolygonTest`
@@ -506,9 +506,48 @@ Registro de tareas finalizadas del proyecto Car Counter (glorieta).
 - [x] `--config` carga zonas de exclusion existentes
 
 #### Conteo real:
-- [x] `main_glorieta.py` carga `exclusion_zones` del JSON
+- [x] `main.py` carga `exclusion_zones` del JSON
 - [x] Detecciones con centro dentro de exclusion se descartan en los 3 paths
 - [x] Las zonas de exclusion se dibujan en rojo semi-transparente en el frame
 - [x] Se imprime la lista de zonas de exclusion al inicio
 - [x] Configs sin `exclusion_zones` funcionan igual (backward compatible)
 - [x] Smoke test: no hay config de prueba en el repo, validacion estructural del codigo
+
+---
+
+## DONE-022: Refactor modular — extraccion de paquete carcounter y mixins GUI
+
+**Fecha:** 2026-03-14
+**Archivos:** `setup.py`, `setup_panels/`, `carcounter/calibration.py`, `carcounter/config_io.py`, `carcounter/sort.py`
+
+### Que se hizo
+
+#### Paquete `carcounter/` — nuevos modulos:
+- `calibration.py`: funciones standalone para ROI, escala, muestras, constraints geometricos, prediccion SAHI y overlay de deteccion
+- `config_io.py`: lectura/escritura de config.json (`load_config`, `parse_*`, `build_config`, `save_config`)
+- `detection.py`, `export.py`: ya existian de iteracion anterior
+
+#### Configurador GUI — descomposicion en mixins (`setup_panels/`):
+- `canvas.py` (CanvasMixin): zoom, pan, conversion de coordenadas, `_redraw()`, overlays compartidos
+- `step0_exclusion.py` (ExclusionMixin): panel y logica de zonas de exclusion
+- `step1_calibration.py` (CalibrationMixin): panel y logica de calibracion YOLO
+- `step2_zones.py` (ZonesMixin): panel y logica de zonas/lineas de conteo + preview
+- `step3_sahi.py` (SAHIMixin): panel y logica SAHI + guardado
+
+#### `setup.py` (2143 → 453 lineas):
+- Orquestador slim que compone los 5 mixins via herencia multiple
+- Contiene solo: `__init__` (estado), `_build_ui` (layout), navegacion entre pasos, dispatcher de eventos, carga de config
+
+#### Limpieza:
+- `sort.py`: eliminados 7 imports demo (matplotlib, skimage, etc.) y bloque `__main__` (~76 lineas)
+- Imports simplificados con `import X as Y` en vez de alias post-import
+- `main_glorieta.py` archivado a `archive/main_glorieta_legacy.py`
+
+### Criterios cumplidos
+
+- [x] `setup.py` < 500 lineas (453)
+- [x] 5 mixins independientes en `setup_panels/`
+- [x] Funciones de calibracion reutilizables en `carcounter/calibration.py`
+- [x] Config I/O centralizado en `carcounter/config_io.py`
+- [x] `sort.py` sin imports innecesarios ni codigo demo
+- [x] Sin codigo duplicado entre mixins y `carcounter/`

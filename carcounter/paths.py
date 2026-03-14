@@ -40,7 +40,7 @@ class Paths:
     # ── Default file paths ───────────────────────
     @property
     def default_config(self) -> Path:
-        return self.config_dir / "config_glorieta.json"
+        return self.config_dir / "config.json"
 
     @property
     def default_model(self) -> Path:
@@ -48,15 +48,15 @@ class Paths:
 
     @property
     def default_video(self) -> Path:
-        return self.assets_dir / "glorieta_normal.mp4"
+        return self.assets_dir / "video.mp4"
 
     @property
     def default_output_video(self) -> Path:
-        return self.output_dir / "result_glorieta.mp4"
+        return self.output_dir / "result.mp4"
 
     @property
     def default_output_json(self) -> Path:
-        return self.output_dir / "results_glorieta.json"
+        return self.output_dir / "results.json"
 
     @property
     def default_mask(self) -> Path:

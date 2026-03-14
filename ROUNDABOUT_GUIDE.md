@@ -1,8 +1,8 @@
-# Guia de uso: Glorieta A→B
+# Guia de uso: Conteo por zonas A→B
 
 ## Objetivo
 
-El flujo de glorieta permite:
+El flujo de conteo por zonas permite:
 
 - calibrar deteccion sobre vista aerea
 - excluir zonas con vehiculos estacionados
@@ -13,8 +13,8 @@ El flujo de glorieta permite:
 
 Los archivos principales son:
 
-- `setup_glorieta.py` — configurador interactivo (Tkinter)
-- `main_glorieta.py` — contador de rutas
+- `setup.py` — configurador interactivo (Tkinter)
+- `main.py` — contador de rutas
 
 ## Paso 0: Zonas de Exclusion (opcional)
 
@@ -31,19 +31,19 @@ Se dibujan en rojo/naranja para diferenciarlas de las zonas de transito.
 
 ```bash
 source env/bin/activate
-python setup_glorieta.py --video assets/glorieta_fast.MP4
+python setup.py --video assets/mi_video.mp4
 ```
 
 Para cargar una configuracion previa:
 
 ```bash
-python setup_glorieta.py --video assets/glorieta_fast.MP4 --config config_glorieta.json
+python setup.py --video assets/mi_video.mp4 --config config/config.json
 ```
 
 ### Que hace el configurador
 
 - permite cambiar de frame para elegir un momento util del video
-- tiene `Vista Global` para medir recall en toda la glorieta (con feedback de progreso)
+- tiene `Vista Global` para medir recall en toda la escena (con feedback de progreso)
 - usa `imgsz` alto para mejorar deteccion en vista aerea
 - permite agregar varias muestras de vehiculos
 - deriva filtros geometricos a partir de esas muestras
@@ -97,30 +97,30 @@ Valores utiles para vista aerea:
 Con la config guardada:
 
 ```bash
-python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4
+python main.py --config config/config.json --video assets/mi_video.mp4
 ```
 
 Modo rapido sin SAHI:
 
 ```bash
-python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4 --no-sahi
+python main.py --config config/config.json --video assets/mi_video.mp4 --no-sahi
 ```
 
 Modo demo con scoreboard grande:
 
 ```bash
-python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4 --demo-mode
+python main.py --config config/config.json --video assets/mi_video.mp4 --demo-mode
 ```
 
 Smoke test:
 
 ```bash
-python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4 --headless --max-frames 50 --no-save
+python main.py --config config/config.json --video assets/mi_video.mp4 --headless --max-frames 50 --no-save
 ```
 
 ## Lo que usa el conteo
 
-`main_glorieta.py` respeta todo lo que el configurador guarda:
+`main.py` respeta todo lo que el configurador guarda:
 
 - `conf_threshold` (global)
 - `conf_per_class` (por clase, si se configuro)
@@ -133,10 +133,10 @@ python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fa
 
 ## Resultados
 
-Al terminar, `main_glorieta.py` genera:
+Al terminar, `main.py` genera:
 
-- `result_glorieta.mp4`: video con visualizacion de tracking y rutas
-- `results_glorieta.json`: resumen de rutas contadas, configuracion, metricas
+- `result.mp4`: video con visualizacion de tracking y rutas
+- `results.json`: resumen de rutas contadas, configuracion, metricas
 - CSV opcional con `--output-csv routes.csv`
 
 ## Validacion manual
