@@ -38,6 +38,7 @@ import os
 import argparse
 import importlib.util
 import numpy as np
+from carcounter.paths import paths
 
 # ─────────────────────────────────────────────
 # CLI
@@ -53,7 +54,7 @@ Ejemplos:
   python main_glorieta.py --benchmark --show-fps
     """
 )
-parser.add_argument("--config", type=str, default="config_glorieta.json",
+parser.add_argument("--config", type=str, default=str(paths.default_config),
                     help="Ruta al archivo de configuración (generado por setup_glorieta.py)")
 parser.add_argument("--video", type=str, default=None,
                     help="Ruta al video. Si no se especifica, se usa el del config.")
@@ -69,7 +70,7 @@ parser.add_argument("--show-fps", dest="show_fps", action="store_true",
                     help="Mostrar FPS en el video")
 parser.add_argument("--benchmark", action="store_true",
                     help="Guardar métricas de rendimiento en benchmarks/")
-parser.add_argument("--output", type=str, default="result_glorieta.mp4",
+parser.add_argument("--output", type=str, default=str(paths.default_output_video),
                     help="Archivo de video de salida")
 parser.add_argument("--no-save", dest="no_save", action="store_true",
                     help="No guardar video de salida (más rápido)")
@@ -80,8 +81,8 @@ parser.add_argument("--max-frames", type=int, default=None,
 parser.add_argument("--tracker", type=str, default="bytetrack",
                     choices=["bytetrack", "botsort", "sort"],
                     help="Algoritmo de tracking: bytetrack (default), botsort o sort fallback")
-parser.add_argument("--output-json", type=str, default="results_glorieta.json",
-                    help="Ruta del JSON de resultados al terminar (default: results_glorieta.json)")
+parser.add_argument("--output-json", type=str, default=str(paths.default_output_json),
+                    help="Ruta del JSON de resultados al terminar (default: output/results_glorieta.json)")
 parser.add_argument("--no-output-json", dest="no_output_json", action="store_true",
                     help="No guardar JSON de resultados al terminar")
 parser.add_argument("--output-csv", type=str, default=None,
@@ -91,8 +92,10 @@ parser.add_argument("--demo-mode", dest="demo_mode", action="store_true",
 args = parser.parse_args()
 
 # Si --no-save y --output-json no fue especificado explícitamente, suprimir JSON también
-if args.no_save and args.output_json == "results_glorieta.json":
+if args.no_save and args.output_json == str(paths.default_output_json):
     args.no_output_json = True
+
+paths.ensure_dirs()
 
 # ─────────────────────────────────────────────
 # Cargar configuración
@@ -116,8 +119,8 @@ settings         = config.get("settings", {})
 sahi_cfg         = config.get("sahi", {})
 tracker_cfg      = config.get("tracker", {})
 
-VIDEO_PATH   = args.video  or config.get("video_path", "assets/glorieta_normal.mp4")
-MODEL_PATH   = args.model  or config.get("model_path", "models/yolo/yolov11l.pt")
+VIDEO_PATH   = args.video  or config.get("video_path", str(paths.default_video))
+MODEL_PATH   = args.model  or config.get("model_path", str(paths.default_model))
 CONF_THRESH  = settings.get("conf_threshold", 0.10)
 CONF_PER_CLASS = settings.get("conf_per_class", {})             # TODO-005: umbral por clase
 EFFECTIVE_CONF = min(min(CONF_PER_CLASS.values()), CONF_THRESH) if CONF_PER_CLASS else CONF_THRESH  # TODO-005
@@ -275,7 +278,7 @@ SORT_IOU = tracker_cfg.get("iou_threshold", 0.2)
 
 if USE_SAHI or TRACKER_BACKEND == "sort":
     try:
-        from sort import Sort as _Sort
+        from carcounter.sort import Sort as _Sort
         _sort_tracker = _Sort(
             max_age=SORT_MAX_AGE,
             min_hits=SORT_MIN_HITS,
@@ -925,8 +928,9 @@ if args.output_csv:
 
 # Guardar benchmark
 if args.benchmark and benchmark_data:
-    os.makedirs("benchmarks", exist_ok=True)
-    bfile = "benchmarks/glorieta_results.txt"
+    bdir = str(paths.benchmarks_dir)
+    os.makedirs(bdir, exist_ok=True)
+    bfile = os.path.join(bdir, "glorieta_results.txt")
     with open(bfile, "w") as f:
         f.write("Glorieta Benchmark\n" + "=" * 50 + "\n")
         f.write(f"Video: {VIDEO_PATH}\n")

@@ -63,3 +63,7 @@ models/
 .envrc
 .python-version
 env.bak/
+
+# Project output and config (generated at runtime)
+config/
+output/

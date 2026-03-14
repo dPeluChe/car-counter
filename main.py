@@ -5,13 +5,14 @@ import cvzone
 import math
 import numpy as np
 import argparse
-from sort import *
+from carcounter.sort import *
+from carcounter.paths import paths
 
 # CLI params (moved up before initialization)
 parser = argparse.ArgumentParser()
 parser.add_argument("--mode", type=str, choices=["street", "roundabout-test"], default="street",
                     help="street: normal counting mode | roundabout-test: detection only for testing")
-parser.add_argument("--video", type=str, default="assets/test_2.mp4",
+parser.add_argument("--video", type=str, default=str(paths.assets_dir / "test_2.mp4"),
                     help="Path to input video file")
 parser.add_argument("--directions", type=int, choices=[1,2], default=2)
 parser.add_argument("--line-y", dest="line_y", type=float, default=0.5)
@@ -27,7 +28,7 @@ parser.add_argument("--iou-threshold", dest="iou_threshold", type=float, default
 args = parser.parse_args()
 
 # Initialization and variable naming
-model = YOLO("models/yolo/yolov11l.pt")
+model = YOLO(str(paths.default_model))
 vid = cv.VideoCapture(args.video)
 
 class_names = ["person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat",
@@ -54,7 +55,7 @@ class_totals = {}
 class_up = {}
 class_down = {}
 id_prev_cy = {}  # Track previous y position for direction detection
-mask = cv.imread("assets/mask.png") # For blocking out noise
+mask = cv.imread(str(paths.default_mask))  # For blocking out noise
 mask_resized = False
 
 # Setting up video writer properties (for saving the output result)

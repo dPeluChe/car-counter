@@ -21,13 +21,14 @@ import math
 import numpy as np
 from PIL import Image, ImageTk
 from ultralytics import YOLO
+from carcounter.paths import paths
 
 # ─────────────────────────────────────────────
 # Constantes
 # ─────────────────────────────────────────────
-MODEL_PATH = "models/yolo/yolov11l.pt"
-DEFAULT_VIDEO = "assets/glorieta_normal.mp4"
-OUTPUT_CONFIG = "config_glorieta.json"
+MODEL_PATH = str(paths.default_model)
+DEFAULT_VIDEO = str(paths.default_video)
+OUTPUT_CONFIG = str(paths.default_config)
 VEHICLE_CLASS_IDS = [2, 3, 5, 7]  # car, motorbike, bus, truck
 CALIB_MIN_CONTEXT_PX = 24
 CALIB_CONTEXT_RATIO = 0.75
@@ -1936,6 +1937,7 @@ class SetupGlorieta(tk.Tk):
                         config.setdefault(section, {})[key] = val
 
         try:
+            paths.ensure_dirs()
             with open(OUTPUT_CONFIG, "w") as f:
                 json.dump(config, f, indent=2)
             excl_info = f" · {len(self.exclusion_zones)} excl" if self.exclusion_zones else ""

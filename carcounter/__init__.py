@@ -1,0 +1,1 @@
+"""Car Counter — paquete core."""
