@@ -2,17 +2,30 @@
 
 ## Objetivo
 
-El flujo actual de glorieta ya no es solo una prueba de deteccion. Ahora permite:
+El flujo de glorieta permite:
 
 - calibrar deteccion sobre vista aerea
+- excluir zonas con vehiculos estacionados
 - definir zonas poligonales por calle
-- rastrear vehiculos con IDs
+- rastrear vehiculos con IDs (ByteTrack / BoT-SORT)
 - contar rutas A→B entre zonas
+- exportar resultados en JSON y CSV
 
 Los archivos principales son:
 
-- `setup_glorieta.py`
-- `main_glorieta.py`
+- `setup_glorieta.py` — configurador interactivo (Tkinter)
+- `main_glorieta.py` — contador de rutas
+
+## Paso 0: Zonas de Exclusion (opcional)
+
+Al abrir el configurador, el primer paso permite definir poligonos sobre areas que no deben contar:
+
+- estacionamientos con vehiculos fijos
+- zonas con objetos que YOLO detecta como vehiculos (techos, etc.)
+
+Las detecciones cuyo centro caiga dentro de estas zonas se descartan en Vista Global, preview YOLO, y el conteo real.
+
+Se dibujan en rojo/naranja para diferenciarlas de las zonas de transito.
 
 ## Paso 1: Configuracion
 
@@ -21,24 +34,34 @@ source env/bin/activate
 python setup_glorieta.py --video assets/glorieta_fast.MP4
 ```
 
+Para cargar una configuracion previa:
+
+```bash
+python setup_glorieta.py --video assets/glorieta_fast.MP4 --config config_glorieta.json
+```
+
 ### Que hace el configurador
 
 - permite cambiar de frame para elegir un momento util del video
-- tiene `Vista Global` para medir recall en toda la glorieta
+- tiene `Vista Global` para medir recall en toda la glorieta (con feedback de progreso)
 - usa `imgsz` alto para mejorar deteccion en vista aerea
 - permite agregar varias muestras de vehiculos
 - deriva filtros geometricos a partir de esas muestras
+- soporta umbrales de confianza por clase (car, moto, bus, truck)
+- filtra detecciones en zonas de exclusion automaticamente
 - valida localmente un auto especifico antes de pasar a zonas
 
 ### Flujo recomendado de calibracion
 
-1. Presiona `Vista Global`
-2. Ajusta `imgsz` si la escena sigue corta de recall
-3. Marca 5 autos y 1-2 camiones con `Agregar muestra vehiculo`
-4. Vuelve a presionar `Vista Global`
-5. Repite hasta bajar falsos positivos grandes
-6. Marca un auto puntual y usa `Probar YOLO`
-7. Confirma y continua
+1. Si hay vehiculos estacionados, dibuja zonas de exclusion en el Paso 0
+2. Presiona `Vista Global`
+3. Ajusta `imgsz` si la escena sigue corta de recall
+4. Marca 5 autos y 1-2 camiones con `Agregar muestra vehiculo`
+5. Si una clase tiene muchos falsos positivos, ajusta su slider de confianza
+6. Vuelve a presionar `Vista Global`
+7. Repite hasta bajar falsos positivos grandes
+8. Marca un auto puntual y usa `Probar YOLO`
+9. Confirma y continua
 
 ## Paso 2: Zonas
 
@@ -49,6 +72,15 @@ Regla practica:
 - la zona debe cubrir el tramo donde ya sabes que el auto esta entrando o saliendo
 - evita zonas demasiado grandes que invadan el anillo interno
 
+### Preview de video
+
+El configurador permite reproducir el video con las zonas superpuestas:
+
+- `Play/Pausa` para ver el video en vivo
+- `YOLO` para activar detecciones sobre el video (mas lento pero valida las zonas)
+- las zonas de exclusion se muestran como referencia visual
+- clic en una zona para seleccionarla
+
 ## Paso 3: SAHI
 
 El configurador tambien guarda parametros para deteccion por tiles.
@@ -58,6 +90,7 @@ Valores utiles para vista aerea:
 - `slice_width`: 256 a 512
 - `slice_height`: 256 a 512
 - `overlap_ratio`: 0.2 a 0.3
+- `nms_threshold`: 0.3 (NMS post-SAHI para eliminar duplicados)
 
 ## Ejecucion del conteo
 
@@ -73,42 +106,45 @@ Modo rapido sin SAHI:
 python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4 --no-sahi
 ```
 
+Modo demo con scoreboard grande:
+
+```bash
+python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4 --demo-mode
+```
+
 Smoke test:
 
 ```bash
 python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4 --headless --max-frames 50 --no-save
 ```
 
-## Filtros que hoy usa el conteo
+## Lo que usa el conteo
 
-`main_glorieta.py` ya respeta:
+`main_glorieta.py` respeta todo lo que el configurador guarda:
 
-- `conf_threshold`
+- `conf_threshold` (global)
+- `conf_per_class` (por clase, si se configuro)
 - `imgsz`
-- `min_area`
-- `max_area`
-- restricciones geometricas derivadas de muestras:
-  - ancho
-  - alto
-  - aspect ratio
+- `min_area` / `max_area`
+- `exclusion_zones` (se dibujan en rojo semi-transparente)
+- restricciones geometricas derivadas de muestras (ancho, alto, aspect ratio)
+- NMS post-SAHI configurable
+- `min_origin_frames` / `min_dest_frames` para anti-bounce
 
-Eso ayuda a quitar techos, arboles o objetos grandes que no parecen vehiculos.
+## Resultados
 
-## Estado actual del prototipo
+Al terminar, `main_glorieta.py` genera:
 
-Ya esta implementado:
+- `result_glorieta.mp4`: video con visualizacion de tracking y rutas
+- `results_glorieta.json`: resumen de rutas contadas, configuracion, metricas
+- CSV opcional con `--output-csv routes.csv`
 
-- ByteTrack / BoT-SORT nativo
-- fallback SORT
-- SAHI
-- calibracion local reescalada
-- vista global de deteccion
-- filtros multi-muestra
-- conteo A→B por zonas
+## Validacion manual
 
 Todavia requiere validacion manual sobre videos reales para ajustar:
 
 - recall vs falsos positivos
 - tamano de tiles SAHI
 - zonas de entrada/salida
+- zonas de exclusion para vehiculos estacionados
 - estabilidad del tracking en escenas con oclusion

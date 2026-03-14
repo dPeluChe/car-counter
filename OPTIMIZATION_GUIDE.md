@@ -1,328 +1,181 @@
-# 🎯 Guía de Optimización para Detección de Vehículos
+# Guia de Optimizacion para Deteccion de Vehiculos
 
-## Problema Identificado: Objetos Pequeños desde Vistas Aéreas
+## Flujo actual
 
-### Síntomas
-- ✅ YOLO detecta los vehículos pero son muy pequeños
-- ❌ Los IDs de tracking cambian constantemente (id=2, luego desaparece, luego id=5)
-- ❌ Vehículos aparecen y desaparecen entre frames
-- ⚠️ Detecciones de objetos no deseados (clocks, trains, etc.)
-
-### Causa Raíz
-1. **Objetos pequeños** → Baja confianza de detección
-2. **Vista aérea/drone** → Perspectiva diferente al entrenamiento de YOLO
-3. **SORT tracker por defecto** → Configurado para objetos grandes y cercanos
-4. **Sin filtro de confianza** → Acepta detecciones débiles
-
----
-
-## 🔧 Nuevos Parámetros Agregados
-
-### `--conf-threshold` (default: 0.3)
-**Qué hace:** Filtra detecciones con baja confianza
+Todos los parametros se configuran con el configurador interactivo y se guardan en el JSON:
 
 ```bash
-# Más estricto (menos falsos positivos, puede perder autos pequeños)
---conf-threshold 0.5
-
-# Más permisivo (detecta más autos pequeños, más ruido)
---conf-threshold 0.2
-
-# Muy permisivo (para objetos muy pequeños)
---conf-threshold 0.15
+python setup_glorieta.py --video assets/glorieta_fast.MP4
+python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fast.MP4
 ```
 
-**Recomendación para glorietas aéreas:** `0.2 - 0.25`
+Ya no se usan flags CLI para confianza, tracker, etc. — todo va en el JSON config.
 
 ---
 
-### `--max-age` (default: 30)
-**Qué hace:** Cuántos frames mantener un track sin nuevas detecciones
+## Parametros clave y como ajustarlos
 
-```bash
-# Tracking más estable (objetos pequeños que desaparecen temporalmente)
---max-age 40
+### `conf_threshold` (default: 0.10)
 
-# Tracking menos estable (solo objetos claramente visibles)
---max-age 15
+Umbral global de confianza para YOLO.
 
-# Muy estable (para objetos que se ocultan frecuentemente)
---max-age 60
-```
+- **Bajar** (0.05-0.10): mas recall, detecta vehiculos pequenos pero mas falsos positivos
+- **Subir** (0.20-0.35): menos falsos positivos, puede perder autos pequenos
 
-**Por qué es importante:**
-- Objetos pequeños pueden no detectarse en cada frame
-- Vista aérea puede tener oclusiones (árboles, sombras)
-- Mayor `max_age` = IDs más estables
+Para glorietas aereas: empezar en 0.10 y subir solo si hay demasiado ruido.
 
-**Recomendación para glorietas aéreas:** `30 - 50`
+### `conf_per_class`
 
----
+Umbrales individuales por clase. Se configuran con los sliders del Paso 1.
 
-### `--iou-threshold` (default: 0.2)
-**Qué hace:** Umbral de IoU para asociar detecciones con tracks existentes
+Util cuando una clase tiene mas falsos positivos que otra:
 
-```bash
-# Más permisivo (mejor para objetos pequeños/distantes)
---iou-threshold 0.15
+- `car`: generalmente el mas confiable, puede quedar bajo (0.10)
+- `motorbike`: suele tener mas falsos positivos en aereas, subir a 0.20-0.30
+- `bus` / `truck`: depende del video
 
-# Más estricto (objetos grandes y cercanos)
---iou-threshold 0.3
-```
+### `imgsz` (default: 1600)
 
-**Por qué bajarlo:**
-- Objetos pequeños tienen bounding boxes pequeñas
-- Pequeños movimientos = bajo IoU
-- Valor bajo = mejor asociación de objetos pequeños
+Resolucion de inferencia YOLO. Mayor = mejor deteccion de objetos pequenos pero mas lento.
 
-**Recomendación para glorietas aéreas:** `0.15 - 0.2`
+- Vista aerea alta (drone >50m): 1600-2560
+- Vista aerea media (20-50m): 1280-1600
+- Vista a nivel de calle: 640-1280
 
----
+### `exclusion_zones`
 
-### `--min-hits` (default: 2)
-**Qué hace:** Detecciones consecutivas necesarias para confirmar un track
+Poligonos donde no se cuentan vehiculos. Se configuran en el Paso 0 del configurador.
 
-```bash
-# Más sensible (detecta rápido pero más falsos positivos)
---min-hits 1
+Usar para:
 
-# Más conservador (menos falsos positivos pero más lento)
---min-hits 3
-```
+- estacionamientos con vehiculos fijos
+- areas laterales donde YOLO detecta techos o arboles como vehiculos
+- zonas fuera del flujo de transito
 
-**Recomendación para glorietas aéreas:** `2` (balance)
+### `sample_constraints`
 
----
+Filtros geometricos derivados de las muestras de vehiculos del Paso 1.
 
-## 📊 Configuraciones Recomendadas por Escenario
+Rango automatico: el configurador toma el min/max de ancho, alto y aspect ratio de todas las muestras, con un margen del 30%.
 
-### 1. Vista Aérea Alta (Drone > 50m)
-**Problema:** Autos muy pequeños (< 30x30 px)
+Mas muestras = filtro mas representativo. Marcar al menos 5 vehiculos de distintos tamanos.
 
-```bash
-python main.py --mode roundabout-test \
-  --video assets/glorieta_caballos.mov \
-  --conf-threshold 0.2 \
-  --max-age 50 \
-  --iou-threshold 0.15 \
-  --min-hits 2
-```
+### `slice_width` / `slice_height` (SAHI)
 
-**Por qué:**
-- `conf 0.2`: Acepta detecciones débiles de objetos pequeños
-- `max-age 50`: Mantiene tracks aunque el auto no se detecte en algunos frames
-- `iou 0.15`: Asocia mejor objetos pequeños con movimiento
+Tamano de los tiles para SAHI (Slicing Aided Hyper Inference).
 
----
+- Tiles chicos (256): mejor para autos muy pequenos, mas tiles, mas lento
+- Tiles grandes (512): mas rapido, menos granularidad
 
-### 2. Vista Aérea Media (Drone 20-50m)
-**Problema:** Autos medianos, tracking inestable
+### `overlap_ratio` (SAHI)
 
-```bash
-python main.py --mode roundabout-test \
-  --video assets/patria_acueducto.mp4 \
-  --conf-threshold 0.25 \
-  --max-age 35 \
-  --iou-threshold 0.2 \
-  --min-hits 2
-```
+Solapamiento entre tiles SAHI. Mayor overlap = menos chances de cortar un vehiculo en el borde.
+
+- 0.2: balance general
+- 0.3: si hay vehiculos justo en los bordes de tiles
+
+### `nms_threshold` (SAHI)
+
+NMS post-SAHI para eliminar detecciones duplicadas entre tiles solapados.
+
+- 0.3: valor por defecto, buen balance
+- 0.2: mas agresivo, elimina mas duplicados
+- 0.5: mas permisivo, menos supresion
+
+### `min_origin_frames` / `min_dest_frames`
+
+Frames consecutivos que un vehiculo debe permanecer en una zona para confirmar entrada/salida.
+
+- 3 (default): buen balance anti-bounce
+- 5+: para zonas muy grandes donde el vehiculo pasa lento
+- 1-2: si las zonas son pequenas y el vehiculo pasa rapido
 
 ---
 
-### 3. Vista Frontal/Cámara de Tráfico (Modo Street)
-**Problema:** Autos grandes, necesita precisión
+## Tracker
 
-```bash
-python main.py --mode street \
-  --video assets/test_2.mp4 \
-  --conf-threshold 0.4 \
-  --max-age 25 \
-  --iou-threshold 0.3 \
-  --min-hits 2
-```
+Opciones via CLI flag `--tracker`:
 
----
+| Tracker | Ventajas | Cuando usar |
+|---------|----------|-------------|
+| `bytetrack` (default) | Estable, nativo de Ultralytics | General, recomendado |
+| `botsort` | Mejor re-ID | Cuando hay muchas oclusiones |
+| `sort` | Legacy, no requiere `lap` | Fallback si `lap` no instala |
 
-## 🧪 Proceso de Calibración
-
-### Paso 1: Detectar si YOLO ve los autos
-```bash
-# Muy permisivo para ver TODO lo que detecta
-python main.py --mode roundabout-test \
-  --video TU_VIDEO.mp4 \
-  --conf-threshold 0.15 \
-  --min-hits 1
-```
-
-**Observar:**
-- ¿Detecta los autos pequeños? → Sí: Subir conf a 0.2-0.25
-- ¿Muchos falsos positivos? → Sí: Subir conf a 0.3-0.35
-- ¿Detecta objetos raros (clocks, trains)? → Normal, se filtran después
+Con SAHI activo, siempre se usa SORT legacy (SAHI no es compatible con `model.track()`).
 
 ---
 
-### Paso 2: Estabilizar el tracking
-```bash
-# Una vez que detecta bien, estabilizar IDs
-python main.py --mode roundabout-test \
-  --video TU_VIDEO.mp4 \
-  --conf-threshold 0.25 \
-  --max-age 40 \
-  --iou-threshold 0.15
-```
+## Modelos YOLO
 
-**Observar en consola:**
-```
-🚗 Detected vehicle id=2 class=car at (648,657)
-🚗 Detected vehicle id=3 class=car at (449,465)
-# ... más frames ...
-# ¿El id=2 sigue apareciendo o cambia a id=10?
-```
-
-**Si los IDs cambian mucho:**
-- ↑ Aumentar `max-age` a 50-60
-- ↓ Bajar `iou-threshold` a 0.1-0.15
-
----
-
-### Paso 3: Reducir falsos positivos
-```bash
-# Ajustar finamente
-python main.py --mode roundabout-test \
-  --video TU_VIDEO.mp4 \
-  --conf-threshold 0.3 \
-  --max-age 45 \
-  --iou-threshold 0.15 \
-  --min-hits 3
-```
-
-**Si hay objetos estáticos detectados:**
-- ↑ Aumentar `min-hits` a 3-4
-
----
-
-## 🎬 Comparación de Modelos YOLO
-
-### YOLOv8l vs YOLOv11l vs YOLOv11m
-
-| Modelo | Tamaño | Velocidad | Precisión | Recomendación |
+| Modelo | Tamano | Velocidad | Precision | Recomendacion |
 |--------|--------|-----------|-----------|---------------|
-| **yolov8l** | ~80MB | ~300ms | Alta | ✅ Buena opción general |
-| **yolov11l** | ~85MB | ~280ms | Muy Alta | ✅ **Mejor para objetos pequeños** |
-| **yolov11m** | ~50MB | ~200ms | Media-Alta | ⚡ Más rápido, menos preciso |
-| yolov8m | ~50MB | ~220ms | Media | ⚡ Alternativa rápida |
-| yolov8s | ~22MB | ~150ms | Media-Baja | ❌ No recomendado para objetos pequeños |
+| **yolov11l** | ~85MB | ~280ms | Muy Alta | Mejor para objetos pequenos |
+| **yolov11m** | ~50MB | ~200ms | Media-Alta | Balance velocidad/precision |
+| yolov8l | ~80MB | ~300ms | Alta | Buena opcion general |
+| yolov8m | ~50MB | ~220ms | Media | Alternativa rapida |
 
-**Recomendación:** 
-- **YOLOv11l** para máxima precisión en objetos pequeños
-- **YOLOv11m** si necesitas velocidad y los objetos no son tan pequeños
+Recomendacion: `yolov11l` para glorietas aereas.
 
 ---
 
-## 📈 Métricas de Calidad de Tracking
+## Proceso de calibracion recomendado
 
-### En el video procesado (`result.mp4`):
-1. **IDs estables:** Un auto debe mantener el mismo ID durante todo su recorrido
-2. **Sin gaps:** No debe desaparecer y reaparecer con otro ID
-3. **Cajas precisas:** Las cajas verdes deben ajustarse bien al vehículo
+### 1. Zonas de exclusion (Paso 0)
 
-### En la consola:
-```
-🚗 Detected vehicle id=2 class=car at (648,657)
-🚗 Detected vehicle id=3 class=car at (449,465)
-...
-# Buscar: ¿Los IDs son secuenciales (2,3,4,5) o saltan mucho (2,15,3,28)?
-# IDs secuenciales = tracking estable ✅
-# IDs que saltan = tracking inestable ❌
-```
+Si hay vehiculos estacionados visibles en el frame, dibuja poligonos sobre ellos. Esto evita tracks innecesarios y ahorra recursos de tracking.
 
----
+### 2. Vista Global + muestras (Paso 1)
 
-## 🚨 Problemas Comunes y Soluciones
+1. Presiona `Vista Global` con conf bajo (0.10) para ver todo lo que detecta
+2. Marca 5+ vehiculos representativos como muestras
+3. Presiona `Vista Global` otra vez — los filtros geometricos ya eliminan objetos grandes
+4. Si una clase tiene falsos positivos, sube su slider individual
+5. Valida con `Probar YOLO` sobre un auto puntual
 
-### Problema: "Detecta clocks, trains, etc."
-**Solución:** Ya está filtrado en el código. Solo cuenta: car, truck, bus, motorbike
+### 3. Zonas de transito (Paso 2)
 
-### Problema: "Los autos pequeños no se detectan"
-```bash
-# Bajar confianza y ajustar tracker
---conf-threshold 0.15 --max-age 60 --iou-threshold 0.1
-```
+1. Dibuja zonas que cubran cada boca calle
+2. Usa el preview de video para validar
+3. Activa YOLO en el preview para ver detecciones en vivo
+4. Las zonas de exclusion se muestran como referencia
 
-### Problema: "Demasiados falsos positivos"
-```bash
-# Subir confianza y min-hits
---conf-threshold 0.35 --min-hits 3
-```
+### 4. SAHI (Paso 3)
 
-### Problema: "IDs cambian constantemente"
-```bash
-# Aumentar max-age y bajar iou
---max-age 50 --iou-threshold 0.15
-```
-
-### Problema: "Muy lento"
-```bash
-# Usar modelo más pequeño
-model = YOLO("models/yolo/yolov11m.pt")
-# o
-model = YOLO("models/yolo/yolov8m.pt")
-```
+1. Revisa la cuadricula de tiles sobre el frame
+2. Ajusta `nms_threshold` si hay duplicados
+3. Guarda la configuracion
 
 ---
 
-## 🎯 Configuración Óptima Inicial para Glorietas
+## Problemas comunes y soluciones
 
-Basado en tus pruebas, empieza con:
+### Vehiculos estacionados generan tracks
 
-```bash
-python main.py --mode roundabout-test \
-  --video assets/glorieta_caballos.mov \
-  --conf-threshold 0.25 \
-  --max-age 40 \
-  --iou-threshold 0.15 \
-  --min-hits 2
-```
+Solucion: definir zonas de exclusion en el Paso 0 del configurador.
 
-Luego ajusta según observes en `result.mp4` y la consola.
+### Autos pequenos no se detectan
 
----
+- Subir `imgsz` a 1600-2560
+- Bajar `conf_threshold` a 0.05-0.10
+- Ajustar tiles SAHI a 256x256
 
-## 📝 Notas Técnicas
+### Demasiados falsos positivos
 
-### Filtro de Vehículos
-El código ahora solo procesa:
-```python
-if vehicle_names in ["car", "truck", "bus", "motorbike"] and conf >= args.conf_threshold:
-```
+- Marcar mas muestras de vehiculos para ajustar filtros geometricos
+- Subir `conf_threshold` o el slider de la clase problematica
+- Agregar zonas de exclusion sobre areas problematicas
 
-Esto elimina:
-- ❌ person, bicycle, clock, train, etc.
-- ❌ Detecciones con confianza < threshold
+### Detecciones duplicadas con SAHI
 
-### Visualización en Pantalla
-En modo `roundabout-test` ahora muestra:
-```
-Detected: 15 vehicles | Active: 8
-conf>=0.25 | max_age=40 | iou<=0.15
-```
+- Bajar `nms_threshold` a 0.2-0.25
 
-Esto te permite ver los parámetros en tiempo real.
+### IDs de tracking cambian constantemente
 
----
+- Usar `bytetrack` (default) en vez de `sort`
+- Los parametros del tracker (max_age, min_hits, iou_threshold) se ajustan en el Paso 3
 
-## 🔬 Próximos Pasos
+### Rutas contadas incorrectamente
 
-1. **Probar configuración óptima** en tus 3 videos de glorieta
-2. **Documentar qué configuración funciona mejor** para cada video
-3. **Analizar `result.mp4`** para ver estabilidad de tracking
-4. **Decidir si implementar conteo por zonas** una vez que el tracking sea estable
-
----
-
-## 💡 Tips Finales
-
-- **Siempre revisa `result.mp4`** antes de confiar en los números
-- **Los parámetros son interdependientes:** Cambiar uno puede requerir ajustar otros
-- **Empieza permisivo, luego restringe:** Es más fácil filtrar que recuperar detecciones perdidas
-- **Documenta qué funciona:** Cada escenario puede necesitar configuración diferente
+- Verificar que las zonas no sean demasiado grandes (invadiendo el anillo)
+- Subir `min_origin_frames` / `min_dest_frames` si hay conteos falsos por vehiculos que rozan la zona
