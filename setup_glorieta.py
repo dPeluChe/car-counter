@@ -61,7 +61,7 @@ EXCL_COLORS = ["#FF5555", "#FF9500", "#FF6B6B", "#FAB387"]
 STEP_TITLES = [
     "PASO 0 — Zonas de Exclusión",
     "PASO 1 — Calibración de Detección",
-    "PASO 2 — Definición de Zonas de Calle",
+    "PASO 2 — Zonas / Líneas de Conteo",
     "PASO 3 — Configuración SAHI y Guardar",
 ]
 
@@ -117,11 +117,20 @@ class SetupGlorieta(tk.Tk):
         self.excl_zone_name = tk.StringVar(value="Exclusion 1")
         self.excl_selected = tk.StringVar(value="")
 
-        # Zonas de tránsito
+        # Modo de conteo
+        self.counting_mode = tk.StringVar(value="zones")  # "zones" o "lines"
+
+        # Zonas de tránsito (modo zones)
         self.zones = {}               # { name: [(x,y)...] }
         self.current_zone_pts = []
         self.zone_drawing = False
         self.current_zone_name = tk.StringVar(value="Norte")
+
+        # Líneas de cruce (modo lines)
+        self.counting_lines = {}      # { name: [(x1,y1), (x2,y2)] }
+        self.line_drawing = False
+        self.line_start = None
+        self.current_line_name = tk.StringVar(value="Línea 1")
         self.display_frame_zones = None  # Frame con zonas dibujadas para mostrar
 
         # Preview en movimiento (TODO-007)
@@ -389,44 +398,90 @@ class SetupGlorieta(tk.Tk):
                                       relief="flat", pady=6)
         self.btn_calib_ok.pack(fill="x", pady=8)
 
-        # ── Panel PASO 2: Zonas ────────────────────────────────────────────────
+        # ── Panel PASO 2: Zonas / Líneas ──────────────────────────────────────
         self.panel_step1 = tk.Frame(self.sidebar, bg="#181825", padx=12, pady=10)
-        self._lbl(self.panel_step1, "ZONAS DE CALLE", bold=True, color="#CDD6F4")
-        self._lbl(self.panel_step1,
+        self._lbl(self.panel_step1, "MODO DE CONTEO", bold=True, color="#CDD6F4")
+
+        # Selector de modo
+        mode_frame = tk.Frame(self.panel_step1, bg="#181825")
+        mode_frame.pack(fill="x", pady=4)
+        self.btn_mode_zones = tk.Button(mode_frame, text="🗺 Zonas A→B",
+                                         command=lambda: self._set_counting_mode("zones"),
+                                         bg="#89B4FA", fg="#11111B", font=("Arial", 9, "bold"),
+                                         relief="flat", pady=4)
+        self.btn_mode_zones.pack(side="left", fill="x", expand=True, padx=(0, 2))
+        self.btn_mode_lines = tk.Button(mode_frame, text="📏 Cruce de línea",
+                                         command=lambda: self._set_counting_mode("lines"),
+                                         bg="#313244", fg="#A6ADC8", font=("Arial", 9, "bold"),
+                                         relief="flat", pady=4)
+        self.btn_mode_lines.pack(side="left", fill="x", expand=True, padx=(2, 0))
+
+        # ── Subpanel zonas ──
+        self.subpanel_zones = tk.Frame(self.panel_step1, bg="#181825")
+        self._lbl(self.subpanel_zones,
                   "Dibuja un polígono en cada boca\n"
                   "de entrada/salida de la glorieta.\n\n"
                   "• Clic izq: agregar punto\n"
                   "• Clic cerca del primero: cerrar\n"
-                  "• Clic der (arrastrar): mover vista\n"
                   "• Rueda: zoom", color="#A6ADC8")
 
-        tk.Frame(self.panel_step1, bg="#313244", height=1).pack(fill="x", pady=8)
+        tk.Frame(self.subpanel_zones, bg="#313244", height=1).pack(fill="x", pady=8)
 
-        self._lbl(self.panel_step1, "Nombre de la zona:", color="#CDD6F4")
-        self.zone_name_entry = ttk.Entry(self.panel_step1,
+        self._lbl(self.subpanel_zones, "Nombre de la zona:", color="#CDD6F4")
+        self.zone_name_entry = ttk.Entry(self.subpanel_zones,
                                          textvariable=self.current_zone_name,
                                          font=("Arial", 11))
         self.zone_name_entry.pack(fill="x", pady=4)
 
-        self.btn_new_zone = tk.Button(self.panel_step1, text="✏  Nueva Zona (dibujar)",
+        self.btn_new_zone = tk.Button(self.subpanel_zones, text="✏  Nueva Zona (dibujar)",
                                       command=self._start_zone_draw,
                                       bg="#89B4FA", fg="#11111B", font=("Arial", 10, "bold"),
                                       relief="flat", pady=6)
         self.btn_new_zone.pack(fill="x", pady=4)
 
-        self.btn_del_zone = tk.Button(self.panel_step1, text="🗑  Eliminar zona seleccionada",
+        self.btn_del_zone = tk.Button(self.subpanel_zones, text="🗑  Eliminar zona seleccionada",
                                       command=self._delete_selected_zone,
                                       bg="#313244", fg="#F38BA8", relief="flat", pady=4)
         self.btn_del_zone.pack(fill="x", pady=2)
 
-        self.btn_undo_point = tk.Button(self.panel_step1, text="↩  Deshacer último punto",
+        self.btn_undo_point = tk.Button(self.subpanel_zones, text="↩  Deshacer último punto",
                                         command=self._undo_last_point,
                                         bg="#313244", fg="#F9E2AF", relief="flat", pady=4,
                                         state="disabled")
         self.btn_undo_point.pack(fill="x", pady=2)
+        self.subpanel_zones.pack(fill="x")
+
+        # ── Subpanel líneas ──
+        self.subpanel_lines = tk.Frame(self.panel_step1, bg="#181825")
+        self._lbl(self.subpanel_lines,
+                  "Dibuja líneas de cruce. Cada\n"
+                  "vehículo que cruce la línea se\n"
+                  "contará (dirección ↑/↓).\n\n"
+                  "• Clic: punto inicio\n"
+                  "• Segundo clic: punto final", color="#A6ADC8")
+
+        tk.Frame(self.subpanel_lines, bg="#313244", height=1).pack(fill="x", pady=8)
+
+        self._lbl(self.subpanel_lines, "Nombre de la línea:", color="#CDD6F4")
+        self.line_name_entry = ttk.Entry(self.subpanel_lines,
+                                          textvariable=self.current_line_name,
+                                          font=("Arial", 11))
+        self.line_name_entry.pack(fill="x", pady=4)
+
+        self.btn_new_line = tk.Button(self.subpanel_lines, text="📏  Nueva Línea (dibujar)",
+                                       command=self._start_line_draw,
+                                       bg="#89B4FA", fg="#11111B", font=("Arial", 10, "bold"),
+                                       relief="flat", pady=6)
+        self.btn_new_line.pack(fill="x", pady=4)
+
+        self.btn_del_line = tk.Button(self.subpanel_lines, text="🗑  Eliminar línea seleccionada",
+                                       command=self._delete_selected_line,
+                                       bg="#313244", fg="#F38BA8", relief="flat", pady=4)
+        self.btn_del_line.pack(fill="x", pady=2)
+        # subpanel_lines starts hidden (zones is default)
 
         tk.Frame(self.panel_step1, bg="#313244", height=1).pack(fill="x", pady=8)
-        self.btn_preview = tk.Button(self.panel_step1, text="▶  Reproducir zonas",
+        self.btn_preview = tk.Button(self.panel_step1, text="▶  Reproducir",
                                      command=self._toggle_zone_preview,
                                      bg="#F9E2AF", fg="#11111B", font=("Arial", 10, "bold"),
                                      relief="flat", pady=6)
@@ -438,7 +493,7 @@ class SetupGlorieta(tk.Tk):
         self.btn_det_toggle.pack(fill="x", pady=2)
 
         tk.Frame(self.panel_step1, bg="#313244", height=1).pack(fill="x", pady=8)
-        self._lbl(self.panel_step1, "Zonas guardadas:", color="#CDD6F4")
+        self._lbl(self.panel_step1, "Elementos guardados:", color="#CDD6F4")
 
         self.zones_frame = tk.Frame(self.panel_step1, bg="#181825")
         self.zones_frame.pack(fill="both", expand=True)
@@ -647,12 +702,27 @@ class SetupGlorieta(tk.Tk):
             self.video_path = cfg_video
             self._load_frame()
 
+        # ── Modo de conteo ─────────────────────────────────────────
+        loaded_mode = cfg.get("counting_mode", "zones")
+        self.counting_mode.set(loaded_mode)
+        self._set_counting_mode(loaded_mode)
+
         # ── Zonas ──────────────────────────────────────────────────
         raw_zones = cfg.get("zones", {})
         if raw_zones:
             self.zones = {name: [list(p) for p in pts] for name, pts in raw_zones.items()}
-            self._refresh_zones_list()
-            self._redraw_zones()
+
+        # ── Líneas ──────────────────────────────────────────────────
+        raw_lines = cfg.get("lines", [])
+        if raw_lines:
+            for lc in raw_lines:
+                name = lc.get("name", f"Línea {len(self.counting_lines)+1}")
+                pts = lc.get("points", [])
+                if len(pts) >= 2:
+                    self.counting_lines[name] = [list(pts[0]), list(pts[1])]
+
+        self._refresh_zones_list()
+        self._redraw_zones()
 
         # ── Preservar config completo para merge al guardar (OBS-2) ──────
         self._loaded_config = cfg
@@ -743,6 +813,7 @@ class SetupGlorieta(tk.Tk):
             self.canvas.config(cursor="crosshair")
             self.calib_drawing = False
             self.zone_drawing = False
+            self.line_drawing = False
             self.excl_drawing = False
         elif idx == 1:  # Calibración
             self.canvas.config(cursor="crosshair")
@@ -872,7 +943,10 @@ class SetupGlorieta(tk.Tk):
         elif self.current_step == 1:
             self._draw_calib_overlay()
         elif self.current_step == 2:
-            self._draw_zones_overlay()
+            if self.counting_mode.get() == "lines":
+                self._draw_lines_overlay()
+            else:
+                self._draw_zones_overlay()
         elif self.current_step == 3:
             self._draw_tile_overlay()
 
@@ -1082,6 +1156,93 @@ class SetupGlorieta(tk.Tk):
                 self.excl_selected.set("")
                 self._redraw()
 
+    # ──────────────────────────────────────────────
+    # PASO 2: Modo de conteo — switching y líneas
+    # ──────────────────────────────────────────────
+    def _set_counting_mode(self, mode):
+        self.counting_mode.set(mode)
+        if mode == "zones":
+            self.btn_mode_zones.config(bg="#89B4FA", fg="#11111B")
+            self.btn_mode_lines.config(bg="#313244", fg="#A6ADC8")
+            self.subpanel_lines.pack_forget()
+            self.subpanel_zones.pack(fill="x")
+        else:
+            self.btn_mode_lines.config(bg="#89B4FA", fg="#11111B")
+            self.btn_mode_zones.config(bg="#313244", fg="#A6ADC8")
+            self.subpanel_zones.pack_forget()
+            self.subpanel_lines.pack(fill="x")
+        self._refresh_zones_list()
+        self._redraw()
+
+    def _start_line_draw(self):
+        name = self.current_line_name.get().strip()
+        if not name:
+            messagebox.showwarning("Línea", "Escribe un nombre para la línea.")
+            return
+        if name in self.counting_lines:
+            if not messagebox.askyesno("Línea existe", f"La línea '{name}' ya existe. ¿Sobreescribir?"):
+                return
+            del self.counting_lines[name]
+        self.line_drawing = True
+        self.line_start = None
+        self.canvas.config(cursor="crosshair")
+        self.status_var.set(f"Dibujando línea '{name}' — clic para punto inicio, segundo clic para punto final")
+
+    def _finish_line(self, ix, iy):
+        name = self.current_line_name.get().strip()
+        self.counting_lines[name] = [list(self.line_start), [ix, iy]]
+        self.line_drawing = False
+        self.line_start = None
+        self._refresh_zones_list()
+        self.status_var.set(f"Línea '{name}' guardada ({len(self.counting_lines)} en total)")
+        n = len(self.counting_lines) + 1
+        while f"Línea {n}" in self.counting_lines:
+            n += 1
+        self.current_line_name.set(f"Línea {n}")
+        self._redraw()
+
+    def _delete_selected_line(self):
+        sel = self.zones_listbox.curselection()
+        if not sel:
+            messagebox.showinfo("Eliminar", "Selecciona una línea de la lista.")
+            return
+        name = list(self.counting_lines.keys())[sel[0]]
+        if messagebox.askyesno("Eliminar", f"¿Eliminar línea '{name}'?"):
+            del self.counting_lines[name]
+            self._refresh_zones_list()
+            self._redraw()
+
+    def _draw_lines_overlay(self):
+        """Dibuja líneas de cruce en el canvas."""
+        # Exclusion zones reference
+        for idx, (name, pts) in enumerate(self.exclusion_zones.items()):
+            ec = EXCL_COLORS[idx % len(EXCL_COLORS)]
+            sp = [self._img_to_screen(p[0], p[1]) for p in pts]
+            flat = [c for pt in sp for c in pt]
+            if len(flat) >= 4:
+                self.canvas.create_polygon(flat, outline=ec, fill=ec + "33", width=1)
+
+        for idx, (name, pts) in enumerate(self.counting_lines.items()):
+            color = ZONE_COLORS[idx % len(ZONE_COLORS)]
+            sp1 = self._img_to_screen(pts[0][0], pts[0][1])
+            sp2 = self._img_to_screen(pts[1][0], pts[1][1])
+            self.canvas.create_line(sp1[0], sp1[1], sp2[0], sp2[1],
+                                     fill=color, width=3)
+            mx = (sp1[0] + sp2[0]) / 2
+            my = (sp1[1] + sp2[1]) / 2
+            self.canvas.create_text(mx, my - 12, text=f"📏 {name}", fill=color,
+                                     font=("Arial", 10, "bold"))
+            # Puntos extremos
+            for pt in (sp1, sp2):
+                self.canvas.create_oval(pt[0]-5, pt[1]-5, pt[0]+5, pt[1]+5,
+                                         fill=color, outline="white", width=1)
+
+        # Línea en curso
+        if self.line_drawing and self.line_start:
+            sp = self._img_to_screen(self.line_start[0], self.line_start[1])
+            self.canvas.create_oval(sp[0]-6, sp[1]-6, sp[0]+6, sp[1]+6,
+                                     fill="#FFE66D", outline="white", width=2)
+
     def _on_press(self, event):
         if self.current_step == 0:
             if self.pan_mode:
@@ -1120,6 +1281,15 @@ class SetupGlorieta(tk.Tk):
             self.calib_rect_start = (ix, iy)
             self.calib_rect_end = (ix, iy)
             self.calib_drawing = True
+        elif self.current_step == 2 and self.line_drawing:
+            ix, iy = self._screen_to_img(event.x, event.y)
+            if self.line_start is None:
+                self.line_start = (ix, iy)
+                self.status_var.set("Clic en el segundo punto de la línea")
+                self._redraw()
+            else:
+                self._finish_line(ix, iy)
+            return
         elif self.current_step == 2 and self.zone_drawing:
             ix, iy = self._screen_to_img(event.x, event.y)
             if len(self.current_zone_pts) > 2:
@@ -1689,9 +1859,12 @@ class SetupGlorieta(tk.Tk):
 
     def _refresh_zones_list(self):
         self.zones_listbox.delete(0, "end")
-        for idx, name in enumerate(self.zones):
-            color_tag = f"color{idx}"
-            self.zones_listbox.insert("end", f"  {name}  ({len(self.zones[name])} pts)")
+        if self.counting_mode.get() == "lines":
+            for name in self.counting_lines:
+                self.zones_listbox.insert("end", f"  📏 {name}")
+        else:
+            for name in self.zones:
+                self.zones_listbox.insert("end", f"  {name}  ({len(self.zones[name])} pts)")
 
     def _on_zone_select(self, event):
         sel = self.zones_listbox.curselection()
@@ -1890,13 +2063,22 @@ class SetupGlorieta(tk.Tk):
         self._redraw()
 
     def _save_config(self):
-        if not self.zones:
+        mode = self.counting_mode.get()
+        if mode == "zones" and not self.zones:
             messagebox.showwarning("Guardar", "No hay zonas definidas. Configura las zonas primero.")
+            return
+        if mode == "lines" and not self.counting_lines:
+            messagebox.showwarning("Guardar", "No hay líneas definidas. Dibuja al menos una línea.")
             return
 
         config = {
+            "counting_mode": mode,
             "exclusion_zones": {name: pts for name, pts in self.exclusion_zones.items()},  # TODO-018
             "zones": {name: pts for name, pts in self.zones.items()},
+            "lines": [
+                {"name": name, "points": pts, "tolerance": 15}
+                for name, pts in self.counting_lines.items()
+            ],
             "settings": {
                 "min_area": self.min_area.get(),
                 "max_area": self.max_area.get(),

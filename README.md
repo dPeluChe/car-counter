@@ -150,8 +150,6 @@ python main_glorieta.py --config config_glorieta.json --video assets/glorieta_fa
 - `docs/TASK_TODO.md` — Backlog de mejoras pendientes
 - `docs/TASK_COMPLETED.md` — Historial de cambios completados
 
-> `SAHI.md` y `QUICKSTART_SAHI.md` están archivados en `docs/archived/`
-
 ## Dependencias clave
 
 - `ultralytics`

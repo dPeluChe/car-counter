@@ -113,7 +113,9 @@ if not os.path.exists(config_path):
 with open(config_path, "r") as f:
     config = json.load(f)
 
+COUNTING_MODE    = config.get("counting_mode", "zones")  # "zones" o "lines"
 zones_config     = config.get("zones", {})
+lines_config     = config.get("lines", [])              # [{name, points, tolerance}]
 excl_config      = config.get("exclusion_zones", {})  # TODO-018
 settings         = config.get("settings", {})
 sahi_cfg         = config.get("sahi", {})
@@ -149,7 +151,11 @@ print(f"\n📄  Config:   {config_path}")
 print(f"📹  Video:    {VIDEO_PATH}")
 print(f"🤖  Modelo:   {MODEL_PATH}")
 print(f"🎯  Tracker:  {args.tracker}")
-print(f"🗺   Zonas:    {list(zones_config.keys())}")
+print(f"📐  Modo:     {COUNTING_MODE}")
+if COUNTING_MODE == "zones":
+    print(f"🗺   Zonas:    {list(zones_config.keys())}")
+elif COUNTING_MODE == "lines":
+    print(f"📏  Líneas:   {[l.get('name', f'Línea {i+1}') for i, l in enumerate(lines_config)]}")
 if excl_config:
     print(f"🚫  Exclusión: {len(excl_config)} zona{'s' if len(excl_config) != 1 else ''} ({', '.join(excl_config.keys())})")  # TODO-018
 
@@ -312,12 +318,25 @@ if not args.no_save:
 zones_np = {name: np.array(pts, dtype=np.int32) for name, pts in zones_config.items()}
 zone_names = list(zones_np.keys())
 
-# Máquina de estados por vehículo:
-#   state: 'origin' | 'transit' | 'done'
-#   origin: nombre de zona de entrada
-#   in_origin_frames: cuántos frames lleva en zona origen (umbral anti-rebote)
+# Líneas de cruce (modo "lines")
+# Cada línea: {name, pt1: (x1,y1), pt2: (x2,y2), tolerance: int}
+_counting_lines = []
+if COUNTING_MODE == "lines":
+    for i, lc in enumerate(lines_config):
+        pts = lc.get("points", [])
+        if len(pts) >= 2:
+            _counting_lines.append({
+                "name": lc.get("name", f"Línea {i+1}"),
+                "pt1": tuple(pts[0]),
+                "pt2": tuple(pts[1]),
+                "tolerance": lc.get("tolerance", 15),
+            })
+    print(f"📏  {len(_counting_lines)} línea(s) de cruce activas")
+
+# Estado de tracking y rutas (compartido por ambos modos)
 tracks_info = {}
-routes_matrix = {}   # { 'Norte → Sur': count }
+routes_matrix = {}   # { 'Norte → Sur': count }  o  { 'Línea 1 ↓': count }
+_id_prev_cy = {}     # modo lines: posición Y previa por track ID
 
 frame_count = 0
 total_vehicles_ever = 0  # TODO-002: IDs únicos vistos (persiste tras purga de tracks_info)
@@ -511,6 +530,85 @@ def _register_route(trk_id, origin, destination):
     routes_matrix[route_key] = routes_matrix.get(route_key, 0) + 1
     tracks_info[trk_id]["state"] = "done"
     print(f"  ✅ ID={trk_id:>4}  ruta: {route_key}  (total={routes_matrix[route_key]})")
+
+def _point_to_line_side(px, py, x1, y1, x2, y2):
+    """Retorna >0 si el punto está 'abajo/derecha' de la línea, <0 si 'arriba/izquierda'."""
+    return (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
+
+def _point_line_distance(px, py, x1, y1, x2, y2):
+    """Distancia perpendicular del punto a la línea definida por (x1,y1)-(x2,y2)."""
+    dx, dy = x2 - x1, y2 - y1
+    length = math.hypot(dx, dy)
+    if length == 0:
+        return math.hypot(px - x1, py - y1)
+    return abs(dx * (y1 - py) - (x1 - px) * dy) / length
+
+def update_line_crossing_state(trk_id, cx, cy, cls_name="unknown"):
+    """
+    Conteo por cruce de línea.
+    Detecta cuando el centro de un vehículo cruza una línea definida.
+    Usa el signo del cross product para detectar cambio de lado.
+    """
+    global total_vehicles_ever
+    prev_cy = _id_prev_cy.get(trk_id)
+    _id_prev_cy[trk_id] = cy
+
+    if trk_id not in tracks_info:
+        total_vehicles_ever += 1
+        tracks_info[trk_id] = {
+            "state": "new",
+            "class": cls_name,
+            "lines_crossed": set(),
+            "last_seen_frame": frame_count,
+        }
+
+    info = tracks_info[trk_id]
+    info["last_seen_frame"] = frame_count
+
+    if prev_cy is None:
+        return  # primer frame, no hay referencia de dirección
+
+    for line in _counting_lines:
+        line_name = line["name"]
+        x1, y1 = line["pt1"]
+        x2, y2 = line["pt2"]
+        tol = line["tolerance"]
+
+        # ¿Está cerca de la línea?
+        dist = _point_line_distance(cx, cy, x1, y1, x2, y2)
+        if dist > tol:
+            continue
+
+        # ¿Cruzó? Comparar signo del cross product entre frame anterior y actual
+        side_prev = _point_to_line_side(cx, prev_cy, x1, y1, x2, y2)
+        side_now = _point_to_line_side(cx, cy, x1, y1, x2, y2)
+
+        if side_prev * side_now < 0:  # cambio de signo = cruzó la línea
+            direction = "↓" if cy > prev_cy else "↑"
+            crossing_key = f"{line_name} {direction}"
+
+            # Solo contar una vez por ID por línea+dirección
+            if crossing_key not in info["lines_crossed"]:
+                info["lines_crossed"].add(crossing_key)
+                info["state"] = "done"
+                routes_matrix[crossing_key] = routes_matrix.get(crossing_key, 0) + 1
+                print(f"  ✅ ID={trk_id:>4}  cruzó: {crossing_key}  cls={cls_name}  (total={routes_matrix[crossing_key]})")
+
+def draw_lines(frame):
+    """Dibuja las líneas de cruce con color y nombre."""
+    for idx, line in enumerate(_counting_lines):
+        color = ZONE_COLORS_BGR[idx % len(ZONE_COLORS_BGR)]
+        pt1 = tuple(line["pt1"])
+        pt2 = tuple(line["pt2"])
+        cv2.line(frame, pt1, pt2, color, 3)
+        # Nombre de la línea
+        mx = (pt1[0] + pt2[0]) // 2
+        my = (pt1[1] + pt2[1]) // 2
+        cv2.putText(frame, line["name"], (mx + 5, my - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA)
+        # Flechas de dirección
+        cv2.putText(frame, "↑↓", (mx + 5, my + 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
 
 def format_time(s):
     h, r = divmod(int(s), 3600)
@@ -749,10 +847,13 @@ try:
             detections = np.array([[b[0], b[1], b[2], b[3], 1.0] for b in tracked_boxes]) \
                 if tracked_boxes else np.empty((0, 5))
 
-        # ── Lógica de rutas (máquina de estados) ─────────────────────────────
+        # ── Lógica de conteo (según modo) ────────────────────────────────────
         for (x1, y1, x2, y2, trk_id, cls_name) in tracked_boxes:
             cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-            update_route_state(trk_id, cx, cy, cls_name)
+            if COUNTING_MODE == "lines":
+                update_line_crossing_state(trk_id, cx, cy, cls_name)
+            else:
+                update_route_state(trk_id, cx, cy, cls_name)
 
         # ── Purga de tracks viejos (TODO-002) ──────────────────────────────────
         if frame_count % 120 == 0 and frame_count > 0:
@@ -762,6 +863,7 @@ try:
             ]
             for tid in stale_ids:
                 del tracks_info[tid]
+                _id_prev_cy.pop(tid, None)
             if stale_ids:
                 print(f"  🧹 Purgados {len(stale_ids)} tracks viejos — activos en memoria: {len(tracks_info)}")
 
@@ -774,7 +876,10 @@ try:
             cv2.addWeighted(_excl_overlay, 0.22, frame, 0.78, 0, frame)
             for _ep in _exclusion_np.values():
                 cv2.polylines(frame, [_ep], True, (60, 60, 220), 2)
-        draw_zones(frame)
+        if COUNTING_MODE == "lines":
+            draw_lines(frame)
+        else:
+            draw_zones(frame)
 
         for (x1, y1, x2, y2, trk_id, cls_name) in tracked_boxes:
             cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
