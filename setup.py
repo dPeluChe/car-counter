@@ -66,6 +66,7 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMi
         self.img_h = self.img_w = 0
         self.total_frames = 0
         self.current_frame_idx = 0
+        self._nav_cap = None  # VideoCapture persistente para navegacion de frames
 
         # Zoom / pan
         self.zoom = 1.0
@@ -92,6 +93,7 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMi
 
         # Zonas de exclusión
         self.exclusion_zones = {}
+        self._excl_np_cached = None
         self.excl_current_pts = []
         self.excl_drawing = False
         self.excl_zone_name = tk.StringVar(value="Exclusion 1")
@@ -234,15 +236,26 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMi
     def _load_frame(self):
         self._load_frame_at(0)
 
+    def _ensure_nav_cap(self):
+        """Abre o reutiliza el VideoCapture para navegacion."""
+        if self._nav_cap is None or not self._nav_cap.isOpened():
+            self._nav_cap = cv2.VideoCapture(self.video_path)
+        return self._nav_cap
+
+    def _release_nav_cap(self):
+        if self._nav_cap is not None:
+            self._nav_cap.release()
+            self._nav_cap = None
+
     def _load_frame_at(self, frame_idx):
-        cap = cv2.VideoCapture(self.video_path)
+        cap = self._ensure_nav_cap()
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         if total_frames > 0:
             frame_idx = max(0, min(total_frames - 1, frame_idx))
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
         ret, frame = cap.read()
-        cap.release()
         if not ret:
+            self._release_nav_cap()
             messagebox.showerror("Error", f"No se pudo leer el video:\n{self.video_path}")
             return
         self.frame_orig = frame.copy()
@@ -256,7 +269,7 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMi
         self.lbl_frame_info.config(text=f"Frame {self.current_frame_idx + 1}/{self.total_frames}")
         self.display_frame_zones = self.frame_rgb.copy()
         self._redraw()
-        self.status_var.set(f"✅ Video cargado: {self.img_w}×{self.img_h}")
+        self.status_var.set(f"Video cargado: {self.img_w}x{self.img_h}")
 
     def _step_frame(self, delta):
         self._load_frame_at(self.current_frame_idx + delta)
@@ -270,6 +283,7 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMi
             title="Seleccionar video",
             filetypes=[("Video", "*.mp4 *.avi *.mov *.mkv *.MOV"), ("Todos", "*.*")])
         if path:
+            self._release_nav_cap()
             self.video_path = path
             self._load_frame()
             self._reset_calib()
@@ -287,6 +301,7 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMi
         excl = parse_exclusion_zones(cfg)
         if excl:
             self.exclusion_zones = excl
+            self._invalidate_excl_cache()
             self._refresh_excl_list()
             n = len(self.exclusion_zones) + 1
             while f"Exclusion {n}" in self.exclusion_zones:
@@ -356,6 +371,7 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMi
     # ──────────────────────────────────────────────
     def _on_close(self):
         self._stop_zone_preview()
+        self._release_nav_cap()
         self.destroy()
 
     def _go_to_step(self, idx):
@@ -370,9 +386,9 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMi
             else:
                 btn.config(bg="#313244", fg="#A6ADC8", font=("Arial", 10))
 
-        for panel in [self.panel_excl, self.panel_step0, self.panel_step1, self.panel_step2]:
+        for panel in [self.panel_step0, self.panel_step1, self.panel_step2, self.panel_step3]:
             panel.pack_forget()
-        panels = [self.panel_excl, self.panel_step0, self.panel_step1, self.panel_step2]
+        panels = [self.panel_step0, self.panel_step1, self.panel_step2, self.panel_step3]
         panels[idx].pack(fill="both", expand=True)
 
         if idx == 0:

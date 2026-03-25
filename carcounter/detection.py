@@ -23,7 +23,8 @@ def detect_and_track(frame, *, model, sahi_model, sahi_predict_fn, sort_tracker,
                      use_sahi, tracker_backend, tracker_yaml,
                      effective_conf, imgsz, conf_for,
                      geo_constraints, exclusion_np,
-                     sahi_slice_w, sahi_slice_h, sahi_overlap, sahi_nms_threshold):
+                     sahi_slice_w, sahi_slice_h, sahi_overlap, sahi_nms_threshold,
+                     device="cpu"):
     """Ejecuta deteccion + tracking y retorna lista de (x1,y1,x2,y2,id,cls_name)."""
 
     detections = np.empty((0, 5))
@@ -59,7 +60,7 @@ def detect_and_track(frame, *, model, sahi_model, sahi_predict_fn, sort_tracker,
     elif tracker_backend == "sort":
         # -- SORT path --
         results = model(frame, conf=effective_conf, verbose=False,
-                        classes=VEHICLE_CLASS_IDS, imgsz=imgsz)
+                        classes=VEHICLE_CLASS_IDS, imgsz=imgsz, device=device)
         det_list = []
         for r in results:
             for box in r.boxes:
@@ -80,7 +81,7 @@ def detect_and_track(frame, *, model, sahi_model, sahi_predict_fn, sort_tracker,
         track_results = model.track(
             frame, conf=effective_conf, imgsz=imgsz,
             tracker=tracker_yaml, persist=True, verbose=False,
-            classes=VEHICLE_CLASS_IDS,
+            classes=VEHICLE_CLASS_IDS, device=device,
         )
         if track_results and track_results[0].boxes is not None:
             for box in track_results[0].boxes:

@@ -551,3 +551,95 @@ Registro de tareas finalizadas del proyecto Car Counter.
 - [x] Config I/O centralizado en `carcounter/config_io.py`
 - [x] `sort.py` sin imports innecesarios ni codigo demo
 - [x] Sin codigo duplicado entre mixins y `carcounter/`
+
+---
+
+## DONE-023: Revision tecnica y correccion de issues
+
+**Fecha:** 2026-03-24
+**Archivos:** `main.py`, `setup.py`, `carcounter/sort.py`, `carcounter/drawing.py`, `setup_panels/step0_exclusion.py`, `setup_panels/step1_calibration.py`, `setup_panels/step2_zones.py`, `setup_panels/step3_sahi.py`
+
+### Que se hizo
+
+Revision tecnica completa del proyecto con correccion de bugs, optimizaciones y mejoras de mantenibilidad.
+
+#### Bugs corregidos:
+- **`_on_zone_select` crash en modo lines**: usaba `self.zones.keys()` cuando el listbox mostraba lineas. Fix: selecciona la coleccion correcta segun `counting_mode`
+- **`np.random.seed(0)` global en sort.py**: fijaba el random state de numpy al importar. Eliminado
+- **`_is_in_exclusion()` recreaba numpy arrays por llamada**: se llama por deteccion por frame en preview YOLO. Ahora cachea en `_excl_np_cached` e invalida al modificar zonas
+
+#### Optimizaciones:
+- **ROI overlay en drawing.py**: `draw_routes_panel` y `draw_scoreboard` ya no copian el frame completo — solo copian la ROI del panel
+- **Single-pass overlay en `_redraw_zones()`**: de N copies+blends (una por zona) a un solo `frame.copy()` + un solo `addWeighted`
+- **VideoCapture persistente en setup.py**: `_load_frame_at()` reutiliza `_nav_cap` en vez de abrir/cerrar por cada navegacion de frame
+
+#### Refactors:
+- **`main.py` envuelto en `def main()`**: todo el codigo que estaba a nivel de modulo ahora esta en una funcion, con `if __name__ == "__main__": main()`. Permite importar el modulo sin ejecutar
+- **Panels renombrados**: `panel_excl/panel_step0/panel_step1/panel_step2` -> `panel_step0/panel_step1/panel_step2/panel_step3` para reflejar el paso real
+
+#### Documentacion:
+- `OPTIMIZATION_GUIDE.md` y `ROUNDABOUT_GUIDE.md` movidos de raiz a `docs/`
+- `README.md` actualizado con seccion de documentacion apuntando a `docs/`
+- `TASK_TODO.md` actualizado con backlog real: tests, GPU, supervision, batching, ONNX
+
+### Criterios cumplidos
+
+- [x] `_on_zone_select` no crashea en modo lines
+- [x] `np.random.seed(0)` eliminado de sort.py
+- [x] `_is_in_exclusion` usa cache numpy (invalidado al modificar zonas)
+- [x] `draw_routes_panel`/`draw_scoreboard` usan ROI overlay
+- [x] `_redraw_zones` usa single-pass overlay
+- [x] `_load_frame_at` reutiliza VideoCapture
+- [x] `main.py` tiene `if __name__ == "__main__": main()`
+- [x] Panels nombrados consistentemente (step0-step3)
+- [x] Docs homologados en `docs/`
+- [x] `TASK_TODO.md` actualizado con backlog real
+
+---
+
+## DONE-024: Tests unitarios para modulos core (TODO-020)
+
+**Fecha:** 2026-03-24
+**Archivos:** `tests/test_geometry.py`, `tests/test_counting.py`, `tests/test_config_io.py`, `tests/test_tracking.py`, `tests/test_device.py`
+
+### Que se hizo
+
+- 81 tests unitarios cubriendo todos los modulos core sin dependencia de YOLO
+- `test_geometry.py`: 22 tests (point_in_zone, bbox_iou, apply_nms, passes_geometry_filter, in_exclusion_zone, point_to_line_side, point_line_distance)
+- `test_counting.py`: 18 tests (maquina de estados zones completa, cruce de linea, purge_stale, anti-bounce, multi-vehiculo)
+- `test_config_io.py`: 19 tests (round-trip load/save, build_config, parse_*, preservacion de campos extra)
+- `test_tracking.py`: 5 tests (attach_classes_to_tracks, IoU matching, fallback)
+- `test_device.py`: 4 tests (detect_device auto/cpu/cuda/mps)
+- Todos pasan en 0.2s
+
+### Criterios cumplidos
+
+- [x] Directorio `tests/` con pytest como runner
+- [x] 22+ tests en geometry (bordes, degenerados, zero-area)
+- [x] Flujo completo zones (new->origin->transit->done) y lines (cruce arriba/abajo)
+- [x] Round-trip config save/load con validacion de campos
+- [x] `pytest tests/ -v` pasa 81/81
+
+---
+
+## DONE-025: Soporte GPU en inferencia (TODO-021)
+
+**Fecha:** 2026-03-24
+**Archivos:** `carcounter/device.py`, `carcounter/detection.py`, `main.py`
+
+### Que se hizo
+
+- `carcounter/device.py`: modulo `detect_device(requested)` que auto-detecta CUDA > MPS > CPU
+- `main.py`: flag `--device auto|cpu|cuda|mps` con default `auto`
+- Device se imprime al inicio: `Device: cuda (NVIDIA RTX 3090)` o `Device: mps (Apple Silicon)` o `Device: cpu`
+- `detection.py`: `device` pasado a `model()` y `model.track()` de ultralytics
+- SAHI tambien usa el device detectado
+
+### Criterios cumplidos
+
+- [x] Auto-deteccion de CUDA/MPS disponible
+- [x] Flag `--device auto|cpu|cuda|mps` con default `auto`
+- [x] SAHI tambien usa el device detectado
+- [x] Print del device al inicio con nombre descriptivo
+- [x] Fallback silencioso a CPU si GPU no disponible
+- [x] Tests unitarios para detect_device

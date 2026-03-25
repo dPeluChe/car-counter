@@ -17,28 +17,28 @@ class CalibrationMixin:
 
     def _build_panel_calib(self):
         """Construye el panel lateral del Paso 1."""
-        self.panel_step0 = tk.Frame(self.sidebar, bg="#181825", padx=12, pady=10)
-        self._lbl(self.panel_step0, "CALIBRACIÓN DE DETECCIÓN", bold=True, color="#CDD6F4")
-        self._lbl(self.panel_step0,
+        self.panel_step1 = tk.Frame(self.sidebar, bg="#181825", padx=12, pady=10)
+        self._lbl(self.panel_step1, "CALIBRACIÓN DE DETECCIÓN", bold=True, color="#CDD6F4")
+        self._lbl(self.panel_step1,
                   "1. Haz clic y arrastra sobre un\nauto para definir su tamaño.\n"
                   "2. Presiona [Probar YOLO].\n"
                   "3. Ajusta confianza si es necesario.\n"
                   "4. Confirma cuando se detecte\n   ese auto correctamente.\n\n"
                   "Zoom: rueda del mouse\n"
                   "Mover vista: clic der o ESPACIO + arrastrar", color="#A6ADC8")
-        self._lbl(self.panel_step0,
+        self._lbl(self.panel_step1,
                   "Tip aéreo: selecciona un solo auto con un recuadro ajustado.\n"
                   "El test reescala ese recorte para encontrar autos pequeños.",
                   color="#89B4FA")
 
-        tk.Frame(self.panel_step0, bg="#313244", height=1).pack(fill="x", pady=8)
+        tk.Frame(self.panel_step1, bg="#313244", height=1).pack(fill="x", pady=8)
 
-        self._lbl(self.panel_step0, "Frame actual:", color="#CDD6F4")
-        self.lbl_frame_info = tk.Label(self.panel_step0, text="Frame 1/1",
+        self._lbl(self.panel_step1, "Frame actual:", color="#CDD6F4")
+        self.lbl_frame_info = tk.Label(self.panel_step1, text="Frame 1/1",
                                        bg="#181825", fg="#A6E3A1", font=("Arial", 10))
         self.lbl_frame_info.pack(anchor="w")
 
-        nav_row = tk.Frame(self.panel_step0, bg="#181825")
+        nav_row = tk.Frame(self.panel_step1, bg="#181825")
         nav_row.pack(fill="x", pady=4)
         tk.Button(nav_row, text="⏮ -25", command=lambda: self._step_frame(-25),
                   bg="#313244", fg="#CDD6F4", relief="flat", padx=8).pack(side="left", padx=(0, 4))
@@ -49,8 +49,8 @@ class CalibrationMixin:
         tk.Button(nav_row, text="+25 ⏭", command=lambda: self._step_frame(25),
                   bg="#313244", fg="#CDD6F4", relief="flat", padx=8).pack(side="left", padx=4)
 
-        self._lbl(self.panel_step0, "Umbral de confianza:", color="#CDD6F4")
-        row = tk.Frame(self.panel_step0, bg="#181825")
+        self._lbl(self.panel_step1, "Umbral de confianza:", color="#CDD6F4")
+        row = tk.Frame(self.panel_step1, bg="#181825")
         row.pack(fill="x")
         tk.Scale(row, from_=0.05, to=0.95, resolution=0.05,
                  variable=self.conf_threshold, orient="horizontal",
@@ -58,17 +58,17 @@ class CalibrationMixin:
                  highlightthickness=0).pack(side="left", fill="x", expand=True)
         tk.Label(row, textvariable=tk.StringVar(), bg="#181825", fg="#89B4FA",
                  font=("Arial", 10)).pack(side="right")
-        self.lbl_conf_val = tk.Label(self.panel_step0, bg="#181825", fg="#89B4FA",
+        self.lbl_conf_val = tk.Label(self.panel_step1, bg="#181825", fg="#89B4FA",
                                      font=("Arial", 10))
         self.lbl_conf_val.pack()
         self.conf_threshold.trace_add("write", self._update_conf_label)
         self._update_conf_label()
 
-        tk.Frame(self.panel_step0, bg="#313244", height=1).pack(fill="x", pady=4)
-        self._lbl(self.panel_step0, "Confianza por clase (opcional):", color="#A6ADC8")
+        tk.Frame(self.panel_step1, bg="#313244", height=1).pack(fill="x", pady=4)
+        self._lbl(self.panel_step1, "Confianza por clase (opcional):", color="#A6ADC8")
         for _n, _v in [("car", self.conf_car), ("moto", self.conf_motorbike),
                        ("bus", self.conf_bus), ("truck", self.conf_truck)]:
-            _r = tk.Frame(self.panel_step0, bg="#181825")
+            _r = tk.Frame(self.panel_step1, bg="#181825")
             _r.pack(fill="x")
             tk.Label(_r, text=f"  {_n}:", bg="#181825", fg="#A6ADC8",
                      font=("Arial", 9), width=6, anchor="w").pack(side="left")
@@ -79,64 +79,64 @@ class CalibrationMixin:
                      command=lambda _: self._on_per_class_conf_modified()
                      ).pack(side="left", fill="x", expand=True)
 
-        self._lbl(self.panel_step0, "Resolución de inferencia (imgsz):", color="#CDD6F4")
-        tk.Scale(self.panel_step0, from_=640, to=1920, resolution=160,
+        self._lbl(self.panel_step1, "Resolución de inferencia (imgsz):", color="#CDD6F4")
+        tk.Scale(self.panel_step1, from_=640, to=1920, resolution=160,
                  variable=self.infer_imgsz, orient="horizontal",
                  bg="#181825", fg="#CDD6F4", troughcolor="#313244",
                  highlightthickness=0).pack(fill="x")
-        self.lbl_imgsz_val = tk.Label(self.panel_step0, bg="#181825", fg="#89B4FA",
+        self.lbl_imgsz_val = tk.Label(self.panel_step1, bg="#181825", fg="#89B4FA",
                                       font=("Arial", 10))
         self.lbl_imgsz_val.pack()
         self.infer_imgsz.trace_add("write", self._update_imgsz_label)
         self._update_imgsz_label()
 
-        self._lbl(self.panel_step0, "Área mínima detectada:", color="#A6ADC8")
-        self.lbl_min_area = tk.Label(self.panel_step0, text="0 px²",
+        self._lbl(self.panel_step1, "Área mínima detectada:", color="#A6ADC8")
+        self.lbl_min_area = tk.Label(self.panel_step1, text="0 px²",
                                      bg="#181825", fg="#A6E3A1", font=("Arial", 10))
         self.lbl_min_area.pack(anchor="w")
-        self._lbl(self.panel_step0, "Área máxima detectada:", color="#A6ADC8")
-        self.lbl_max_area = tk.Label(self.panel_step0, text="999999 px²",
+        self._lbl(self.panel_step1, "Área máxima detectada:", color="#A6ADC8")
+        self.lbl_max_area = tk.Label(self.panel_step1, text="999999 px²",
                                      bg="#181825", fg="#A6E3A1", font=("Arial", 10))
         self.lbl_max_area.pack(anchor="w")
-        self.lbl_samples_info = tk.Label(self.panel_step0, text="Muestras: 0",
+        self.lbl_samples_info = tk.Label(self.panel_step1, text="Muestras: 0",
                                          bg="#181825", fg="#89B4FA", font=("Arial", 10))
         self.lbl_samples_info.pack(anchor="w", pady=(2, 0))
 
-        tk.Frame(self.panel_step0, bg="#313244", height=1).pack(fill="x", pady=8)
+        tk.Frame(self.panel_step1, bg="#313244", height=1).pack(fill="x", pady=8)
 
-        self.btn_yolo_test = tk.Button(self.panel_step0, text="👁  Probar YOLO",
+        self.btn_yolo_test = tk.Button(self.panel_step1, text="👁  Probar YOLO",
                                        command=self._run_calib_test,
                                        bg="#89B4FA", fg="#11111B", font=("Arial", 10, "bold"),
                                        relief="flat", pady=6)
         self.btn_yolo_test.pack(fill="x", pady=4)
 
-        self.btn_global_test = tk.Button(self.panel_step0, text="🛰  Vista Global",
+        self.btn_global_test = tk.Button(self.panel_step1, text="🛰  Vista Global",
                                          command=self._run_global_detection_test,
                                          bg="#F9E2AF", fg="#11111B", font=("Arial", 10, "bold"),
                                          relief="flat", pady=6)
         self.btn_global_test.pack(fill="x", pady=2)
 
-        self.btn_add_sample = tk.Button(self.panel_step0, text="📌 Agregar muestra vehículo",
+        self.btn_add_sample = tk.Button(self.panel_step1, text="📌 Agregar muestra vehículo",
                                         command=self._add_vehicle_sample,
                                         bg="#A6E3A1", fg="#11111B", font=("Arial", 10, "bold"),
                                         relief="flat", pady=6)
         self.btn_add_sample.pack(fill="x", pady=2)
 
-        self.btn_clear_samples = tk.Button(self.panel_step0, text="🧹 Limpiar muestras",
+        self.btn_clear_samples = tk.Button(self.panel_step1, text="🧹 Limpiar muestras",
                                            command=self._clear_vehicle_samples,
                                            bg="#313244", fg="#CDD6F4", relief="flat", pady=4)
         self.btn_clear_samples.pack(fill="x", pady=2)
 
-        self.btn_calib_reset = tk.Button(self.panel_step0, text="↺  Limpiar recuadro",
+        self.btn_calib_reset = tk.Button(self.panel_step1, text="↺  Limpiar recuadro",
                                          command=self._reset_calib,
                                          bg="#313244", fg="#CDD6F4", relief="flat", pady=4)
         self.btn_calib_reset.pack(fill="x", pady=2)
 
-        self.lbl_calib_status = tk.Label(self.panel_step0, text="⚠  Pendiente de confirmar",
+        self.lbl_calib_status = tk.Label(self.panel_step1, text="⚠  Pendiente de confirmar",
                                           bg="#181825", fg="#F38BA8", font=("Arial", 9))
         self.lbl_calib_status.pack(pady=4)
 
-        self.btn_calib_ok = tk.Button(self.panel_step0, text="✅  Confirmar y continuar →",
+        self.btn_calib_ok = tk.Button(self.panel_step1, text="✅  Confirmar y continuar →",
                                       command=self._confirm_calib,
                                       bg="#A6E3A1", fg="#11111B", font=("Arial", 10, "bold"),
                                       relief="flat", pady=6)

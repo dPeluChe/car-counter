@@ -26,6 +26,25 @@ ZONE_COLORS_HEX = [
 
 EXCL_COLORS_HEX = ["#FF5555", "#FF9500", "#FF6B6B", "#FAB387"]
 
+# Colores RGB para OpenCV en espacio RGB (setup_panels usa RGB, no BGR)
+ZONE_COLORS_RGB = [
+    (0, 255, 136),    # verde
+    (255, 107, 107),  # rojo-coral
+    (78, 205, 196),   # cian
+    (255, 230, 109),  # amarillo
+    (168, 230, 207),  # verde menta
+    (255, 139, 148),  # salmon
+    (184, 184, 255),  # lavanda
+    (255, 160, 122),  # azul claro
+]
+
+EXCL_COLORS_RGB = [
+    (255, 85, 85),    # rojo
+    (255, 149, 0),    # naranja
+    (255, 107, 107),  # rojo claro
+    (250, 179, 135),  # salmon
+]
+
 # Colores BGR para OpenCV (main)
 ZONE_COLORS_BGR = [
     (136, 255, 0),    # verde

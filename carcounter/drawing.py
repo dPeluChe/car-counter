@@ -50,6 +50,16 @@ def draw_exclusion_zones(frame, exclusion_np):
         cv2.polylines(frame, [pts], True, (60, 60, 220), 2)
 
 
+def _draw_panel_bg(frame, x0, y0, panel_w, panel_h, bg_color, alpha, border_color):
+    """Dibuja fondo semi-transparente para un panel usando ROI en vez de full frame copy."""
+    rx2 = min(frame.shape[1], x0 + panel_w)
+    ry2 = min(frame.shape[0], y0 + panel_h)
+    roi = frame[y0:ry2, x0:rx2].copy()
+    cv2.rectangle(frame, (x0, y0), (x0 + panel_w, y0 + panel_h), bg_color, -1)
+    cv2.addWeighted(roi, alpha, frame[y0:ry2, x0:rx2], 1.0 - alpha, 0, frame[y0:ry2, x0:rx2])
+    cv2.rectangle(frame, (x0, y0), (x0 + panel_w, y0 + panel_h), border_color, 1)
+
+
 def draw_routes_panel(frame, routes, n_active):
     """Panel semitransparente con la matriz de rutas A->B."""
     if not routes:
@@ -61,10 +71,7 @@ def draw_routes_panel(frame, routes, n_active):
     panel_w = 280
     x0, y0 = 10, 10
 
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (x0, y0), (x0 + panel_w, y0 + panel_h), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
-    cv2.rectangle(frame, (x0, y0), (x0 + panel_w, y0 + panel_h), (80, 80, 80), 1)
+    _draw_panel_bg(frame, x0, y0, panel_w, panel_h, (0, 0, 0), 0.6, (80, 80, 80))
 
     cv2.putText(frame, "RUTAS DETECTADAS", (x0 + pad, y0 + pad + 14),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1, cv2.LINE_AA)
@@ -98,10 +105,7 @@ def draw_scoreboard(frame, routes, n_active, total_ever, vid_w, zone_names):
     x0 = max(0, vid_w - panel_w - 12)
     y0 = 10
 
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (x0, y0), (x0 + panel_w, y0 + panel_h), (8, 8, 8), -1)
-    cv2.addWeighted(overlay, 0.65, frame, 0.35, 0, frame)
-    cv2.rectangle(frame, (x0, y0), (x0 + panel_w, y0 + panel_h), (90, 90, 90), 1)
+    _draw_panel_bg(frame, x0, y0, panel_w, panel_h, (8, 8, 8), 0.65, (90, 90, 90))
 
     cv2.putText(frame, f"TOTAL: {total_ever}",
                 (x0 + pad, y0 + 40), cv2.FONT_HERSHEY_SIMPLEX, 1.05,

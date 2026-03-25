@@ -11,79 +11,79 @@ class SAHIMixin:
 
     def _build_panel_sahi(self):
         """Construye el panel lateral del Paso 3."""
-        self.panel_step2 = tk.Frame(self.sidebar, bg="#181825", padx=12, pady=10)
-        self._lbl(self.panel_step2, "PARÁMETROS SAHI", bold=True, color="#CDD6F4")
-        self._lbl(self.panel_step2,
+        self.panel_step3 = tk.Frame(self.sidebar, bg="#181825", padx=12, pady=10)
+        self._lbl(self.panel_step3, "PARÁMETROS SAHI", bold=True, color="#CDD6F4")
+        self._lbl(self.panel_step3,
                   "SAHI divide el frame en tiles para\n"
                   "detectar autos pequeños/lejanos.\n"
                   "Tiles más pequeños = más precisión\nbut más lento.",
                   color="#A6ADC8")
 
-        tk.Frame(self.panel_step2, bg="#313244", height=1).pack(fill="x", pady=6)
+        tk.Frame(self.panel_step3, bg="#313244", height=1).pack(fill="x", pady=6)
 
         params = [
             ("Ancho de tile (px):", self.slice_w, 128, 1024, 128),
             ("Alto de tile (px):", self.slice_h, 128, 1024, 128),
         ]
         for lbl, var, mn, mx, res in params:
-            self._lbl(self.panel_step2, lbl, color="#CDD6F4")
-            tk.Scale(self.panel_step2, from_=mn, to=mx, resolution=res,
+            self._lbl(self.panel_step3, lbl, color="#CDD6F4")
+            tk.Scale(self.panel_step3, from_=mn, to=mx, resolution=res,
                      variable=var, orient="horizontal",
                      bg="#181825", fg="#CDD6F4", troughcolor="#313244",
                      highlightthickness=0, command=lambda _: self._update_tile_preview()
                      ).pack(fill="x")
 
-        self._lbl(self.panel_step2, "Overlap entre tiles:", color="#CDD6F4")
-        tk.Scale(self.panel_step2, from_=0.0, to=0.5, resolution=0.05,
+        self._lbl(self.panel_step3, "Overlap entre tiles:", color="#CDD6F4")
+        tk.Scale(self.panel_step3, from_=0.0, to=0.5, resolution=0.05,
                  variable=self.overlap, orient="horizontal",
                  bg="#181825", fg="#CDD6F4", troughcolor="#313244",
                  highlightthickness=0, command=lambda _: self._update_tile_preview()
                  ).pack(fill="x")
 
-        self._lbl(self.panel_step2, "NMS post-SAHI (IoU threshold):", color="#CDD6F4")
-        tk.Scale(self.panel_step2, from_=0.0, to=0.9, resolution=0.05,
+        self._lbl(self.panel_step3, "NMS post-SAHI (IoU threshold):", color="#CDD6F4")
+        tk.Scale(self.panel_step3, from_=0.0, to=0.9, resolution=0.05,
                  variable=self.nms_threshold, orient="horizontal",
                  bg="#181825", fg="#CDD6F4", troughcolor="#313244",
                  highlightthickness=0).pack(fill="x")
 
-        self.lbl_tiles = tk.Label(self.panel_step2, text="Tiles por frame: —",
+        self.lbl_tiles = tk.Label(self.panel_step3, text="Tiles por frame: —",
                                    bg="#181825", fg="#89B4FA", font=("Arial", 10))
         self.lbl_tiles.pack(pady=4)
 
-        tk.Frame(self.panel_step2, bg="#313244", height=1).pack(fill="x", pady=6)
-        self._lbl(self.panel_step2, "PARÁMETROS SORT FALLBACK", bold=True, color="#CDD6F4")
+        tk.Frame(self.panel_step3, bg="#313244", height=1).pack(fill="x", pady=6)
+        self._lbl(self.panel_step3, "PARÁMETROS SORT FALLBACK", bold=True, color="#CDD6F4")
 
         tracker_params = [
             ("Max age (frames):", self.max_age, 10, 100, 5),
             ("Min hits:", self.min_hits, 1, 10, 1),
         ]
         for lbl, var, mn, mx, res in tracker_params:
-            self._lbl(self.panel_step2, lbl, color="#CDD6F4")
-            tk.Scale(self.panel_step2, from_=mn, to=mx, resolution=res,
+            self._lbl(self.panel_step3, lbl, color="#CDD6F4")
+            tk.Scale(self.panel_step3, from_=mn, to=mx, resolution=res,
                      variable=var, orient="horizontal",
                      bg="#181825", fg="#CDD6F4", troughcolor="#313244",
                      highlightthickness=0).pack(fill="x")
 
-        self._lbl(self.panel_step2, "IOU threshold tracker:", color="#CDD6F4")
-        tk.Scale(self.panel_step2, from_=0.05, to=0.5, resolution=0.05,
+        self._lbl(self.panel_step3, "IOU threshold tracker:", color="#CDD6F4")
+        tk.Scale(self.panel_step3, from_=0.05, to=0.5, resolution=0.05,
                  variable=self.iou_thresh, orient="horizontal",
                  bg="#181825", fg="#CDD6F4", troughcolor="#313244",
                  highlightthickness=0).pack(fill="x")
 
-        tk.Frame(self.panel_step2, bg="#313244", height=1).pack(fill="x", pady=6)
+        tk.Frame(self.panel_step3, bg="#313244", height=1).pack(fill="x", pady=6)
 
-        self.btn_tile_grid = tk.Button(self.panel_step2, text="🔲  Ocultar cuádrícula",
+        self.btn_tile_grid = tk.Button(self.panel_step3, text="🔲  Ocultar cuádrícula",
                                         command=self._toggle_tile_grid,
                                         bg="#313244", fg="#89B4FA", relief="flat", pady=4)
         self.btn_tile_grid.pack(fill="x", pady=2)
 
-        self.btn_save = tk.Button(self.panel_step2, text="💾  GUARDAR config.json",
+        self.btn_save = tk.Button(self.panel_step3, text="💾  GUARDAR config.json",
                                   command=self._save_config,
                                   bg="#A6E3A1", fg="#11111B", font=("Arial", 10, "bold"),
                                   relief="flat", pady=8)
         self.btn_save.pack(fill="x", pady=8)
 
-        self.lbl_save_status = tk.Label(self.panel_step2, text="",
+        self.lbl_save_status = tk.Label(self.panel_step3, text="",
                                          bg="#181825", fg="#A6E3A1", font=("Arial", 9))
         self.lbl_save_status.pack()
 

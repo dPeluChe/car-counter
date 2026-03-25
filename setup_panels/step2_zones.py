@@ -10,7 +10,9 @@ import numpy as np
 from carcounter.constants import (
     PREVIEW_VEH_NAMES,
     ZONE_COLORS_HEX as ZONE_COLORS,
+    ZONE_COLORS_RGB,
     EXCL_COLORS_HEX as EXCL_COLORS,
+    EXCL_COLORS_RGB,
 )
 
 
@@ -19,11 +21,11 @@ class ZonesMixin:
 
     def _build_panel_zones(self):
         """Construye el panel lateral del Paso 2."""
-        self.panel_step1 = tk.Frame(self.sidebar, bg="#181825", padx=12, pady=10)
-        self._lbl(self.panel_step1, "MODO DE CONTEO", bold=True, color="#CDD6F4")
+        self.panel_step2 = tk.Frame(self.sidebar, bg="#181825", padx=12, pady=10)
+        self._lbl(self.panel_step2, "MODO DE CONTEO", bold=True, color="#CDD6F4")
 
         # Selector de modo
-        mode_frame = tk.Frame(self.panel_step1, bg="#181825")
+        mode_frame = tk.Frame(self.panel_step2, bg="#181825")
         mode_frame.pack(fill="x", pady=4)
         self.btn_mode_zones = tk.Button(mode_frame, text="🗺 Zonas A→B",
                                          command=lambda: self._set_counting_mode("zones"),
@@ -37,7 +39,7 @@ class ZonesMixin:
         self.btn_mode_lines.pack(side="left", fill="x", expand=True, padx=(2, 0))
 
         # ── Subpanel zonas ──
-        self.subpanel_zones = tk.Frame(self.panel_step1, bg="#181825")
+        self.subpanel_zones = tk.Frame(self.panel_step2, bg="#181825")
         self._lbl(self.subpanel_zones,
                   "Dibuja un poligono en cada\n"
                   "zona de entrada/salida.\n\n"
@@ -71,7 +73,7 @@ class ZonesMixin:
         self.subpanel_zones.pack(fill="x")
 
         # ── Subpanel líneas ──
-        self.subpanel_lines = tk.Frame(self.panel_step1, bg="#181825")
+        self.subpanel_lines = tk.Frame(self.panel_step2, bg="#181825")
         self._lbl(self.subpanel_lines,
                   "Dibuja líneas de cruce. Cada\n"
                   "vehículo que cruce la línea se\n"
@@ -97,22 +99,22 @@ class ZonesMixin:
                                        bg="#313244", fg="#F38BA8", relief="flat", pady=4)
         self.btn_del_line.pack(fill="x", pady=2)
 
-        tk.Frame(self.panel_step1, bg="#313244", height=1).pack(fill="x", pady=8)
-        self.btn_preview = tk.Button(self.panel_step1, text="▶  Reproducir",
+        tk.Frame(self.panel_step2, bg="#313244", height=1).pack(fill="x", pady=8)
+        self.btn_preview = tk.Button(self.panel_step2, text="▶  Reproducir",
                                      command=self._toggle_zone_preview,
                                      bg="#F9E2AF", fg="#11111B", font=("Arial", 10, "bold"),
                                      relief="flat", pady=6)
         self.btn_preview.pack(fill="x", pady=4)
 
-        self.btn_det_toggle = tk.Button(self.panel_step1, text="🔍  Detecciones YOLO: OFF",
+        self.btn_det_toggle = tk.Button(self.panel_step2, text="🔍  Detecciones YOLO: OFF",
                                         command=self._toggle_yolo_preview,
                                         bg="#313244", fg="#6C7086", relief="flat", pady=4)
         self.btn_det_toggle.pack(fill="x", pady=2)
 
-        tk.Frame(self.panel_step1, bg="#313244", height=1).pack(fill="x", pady=8)
-        self._lbl(self.panel_step1, "Elementos guardados:", color="#CDD6F4")
+        tk.Frame(self.panel_step2, bg="#313244", height=1).pack(fill="x", pady=8)
+        self._lbl(self.panel_step2, "Elementos guardados:", color="#CDD6F4")
 
-        self.zones_frame = tk.Frame(self.panel_step1, bg="#181825")
+        self.zones_frame = tk.Frame(self.panel_step2, bg="#181825")
         self.zones_frame.pack(fill="both", expand=True)
 
         self.selected_zone = tk.StringVar(value="")
@@ -122,7 +124,7 @@ class ZonesMixin:
         self.zones_listbox.pack(fill="both", expand=True)
         self.zones_listbox.bind("<<ListboxSelect>>", self._on_zone_select)
 
-        self.btn_zones_ok = tk.Button(self.panel_step1, text="✅  Continuar →",
+        self.btn_zones_ok = tk.Button(self.panel_step2, text="✅  Continuar →",
                                       command=self._confirm_zones,
                                       bg="#A6E3A1", fg="#11111B", font=("Arial", 10, "bold"),
                                       relief="flat", pady=6)
@@ -233,8 +235,12 @@ class ZonesMixin:
     def _on_zone_select(self, event):
         sel = self.zones_listbox.curselection()
         if sel:
-            name = list(self.zones.keys())[sel[0]]
-            self.selected_zone.set(name)
+            if self.counting_mode.get() == "lines":
+                keys = list(self.counting_lines.keys())
+            else:
+                keys = list(self.zones.keys())
+            if sel[0] < len(keys):
+                self.selected_zone.set(keys[sel[0]])
 
     def _delete_selected_zone(self):
         name = self.selected_zone.get()
@@ -255,31 +261,42 @@ class ZonesMixin:
         self._redraw()
 
     def _redraw_zones(self):
-        """Actualiza display_frame_zones con las zonas dibujadas."""
+        """Actualiza display_frame_zones con las zonas dibujadas (single-pass overlay)."""
         base = cv2.cvtColor(self.frame_orig, cv2.COLOR_BGR2RGB).copy()
+        overlay = base.copy()
+        excl_meta = []
+        zone_meta = []
+
+        # Fill all exclusion zones on one overlay
         for idx, (name, pts) in enumerate(self.exclusion_zones.items()):
-            ec_hex = EXCL_COLORS[idx % len(EXCL_COLORS)].lstrip("#")
-            er, eg, eb = int(ec_hex[0:2], 16), int(ec_hex[2:4], 16), int(ec_hex[4:6], 16)
+            color = EXCL_COLORS_RGB[idx % len(EXCL_COLORS_RGB)]
             np_pts = np.array(pts, dtype=np.int32)
-            overlay = base.copy()
-            cv2.fillPoly(overlay, [np_pts], (er, eg, eb))
-            base = cv2.addWeighted(base, 0.80, overlay, 0.20, 0)
-            cv2.polylines(base, [np_pts], True, (er, eg, eb), 2)
-            cx = int(np.mean([p[0] for p in pts]))
-            cy = int(np.mean([p[1] for p in pts]))
-            cv2.putText(base, f"EXCL:{name}", (cx, cy),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (er, eg, eb), 2)
+            cv2.fillPoly(overlay, [np_pts], color)
+            excl_meta.append((name, np_pts, color))
+
+        # Fill all transit zones on same overlay
         for idx, (name, pts) in enumerate(self.zones.items()):
-            color_hex = ZONE_COLORS[idx % len(ZONE_COLORS)].lstrip("#")
-            r, g, b = int(color_hex[0:2], 16), int(color_hex[2:4], 16), int(color_hex[4:6], 16)
+            color = ZONE_COLORS_RGB[idx % len(ZONE_COLORS_RGB)]
             np_pts = np.array(pts, dtype=np.int32)
-            overlay = base.copy()
-            cv2.fillPoly(overlay, [np_pts], (r, g, b))
-            base = cv2.addWeighted(base, 0.75, overlay, 0.25, 0)
-            cv2.polylines(base, [np_pts], True, (r, g, b), 2)
-            cx = int(np.mean([p[0] for p in pts]))
-            cy = int(np.mean([p[1] for p in pts]))
-            cv2.putText(base, name, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (r, g, b), 2)
+            cv2.fillPoly(overlay, [np_pts], color)
+            zone_meta.append((name, np_pts, color))
+
+        # Single blend pass
+        base = cv2.addWeighted(base, 0.75, overlay, 0.25, 0)
+
+        # Draw outlines and labels
+        for name, np_pts, color in excl_meta:
+            cv2.polylines(base, [np_pts], True, color, 2)
+            cx = int(np.mean(np_pts[:, 0]))
+            cy = int(np.mean(np_pts[:, 1]))
+            cv2.putText(base, f"EXCL:{name}", (cx, cy),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        for name, np_pts, color in zone_meta:
+            cv2.polylines(base, [np_pts], True, color, 2)
+            cx = int(np.mean(np_pts[:, 0]))
+            cy = int(np.mean(np_pts[:, 1]))
+            cv2.putText(base, name, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+
         self.display_frame_zones = base
         self._redraw()
 
@@ -351,17 +368,15 @@ class ZonesMixin:
         overlay = base.copy()
         zone_meta = []
         for idx, (name, pts) in enumerate(self.zones.items()):
-            color_hex = ZONE_COLORS[idx % len(ZONE_COLORS)].lstrip("#")
-            r, g, b = int(color_hex[0:2], 16), int(color_hex[2:4], 16), int(color_hex[4:6], 16)
+            color = ZONE_COLORS_RGB[idx % len(ZONE_COLORS_RGB)]
             np_pts = np.array(pts, dtype=np.int32)
-            cv2.fillPoly(overlay, [np_pts], (r, g, b))
-            zone_meta.append((name, pts, (r, g, b)))
+            cv2.fillPoly(overlay, [np_pts], color)
+            zone_meta.append((name, np_pts, color))
         base = cv2.addWeighted(base, 0.75, overlay, 0.25, 0)
-        for name, pts, color in zone_meta:
-            np_pts = np.array(pts, dtype=np.int32)
+        for name, np_pts, color in zone_meta:
             cv2.polylines(base, [np_pts], True, color, 2)
-            cx = int(np.mean([p[0] for p in pts]))
-            cy = int(np.mean([p[1] for p in pts]))
+            cx = int(np.mean(np_pts[:, 0]))
+            cy = int(np.mean(np_pts[:, 1]))
             cv2.putText(base, name, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
         self.display_frame_zones = base
@@ -383,9 +398,6 @@ class ZonesMixin:
                 text="🔍  Detecciones YOLO: OFF", fg="#6C7086")
 
     def _confirm_zones(self):
-        if not self.zones:
-            messagebox.showwarning("Zonas", "Define al menos 2 zonas (una entrada, una salida).")
-            return
         if len(self.zones) < 2:
             messagebox.showwarning("Zonas", "Necesitas al menos 2 zonas para detectar rutas.")
             return

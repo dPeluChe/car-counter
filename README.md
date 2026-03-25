@@ -26,6 +26,12 @@ setup_panels/        # Mixins del configurador GUI
   step1_calibration.py # Paso 1: calibracion YOLO
   step2_zones.py     #   Paso 2: zonas/lineas de conteo
   step3_sahi.py      #   Paso 3: SAHI + guardado
+docs/                # Documentacion
+  OPTIMIZATION_GUIDE.md  # Guia de parametros y calibracion
+  ROUNDABOUT_GUIDE.md    # Guia paso a paso para glorietas
+  TASK_TODO.md           # Tareas pendientes
+  TASK_COMPLETED.md      # Historial de tareas completadas
+archive/             # Archivos legacy (no usados)
 ```
 
 ## Features
@@ -118,6 +124,13 @@ Generado por el configurador:
 - `--no-save`: no guardar video
 - `--show-fps`: mostrar FPS
 - `--benchmark`: guardar metricas
+
+## Documentacion
+
+- [Guia de optimizacion y parametros](docs/OPTIMIZATION_GUIDE.md)
+- [Guia paso a paso para glorietas](docs/ROUNDABOUT_GUIDE.md)
+- [Tareas pendientes](docs/TASK_TODO.md)
+- [Historial de tareas](docs/TASK_COMPLETED.md)
 
 ## Dependencias
 
