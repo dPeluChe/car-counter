@@ -1,5 +1,6 @@
 """Funciones de dibujo OpenCV para el contador."""
 
+import math
 import cv2
 import numpy as np
 
@@ -146,7 +147,7 @@ def draw_hud(frame, frame_num, total_f, fps_avg, detections, n_routes_total, vid
                 0.5, (200, 200, 200), 1, cv2.LINE_AA)
 
 
-def draw_tracked_boxes(frame, tracked_boxes, tracks_info, zone_names):
+def draw_tracked_boxes(frame, tracked_boxes, tracks_info, zone_names, trails=None):
     """Dibuja bboxes de vehiculos con color segun estado de tracking."""
     for (x1, y1, x2, y2, trk_id, cls_name) in tracked_boxes:
         cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
@@ -164,10 +165,23 @@ def draw_tracked_boxes(frame, tracked_boxes, tracks_info, zone_names):
         else:
             color = (160, 160, 160)
 
+        # Draw trail
+        if trails and trk_id in trails:
+            trail = trails[trk_id]
+            n = len(trail)
+            prev = None
+            for i, pt in enumerate(trail):
+                if prev is not None:
+                    thickness = max(1, int(math.sqrt(float(i) / float(n)) * 2.5))
+                    cv2.line(frame, (int(prev[0]), int(prev[1])),
+                             (int(pt[0]), int(pt[1])), color, thickness)
+                prev = pt
+
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         cv2.circle(frame, (cx, cy), 4, color, -1)
 
-        state_icon = {"done": "v", "transit": ">", "origin": "o", "new": "?"}.get(state, "")
+        state_icon = {"done": "v", "transit": ">", "origin": "o", "new": "?",
+                      "tracking": "~"}.get(state, "")
         label = f"{state_icon}{trk_id}"
         if origin:
             label += f"[{origin}]"

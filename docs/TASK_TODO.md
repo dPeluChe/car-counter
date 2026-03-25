@@ -22,6 +22,7 @@ Reemplazar archivos sueltos (config.json, results.json) con una DB local libSQL 
 projects  -> id, name, video_path, model_path, created_at
 configs   -> id, project_id, json_blob, notes, created_at
 runs      -> id, config_id, frames, duration, vehicles, routes_json, created_at
+od_entries -> run_id, origin, destination, count, vehicle_class
 ```
 
 ### Fase futura (vectores)
@@ -42,66 +43,101 @@ runs      -> id, config_id, frames, duration, vehicles, routes_json, created_at
 
 ---
 
-## ~~TODO-020: Tests unitarios para modulos core~~ COMPLETADO
-
-Movido a TASK_COMPLETED.md (DONE-024). 81 tests en 4 archivos, 0.2s.
-
----
-
-## ~~TODO-021: Soporte GPU en inferencia~~ COMPLETADO
-
-Movido a TASK_COMPLETED.md (DONE-025). Auto-detect CPU/CUDA/MPS, `--device auto`.
+## ~~TODO-020: Tests unitarios~~ COMPLETADO -> DONE-024
+## ~~TODO-021: Soporte GPU~~ COMPLETADO -> DONE-025
 
 ---
 
-## TODO-022: Investigar supervision library (Roboflow)
+## TODO-022: Evaluar supervision library (Roboflow)
 
 **Prioridad:** P2
-**Dependencia:** Ninguna
 
-### Objetivo
+### Hallazgos del analisis (2026-03-24)
 
-Evaluar si `supervision` puede simplificar `detection.py` + `drawing.py` + `tracking.py`. La libreria unifica tracking, counting por lineas/zonas, y annotators de visualizacion.
+Se analizo el repo roboflow/supervision (36.8k stars). Patrones ya adoptados:
+- [x] Polygon masks pre-computadas (O(1) zone lookup) -> implementado
+- [x] Multi-anchor line crossing + crossing threshold -> implementado
+- [x] Trail visualization -> implementado
 
-### Criterios de aceptacion
-
-- [ ] Documento de evaluacion con pros/cons vs implementacion actual
-- [ ] Prototipo minimo con supervision que replique el flujo zones
-- [ ] Comparativa de precision y rendimiento
-- [ ] Decision documentada: adoptar, adoptar parcialmente, o descartar
+Patrones pendientes de evaluar:
+- [ ] Detections dataclass unificado (reemplaza tuplas)
+- [ ] Annotator base class con composicion
+- [ ] Callback-based slicer para SAHI
+- [ ] Migrar completamente a supervision (elimina counting.py + tracking.py + drawing.py parcial)
 
 ---
 
 ## TODO-023: Video batching para inferencia GPU
 
 **Prioridad:** P2
-**Dependencia:** TODO-021
-
-### Objetivo
-
-Procesar N frames en batch para la inferencia YOLO en vez de 1 por 1. Mejora throughput significativamente en GPU.
-
-### Criterios de aceptacion
-
-- [ ] Flag `--batch-size N` (default 1)
-- [ ] Acumulacion de frames y envio en batch a YOLO
-- [ ] Tracking se aplica post-batch con correspondencia correcta
-- [ ] Benchmark comparativo batch=1 vs batch=4 vs batch=8
+**Dependencia:** TODO-021 (completado)
+**Nota:** YOLO de ultralytics ya gestiona batching interno en GPU. El batching manual requiere diseño cuidadoso por interaccion con tracker secuencial.
 
 ---
 
 ## TODO-024: Export modelo ONNX/TensorRT
 
 **Prioridad:** P2
-**Dependencia:** Ninguna
-
-### Objetivo
-
-Soportar modelos exportados a ONNX o TensorRT para inferencia mas rapida sin dependencia completa de PyTorch.
 
 ### Criterios de aceptacion
 
 - [ ] Script `scripts/export_model.py` para convertir .pt a .onnx
 - [ ] `main.py` acepta modelos .onnx y .engine ademas de .pt
 - [ ] Benchmark comparativo .pt vs .onnx vs .engine
-- [ ] Documentado en OPTIMIZATION_GUIDE.md
+
+---
+
+## TODO-025: Config tipado con dataclass
+
+**Prioridad:** P1
+**Origen:** Analisis de rust-road-traffic
+
+### Objetivo
+
+Reemplazar config dict-based con dataclasses tipadas. Base para serializacion limpia a libSQL.
+
+### Criterios de aceptacion
+
+- [ ] `carcounter/config.py` con `AppConfig`, `DetectionConfig`, `TrackingConfig`, etc.
+- [ ] Validacion al cargar (tracker type, ranges, required fields)
+- [ ] Backup timestamped antes de sobreescribir config
+- [ ] Backward compatible con JSON existente
+
+---
+
+## TODO-026: Visualizacion de direction vectors
+
+**Prioridad:** P2
+**Origen:** Analisis de repos
+
+### Objetivo
+
+Dibujar los vectores de direccion configurados en modo `directions` sobre el frame para feedback visual.
+
+### Criterios de aceptacion
+
+- [ ] Flechas dibujadas con nombre de direccion sobre el frame
+- [ ] Visibles en main.py cuando `counting_mode == "directions"`
+- [ ] Soporte en setup.py para dibujar/editar direction vectors (paso nuevo o extension del paso 2)
+
+---
+
+## TODO-027: FastAPI REST API minimo
+
+**Prioridad:** P2
+**Dependencia:** TODO-019 (libSQL)
+**Origen:** Analisis de rust-road-traffic
+
+### Objetivo
+
+API REST read-only para exponer datos de runs y zonas.
+
+### Endpoints
+
+```
+GET  /api/zones          -> zonas configuradas
+GET  /api/stats          -> estadisticas del run actual
+GET  /api/runs           -> lista de runs desde libSQL
+GET  /api/runs/{id}      -> detalle + routes + OD matrix
+GET  /api/stream         -> MJPEG stream del video procesado
+```

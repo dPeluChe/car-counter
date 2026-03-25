@@ -77,12 +77,47 @@ def export_csv(path, routes_matrix):
     print(f"Resultados CSV: {path}")
 
 
+def export_tracks_csv(path, track_data):
+    """Guarda datos per-track en CSV (trayectorias, clase, estado)."""
+    if not track_data:
+        return
+    fields = ["track_id", "class", "state", "origin", "direction",
+              "first_x", "first_y", "last_x", "last_y", "trail_length", "last_seen_frame"]
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        for row in sorted(track_data, key=lambda r: r["track_id"]):
+            w.writerow(row)
+    print(f"Tracks CSV: {path}")
+
+
+def export_od_matrix_csv(path, od_matrix):
+    """Guarda OD matrix nested como CSV. Solo aplica en modo zones."""
+    if not od_matrix:
+        print("OD Matrix: vacia (solo se genera en modo zones)")
+        return
+    all_zones = set()
+    for origin, dests in od_matrix.items():
+        all_zones.add(origin)
+        all_zones.update(dests.keys())
+    zones = sorted(all_zones)
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["origen\\destino"] + zones)
+        for origin in zones:
+            row = [origin]
+            for dest in zones:
+                row.append(od_matrix.get(origin, {}).get(dest, 0))
+            w.writerow(row)
+    print(f"OD Matrix CSV: {path}")
+
+
 def export_benchmark(benchmarks_dir, *, video_path, config_path, use_sahi,
                      total_time, avg_fps, routes_matrix, benchmark_data):
     """Guarda metricas de rendimiento."""
     os.makedirs(benchmarks_dir, exist_ok=True)
     path = os.path.join(benchmarks_dir, "benchmark_results.txt")
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write("Car Counter Benchmark\n" + "=" * 50 + "\n")
         f.write(f"Video: {video_path}\nConfig: {config_path}\nSAHI: {use_sahi}\n")
         f.write(f"Tiempo total: {format_time(total_time)}\nFPS promedio: {avg_fps:.2f}\n")

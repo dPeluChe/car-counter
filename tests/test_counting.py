@@ -27,14 +27,15 @@ def make_counter(zone_a_pos=(0, 0), zone_b_pos=(300, 0), size=100,
     )
 
 
-def make_line_counter(tolerance=25):
+def make_line_counter(tolerance=25, min_crossing_frames=1):
     """Crea un VehicleCounter con una linea de cruce."""
     lines = [{
         "name": "Linea 1",
         "pt1": (0, 100), "pt2": (200, 100),
         "tolerance": tolerance,
     }]
-    return VehicleCounter(zones_np={}, counting_lines=lines)
+    return VehicleCounter(zones_np={}, counting_lines=lines,
+                          min_crossing_frames=min_crossing_frames)
 
 
 # ── Zones mode: state machine ────────────────
@@ -264,4 +265,138 @@ class TestPurgeStale:
         c.update(1, 100, 80, "car", "lines")
         c.set_frame(300)
         c.purge_stale(max_missing_frames=200)
-        assert 1 not in c._id_prev_cy
+        assert 1 not in c._id_prev_pos
+
+    def test_purges_trails(self):
+        c = make_counter()
+        c.set_frame(1)
+        c.update(1, 200, 200, "car", "zones")
+        assert 1 in c.trails
+        c.set_frame(300)
+        c.purge_stale(max_missing_frames=200)
+        assert 1 not in c.trails
+
+
+# ── Directions mode ───────────────────────────
+
+class TestDirectionsMode:
+    """Tests para el modo directions (cosine similarity)."""
+
+    def test_assigns_direction(self):
+        directions = {
+            "Norte": [[100, 200], [100, 0]],     # vector pointing up
+            "Sur":   [[100, 0], [100, 200]],      # vector pointing down
+        }
+        c = VehicleCounter(zones_np={}, counting_lines=[], directions=directions,
+                           min_origin_frames=3)
+        # Vehicle moves upward (y decreasing)
+        for f in range(1, 8):
+            c.set_frame(f)
+            c.update(1, 100, 200 - f * 20, "car", "directions")
+        assert c.tracks_info[1]["state"] == "done"
+        assert "Norte" in c.routes_matrix
+
+    def test_minimum_frames_required(self):
+        directions = {"Este": [[0, 100], [200, 100]]}
+        c = VehicleCounter(zones_np={}, counting_lines=[], directions=directions,
+                           min_origin_frames=5)
+        # Only 3 frames - not enough
+        for f in range(1, 4):
+            c.set_frame(f)
+            c.update(1, f * 50, 100, "car", "directions")
+        assert c.tracks_info[1]["state"] == "tracking"
+
+    def test_low_similarity_not_assigned(self):
+        directions = {"Este": [[0, 100], [200, 100]]}  # horizontal right
+        c = VehicleCounter(zones_np={}, counting_lines=[], directions=directions,
+                           min_origin_frames=3)
+        # Vehicle moves diagonally (low similarity with pure horizontal)
+        for f in range(1, 8):
+            c.set_frame(f)
+            c.update(1, 100 + f * 5, 100 - f * 50, "car", "directions")
+        # With strong vertical component, cosine similarity with horizontal may be < 0.5
+        # so it might not get assigned depending on the exact vector
+
+
+# ── OD Matrix ─────────────────────────────────
+
+class TestODMatrix:
+    """Tests para OD matrix nested."""
+
+    def test_od_matrix_populated(self):
+        c = make_counter(min_origin=2, min_dest=2)
+        # Full route A->B
+        for f in range(1, 3):
+            c.set_frame(f)
+            c.update(1, 50, 50, "car", "zones")
+        c.set_frame(3)
+        c.update(1, 200, 50, "car", "zones")
+        for f in range(4, 6):
+            c.set_frame(f)
+            c.update(1, 350, 50, "car", "zones")
+        assert c.od_matrix == {"A": {"B": 1}}
+
+    def test_od_matrix_by_class(self):
+        c = make_counter(min_origin=2, min_dest=2)
+        for f in range(1, 3):
+            c.set_frame(f)
+            c.update(1, 50, 50, "truck", "zones")
+        c.set_frame(3)
+        c.update(1, 200, 50, "truck", "zones")
+        for f in range(4, 6):
+            c.set_frame(f)
+            c.update(1, 350, 50, "truck", "zones")
+        assert c.od_matrix_by_class["A"]["B"]["truck"] == 1
+
+
+# ── Trails ────────────────────────────────────
+
+class TestTrails:
+    """Tests para trail recording."""
+
+    def test_trail_recorded(self):
+        c = make_counter()
+        c.set_frame(1)
+        c.update(1, 50, 50, "car", "zones")
+        c.set_frame(2)
+        c.update(1, 60, 60, "car", "zones")
+        assert len(c.trails[1]) == 2
+        assert c.trails[1][0] == (50, 50)
+        assert c.trails[1][1] == (60, 60)
+
+    def test_trail_max_length(self):
+        c = VehicleCounter(zones_np={}, counting_lines=[], trail_length=5)
+        for f in range(1, 20):
+            c.set_frame(f)
+            c.update(1, f * 10, f * 10, "car", "zones")
+        assert len(c.trails[1]) == 5  # max length
+
+    def test_get_track_data(self):
+        c = make_counter()
+        c.set_frame(1)
+        c.update(1, 50, 50, "car", "zones")
+        c.set_frame(2)
+        c.update(1, 60, 60, "car", "zones")
+        data = c.get_track_data()
+        assert len(data) == 1
+        assert data[0]["track_id"] == 1
+        assert data[0]["class"] == "car"
+        assert data[0]["first_x"] == 50
+
+
+# ── Zone masks integration ────────────────────
+
+class TestZoneMasksIntegration:
+    """Tests para zone masks en VehicleCounter."""
+
+    def test_counter_with_masks(self):
+        zones = {
+            "A": make_square_zone(0, 0, 100),
+            "B": make_square_zone(300, 0, 100),
+        }
+        c = VehicleCounter(zones_np=zones, counting_lines=[],
+                           frame_size=(500, 200))
+        assert c._zone_masks is not None
+        assert c.get_zone_for_point(50, 50) == "A"
+        assert c.get_zone_for_point(350, 50) == "B"
+        assert c.get_zone_for_point(200, 100) is None

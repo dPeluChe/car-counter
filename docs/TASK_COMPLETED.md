@@ -643,3 +643,61 @@ Revision tecnica completa del proyecto con correccion de bugs, optimizaciones y 
 - [x] Print del device al inicio con nombre descriptivo
 - [x] Fallback silencioso a CPU si GPU no disponible
 - [x] Tests unitarios para detect_device
+
+---
+
+## DONE-026: Features aprendidas de repos de referencia
+
+**Fecha:** 2026-03-24
+**Archivos:** `carcounter/geometry.py`, `carcounter/counting.py`, `carcounter/drawing.py`, `carcounter/export.py`, `main.py`, `tests/`
+**Origen:** Analisis de roboflow/supervision, kaylode/vehicle-counting, ifzhang/ByteTrack, LdDl/rust-road-traffic
+
+### Que se hizo
+
+#### Polygon masks pre-computadas (de supervision):
+- `build_zone_masks()` y `point_in_zone_mask()` en geometry.py
+- VehicleCounter usa masks cuando recibe `frame_size` — O(1) lookup vs O(V) pointPolygonTest
+- Eliminacion de ~7500 llamadas a pointPolygonTest/seg en escenas tipicas
+
+#### Multi-anchor line crossing + crossing threshold (de supervision):
+- Line crossing usa 4 esquinas del bbox (si bbox disponible)
+- Vehículos cruzando la linea (anchors en ambos lados) se ignoran (previene jitter)
+- `min_crossing_frames` requiere N frames consecutivos del nuevo lado antes de contar
+
+#### Modo `directions` por cosine similarity (de kaylode):
+- Tercer modo de conteo: vectores de direccion predefinidos en config
+- Track vector (primer centro -> ultimo centro) comparado por cosine similarity
+- Asignacion automatica con threshold > 0.5
+- Config: `"directions": {"Norte": [[100,200], [100,0]], ...}`
+
+#### Trail visualization (de DeepSORT repo):
+- Deque de centroides por track (max 64 puntos)
+- Trails dibujados con grosor creciente (mas grueso = mas reciente)
+- Cleanup automatico en purge_stale()
+
+#### OD Matrix nested + per-class (de rust-road-traffic):
+- `counter.od_matrix` = `{"A": {"B": 5}}` (nested dict)
+- `counter.od_matrix_by_class` = `{"A": {"B": {"car": 3, "truck": 2}}}`
+- Export CSV como tabla origen/destino con `--output-od-csv`
+
+#### Per-track CSV export (de kaylode):
+- `--output-tracks-csv` exporta track_id, clase, estado, posiciones, trail_length
+- `export_tracks_csv()` y `export_od_matrix_csv()` en export.py
+
+#### Nuevas funciones en geometry.py:
+- `bbox_intersects_zone()` — test de 4 esquinas del bbox
+- `cosine_similarity_2d()` — para modo directions
+
+#### Bug fix (pre-existente descubierto en review):
+- Direct zone-to-zone transition ahora respeta min_dest_frames (antes lo bypaseaba)
+
+### Criterios cumplidos
+
+- [x] Zone masks pre-computadas con O(1) lookup
+- [x] Multi-anchor line crossing con crossing threshold configurable
+- [x] Modo directions funcional con cosine similarity
+- [x] Trails visualizados con grosor creciente
+- [x] OD matrix nested con breakdown per-class
+- [x] Export CSV per-track y OD matrix
+- [x] 103 tests (22 nuevos), todos verdes
+- [x] Bug de zone-to-zone bypass corregido

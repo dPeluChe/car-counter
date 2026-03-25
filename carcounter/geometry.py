@@ -5,10 +5,44 @@ import cv2
 import numpy as np
 
 
+# ── Zone masks (pre-computed) ─────────────────
+
+def build_zone_masks(zones_np, frame_w, frame_h):
+    """Pre-computa masks binarias para cada zona. O(1) lookup vs O(V) pointPolygonTest."""
+    masks = {}
+    for name, pts in zones_np.items():
+        mask = np.zeros((frame_h, frame_w), dtype=np.uint8)
+        cv2.fillPoly(mask, [pts], 1)
+        masks[name] = mask
+    return masks
+
+
+def point_in_zone_mask(x, y, masks):
+    """Retorna el nombre de la zona donde cae (x,y) usando masks pre-computadas."""
+    ix, iy = int(x), int(y)
+    for name, mask in masks.items():
+        if 0 <= iy < mask.shape[0] and 0 <= ix < mask.shape[1] and mask[iy, ix]:
+            return name
+    return None
+
+
+# ── Point-in-polygon (legacy, para setup) ─────
+
 def point_in_zone(x, y, zone_pts):
     """True si (x,y) esta dentro del poligono zone_pts (np.int32)."""
     return cv2.pointPolygonTest(zone_pts, (float(x), float(y)), False) >= 0
 
+
+def bbox_intersects_zone(x1, y1, x2, y2, zone_pts):
+    """True si cualquier esquina del bbox toca el poligono (mas generoso que solo centro)."""
+    corners = [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
+    for cx, cy in corners:
+        if cv2.pointPolygonTest(zone_pts, (float(cx), float(cy)), False) >= 0:
+            return True
+    return False
+
+
+# ── IoU ───────────────────────────────────────
 
 def bbox_iou(box_a, box_b):
     """IoU entre dos bboxes (x1,y1,x2,y2)."""
@@ -29,6 +63,8 @@ def bbox_iou(box_a, box_b):
     return inter_area / denom if denom > 0 else 0.0
 
 
+# ── NMS ───────────────────────────────────────
+
 def apply_nms(det_list, det_classes, iou_threshold):
     """Greedy NMS post-SAHI. Ordena por conf desc y suprime solapadas."""
     if not det_list:
@@ -46,38 +82,34 @@ def apply_nms(det_list, det_classes, iou_threshold):
     return [det_list[k] for k in keep], [det_classes[k] for k in keep]
 
 
+# ── Geometry filters ──────────────────────────
+
 def passes_geometry_filter(x1, y1, x2, y2, constraints):
     """Valida bbox contra constraints dict (min/max width/height/area/aspect)."""
     width = max(1, x2 - x1)
     height = max(1, y2 - y1)
     area = width * height
     aspect = width / float(height)
-    min_area = constraints.get("min_area", 0)
-    max_area = constraints.get("max_area", 999999)
-    min_w = constraints.get("min_width", 0)
-    max_w = constraints.get("max_width", 999999)
-    min_h = constraints.get("min_height", 0)
-    max_h = constraints.get("max_height", 999999)
-    min_asp = constraints.get("min_aspect", 0.0)
-    max_asp = constraints.get("max_aspect", 999999.0)
-    if min_area > 0 and area < min_area:
+    if area < constraints.get("min_area", 0):
         return False
-    if max_area < 999999 and area > max_area:
+    if area > constraints.get("max_area", math.inf):
         return False
-    if min_w > 0 and width < min_w:
+    if width < constraints.get("min_width", 0):
         return False
-    if max_w < 999999 and width > max_w:
+    if width > constraints.get("max_width", math.inf):
         return False
-    if min_h > 0 and height < min_h:
+    if height < constraints.get("min_height", 0):
         return False
-    if max_h < 999999 and height > max_h:
+    if height > constraints.get("max_height", math.inf):
         return False
-    if min_asp > 0 and aspect < min_asp:
+    if aspect < constraints.get("min_aspect", 0.0):
         return False
-    if max_asp < 999999 and aspect > max_asp:
+    if aspect > constraints.get("max_aspect", math.inf):
         return False
     return True
 
+
+# ── Exclusion zones ──────────────────────────
 
 def in_exclusion_zone(cx, cy, exclusion_np):
     """True si (cx,cy) cae dentro de alguna zona de exclusion."""
@@ -86,6 +118,8 @@ def in_exclusion_zone(cx, cy, exclusion_np):
             return True
     return False
 
+
+# ── Line crossing ────────────────────────────
 
 def point_to_line_side(px, py, x1, y1, x2, y2):
     """Cross product: >0 si abajo/derecha, <0 si arriba/izquierda."""
@@ -99,3 +133,17 @@ def point_line_distance(px, py, x1, y1, x2, y2):
     if length == 0:
         return math.hypot(px - x1, py - y1)
     return abs(dx * (y1 - py) - (x1 - px) * dy) / length
+
+
+# ── Direction (cosine similarity) ─────────────
+
+def cosine_similarity_2d(vec_a, vec_b):
+    """Cosine similarity entre dos vectores 2D. Retorna -1..1."""
+    ax, ay = vec_a
+    bx, by = vec_b
+    dot = ax * bx + ay * by
+    norm_a = math.sqrt(ax * ax + ay * ay)
+    norm_b = math.sqrt(bx * bx + by * by)
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)

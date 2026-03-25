@@ -25,7 +25,10 @@ from carcounter.drawing import (
     draw_zones, draw_lines, draw_exclusion_zones, draw_tracked_boxes,
     draw_routes_panel, draw_scoreboard, draw_hud, format_time,
 )
-from carcounter.export import print_summary, export_json, export_csv, export_benchmark
+from carcounter.export import (
+    print_summary, export_json, export_csv, export_benchmark,
+    export_tracks_csv, export_od_matrix_csv,
+)
 from carcounter.device import detect_device
 
 
@@ -51,6 +54,8 @@ def build_parser():
     parser.add_argument("--output-json", default=str(paths.default_output_json))
     parser.add_argument("--no-output-json", dest="no_output_json", action="store_true")
     parser.add_argument("--output-csv", default=None)
+    parser.add_argument("--output-tracks-csv", default=None)
+    parser.add_argument("--output-od-csv", default=None)
     parser.add_argument("--demo-mode", dest="demo_mode", action="store_true")
     return parser
 
@@ -190,10 +195,16 @@ def main():
                     "tolerance": lc.get("tolerance", 15),
                 })
 
+    # Directions config (for directions mode)
+    directions_config = config.get("directions", {})
+
     counter = VehicleCounter(
         zones_np=zones_np, counting_lines=counting_lines,
         min_origin_frames=settings.get("min_origin_frames", 3),
         min_dest_frames=settings.get("min_dest_frames", 3),
+        frame_size=(VID_W, VID_H),
+        directions=directions_config,
+        min_crossing_frames=settings.get("min_crossing_frames", 2),
     )
 
     writer = cv2.VideoWriter(args.output, cv2.VideoWriter_fourcc(*"mp4v"), VID_FPS, (VID_W, VID_H)) \
@@ -236,7 +247,8 @@ def main():
             # -- Conteo --
             for (x1, y1, x2, y2, trk_id, cls_name) in tracked_boxes:
                 cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-                counter.update(trk_id, cx, cy, cls_name, COUNTING_MODE)
+                counter.update(trk_id, cx, cy, cls_name, COUNTING_MODE,
+                               bbox=(x1, y1, x2, y2))
 
             if frame_count % 120 == 0:
                 counter.purge_stale()
@@ -248,7 +260,8 @@ def main():
             else:
                 draw_zones(frame, zones_np)
 
-            draw_tracked_boxes(frame, tracked_boxes, counter.tracks_info, zone_names)
+            draw_tracked_boxes(frame, tracked_boxes, counter.tracks_info, zone_names,
+                               trails=counter.trails)
 
             if args.demo_mode:
                 draw_scoreboard(frame, counter.routes_matrix, len(tracked_boxes),
@@ -311,6 +324,12 @@ def main():
 
     if args.output_csv:
         export_csv(args.output_csv, rm)
+
+    if args.output_tracks_csv:
+        export_tracks_csv(args.output_tracks_csv, counter.get_track_data())
+
+    if args.output_od_csv:
+        export_od_matrix_csv(args.output_od_csv, counter.od_matrix)
 
     if args.benchmark and benchmark_data:
         export_benchmark(str(paths.benchmarks_dir), video_path=VIDEO_PATH,
