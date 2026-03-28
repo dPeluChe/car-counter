@@ -189,6 +189,40 @@ def draw_tracked_boxes(frame, tracked_boxes, tracks_info, zone_names, trails=Non
                     cv2.FONT_HERSHEY_SIMPLEX, 0.42, color, 1, cv2.LINE_AA)
 
 
+class DensityHeatmap:
+    """Acumula centroides y genera un heatmap overlay."""
+
+    def __init__(self, width, height, decay=0.995, blur_ksize=31):
+        self._acc = np.zeros((height, width), dtype=np.float32)
+        self._decay = decay
+        self._blur_ksize = blur_ksize | 1  # ensure odd
+
+    def update(self, centroids):
+        """Agrega centroides [(cx,cy), ...] al acumulador con decay temporal."""
+        self._acc *= self._decay
+        for cx, cy in centroids:
+            ix, iy = int(cx), int(cy)
+            if 0 <= iy < self._acc.shape[0] and 0 <= ix < self._acc.shape[1]:
+                self._acc[iy, ix] += 1.0
+
+    def draw(self, frame, alpha=0.4):
+        """Renderiza el heatmap sobre el frame."""
+        if self._acc.max() == 0:
+            return
+        blurred = cv2.GaussianBlur(self._acc, (self._blur_ksize, self._blur_ksize), 0)
+        normalized = blurred / max(blurred.max(), 1.0)
+        heatmap_u8 = (normalized * 255).astype(np.uint8)
+        colored = cv2.applyColorMap(heatmap_u8, cv2.COLORMAP_JET)
+        # Solo mezclar donde hay actividad (threshold > 5% del max)
+        mask = normalized > 0.05
+        mask_3c = np.stack([mask] * 3, axis=-1)
+        blended = frame.copy()
+        blended[mask_3c] = cv2.addWeighted(
+            frame, 1 - alpha, colored, alpha, 0
+        )[mask_3c]
+        np.copyto(frame, blended)
+
+
 def format_time(s):
     """Formatea segundos a Xh Xm Xs."""
     h, r = divmod(int(s), 3600)

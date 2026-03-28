@@ -24,6 +24,7 @@ from carcounter.detection import detect_and_track
 from carcounter.drawing import (
     draw_zones, draw_lines, draw_exclusion_zones, draw_tracked_boxes,
     draw_routes_panel, draw_scoreboard, draw_hud, format_time,
+    DensityHeatmap,
 )
 from carcounter.export import (
     print_summary, export_json, export_csv, export_benchmark,
@@ -50,12 +51,13 @@ def build_parser():
     parser.add_argument("--no-save", dest="no_save", action="store_true")
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--max-frames", type=int, default=None)
-    parser.add_argument("--tracker", default="bytetrack", choices=["bytetrack", "botsort", "sort"])
+    parser.add_argument("--tracker", default="bytetrack", choices=["bytetrack", "botsort", "sort", "ocsort"])
     parser.add_argument("--output-json", default=str(paths.default_output_json))
     parser.add_argument("--no-output-json", dest="no_output_json", action="store_true")
     parser.add_argument("--output-csv", default=None)
     parser.add_argument("--output-tracks-csv", default=None)
     parser.add_argument("--output-od-csv", default=None)
+    parser.add_argument("--heatmap", action="store_true")
     parser.add_argument("--demo-mode", dest="demo_mode", action="store_true")
     return parser
 
@@ -164,9 +166,24 @@ def main():
     if TRACKER_BACKEND in {"bytetrack", "botsort"} and not importlib.util.find_spec("lap"):
         print("'lap' no instalado — fallback a SORT")
         TRACKER_BACKEND = "sort"
+    if TRACKER_BACKEND == "ocsort":
+        from carcounter.ocsort_wrapper import is_ocsort_available
+        if not is_ocsort_available():
+            print("'trackers' no instalado — fallback a SORT")
+            TRACKER_BACKEND = "sort"
 
     _sort_tracker = None
-    if USE_SAHI or TRACKER_BACKEND == "sort":
+    if TRACKER_BACKEND == "ocsort":
+        from carcounter.ocsort_wrapper import OCSortWrapper
+        _sort_tracker = OCSortWrapper(
+            max_age=tracker_cfg.get("max_age", 40),
+            min_hits=tracker_cfg.get("min_hits", 3),
+            iou_threshold=tracker_cfg.get("iou_threshold", 0.2),
+            high_conf_threshold=settings.get("conf_threshold", 0.1),
+            frame_rate=VID_FPS,
+        )
+        print(f"Tracker: OC-SORT (direction_consistency=0.2)")
+    elif USE_SAHI or TRACKER_BACKEND == "sort":
         try:
             from carcounter.sort import Sort
             _sort_tracker = Sort(
@@ -210,6 +227,8 @@ def main():
     writer = cv2.VideoWriter(args.output, cv2.VideoWriter_fourcc(*"mp4v"), VID_FPS, (VID_W, VID_H)) \
         if not args.no_save else None
 
+    _heatmap = DensityHeatmap(VID_W, VID_H) if args.heatmap else None
+
     # ─────────────────────────────────────────────
     # Main loop
     # ─────────────────────────────────────────────
@@ -252,6 +271,12 @@ def main():
 
             if frame_count % 120 == 0:
                 counter.purge_stale()
+
+            # -- Heatmap --
+            if _heatmap:
+                centroids = [((x1+x2)//2, (y1+y2)//2) for x1,y1,x2,y2,_,_ in tracked_boxes]
+                _heatmap.update(centroids)
+                _heatmap.draw(frame)
 
             # -- Visualizacion --
             draw_exclusion_zones(frame, _exclusion_np)

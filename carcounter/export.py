@@ -82,7 +82,8 @@ def export_tracks_csv(path, track_data):
     if not track_data:
         return
     fields = ["track_id", "class", "state", "origin", "direction",
-              "first_x", "first_y", "last_x", "last_y", "trail_length", "last_seen_frame"]
+              "first_x", "first_y", "last_x", "last_y", "trail_length", "last_seen_frame",
+              "avg_width", "avg_height", "avg_area", "avg_aspect", "avg_elongation"]
     with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()

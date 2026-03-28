@@ -57,7 +57,7 @@ def detect_and_track(frame, *, model, sahi_model, sahi_predict_fn, sort_tracker,
         # SAHI usa SORT para tracking
         tracked_boxes = _track_with_sort(sort_tracker, detections, det_classes)
 
-    elif tracker_backend == "sort":
+    elif tracker_backend in ("sort", "ocsort"):
         # -- SORT path --
         results = model(frame, conf=effective_conf, verbose=False,
                         classes=VEHICLE_CLASS_IDS, imgsz=imgsz, device=device)

@@ -400,3 +400,97 @@ class TestZoneMasksIntegration:
         assert c.get_zone_for_point(50, 50) == "A"
         assert c.get_zone_for_point(350, 50) == "B"
         assert c.get_zone_for_point(200, 100) is None
+
+
+# ── Shape metrics ─────────────────────────────
+
+class TestShapeMetrics:
+    """Tests para shape metrics de vehiculos."""
+
+    def test_shape_metrics_recorded(self):
+        c = make_counter()
+        c.set_frame(1)
+        c.update(1, 50, 50, "car", "zones", bbox=(20, 20, 80, 60))
+        m = c.get_shape_metrics(1)
+        assert m is not None
+        assert m["avg_width"] == 60.0
+        assert m["avg_height"] == 40.0
+        assert m["avg_area"] == 2400.0
+
+    def test_shape_metrics_ema(self):
+        c = make_counter()
+        c.set_frame(1)
+        c.update(1, 50, 50, "car", "zones", bbox=(0, 0, 100, 50))
+        c.set_frame(2)
+        c.update(1, 50, 50, "car", "zones", bbox=(0, 0, 100, 50))
+        m = c.get_shape_metrics(1)
+        # After 2 identical updates, EMA should converge toward same values
+        assert abs(m["avg_width"] - 100.0) < 1.0
+
+    def test_shape_metrics_purged(self):
+        c = make_counter()
+        c.set_frame(1)
+        c.update(1, 200, 200, "car", "zones", bbox=(180, 180, 220, 220))
+        assert c.get_shape_metrics(1) is not None
+        c.set_frame(300)
+        c.purge_stale(max_missing_frames=200)
+        assert c.get_shape_metrics(1) is None
+
+    def test_no_bbox_no_metrics(self):
+        c = make_counter()
+        c.set_frame(1)
+        c.update(1, 50, 50, "car", "zones")
+        assert c.get_shape_metrics(1) is None
+
+    def test_elongation(self):
+        c = make_counter()
+        c.set_frame(1)
+        # Truck-like: wide bbox
+        c.update(1, 50, 50, "truck", "zones", bbox=(0, 0, 200, 50))
+        m = c.get_shape_metrics(1)
+        assert m["avg_elongation"] == 4.0  # 200/50
+
+    def test_shape_in_track_data(self):
+        c = make_counter()
+        c.set_frame(1)
+        c.update(1, 50, 50, "car", "zones", bbox=(10, 10, 90, 70))
+        data = c.get_track_data()
+        assert data[0]["avg_width"] == 80.0
+        assert data[0]["avg_elongation"] > 1.0
+
+
+# ── Density heatmap ───────────────────────────
+
+class TestDensityHeatmap:
+    """Tests para DensityHeatmap."""
+
+    def test_heatmap_creation(self):
+        from carcounter.drawing import DensityHeatmap
+        hm = DensityHeatmap(100, 100)
+        assert hm._acc.shape == (100, 100)
+
+    def test_heatmap_accumulates(self):
+        from carcounter.drawing import DensityHeatmap
+        hm = DensityHeatmap(100, 100, decay=1.0)
+        hm.update([(50, 50), (50, 50)])
+        assert hm._acc[50, 50] == 2.0
+
+    def test_heatmap_decay(self):
+        from carcounter.drawing import DensityHeatmap
+        hm = DensityHeatmap(100, 100, decay=0.5)
+        hm.update([(50, 50)])
+        assert hm._acc[50, 50] == 1.0
+        hm.update([])
+        assert hm._acc[50, 50] == 0.5
+
+    def test_heatmap_out_of_bounds(self):
+        from carcounter.drawing import DensityHeatmap
+        hm = DensityHeatmap(100, 100, decay=1.0)
+        hm.update([(200, 200), (-5, -5)])
+        assert hm._acc.sum() == 0.0
+
+    def test_heatmap_draw_empty(self):
+        from carcounter.drawing import DensityHeatmap
+        hm = DensityHeatmap(100, 100)
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        hm.draw(frame)  # Should not crash on empty heatmap

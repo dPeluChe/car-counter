@@ -51,6 +51,7 @@ class VehicleCounter:
         self.total_vehicles_ever = 0
         self._id_prev_pos = {}
         self._crossing_history = {}  # {trk_id: {line_name: deque}}
+        self._shape_metrics = {}  # {trk_id: {avg_width, avg_height, ...}}
         self.frame_count = 0
 
     def set_frame(self, frame_count):
@@ -72,6 +73,10 @@ class VehicleCounter:
         if trk_id not in self.trails:
             self.trails[trk_id] = deque(maxlen=self.trail_length)
         self.trails[trk_id].append((cx, cy))
+
+        # Update shape metrics (running average)
+        if bbox:
+            self._update_shape_metrics(trk_id, bbox)
 
         if mode == "lines":
             self._update_line_crossing(trk_id, cx, cy, cls_name, bbox)
@@ -300,6 +305,39 @@ class VehicleCounter:
             self.routes_matrix[best_dir] = self.routes_matrix.get(best_dir, 0) + 1
             print(f"  ID={trk_id:>4}  direccion: {best_dir}  sim={best_score:.2f}  cls={cls_name}  (total={self.routes_matrix[best_dir]})")
 
+    # ── Shape metrics ─────────────────────────
+
+    def _update_shape_metrics(self, trk_id, bbox):
+        """Actualiza metricas de forma del bbox (running average)."""
+        x1, y1, x2, y2 = bbox
+        w = max(1, x2 - x1)
+        h = max(1, y2 - y1)
+        area = w * h
+        aspect = w / h
+        elongation = max(w, h) / min(w, h)
+
+        if trk_id not in self._shape_metrics:
+            self._shape_metrics[trk_id] = {
+                "avg_width": float(w), "avg_height": float(h),
+                "avg_area": float(area), "avg_aspect": aspect,
+                "avg_elongation": elongation, "samples": 1,
+            }
+        else:
+            m = self._shape_metrics[trk_id]
+            n = m["samples"]
+            # Exponential moving average (alpha = 0.3)
+            a = 0.3
+            m["avg_width"] = m["avg_width"] * (1 - a) + w * a
+            m["avg_height"] = m["avg_height"] * (1 - a) + h * a
+            m["avg_area"] = m["avg_area"] * (1 - a) + area * a
+            m["avg_aspect"] = m["avg_aspect"] * (1 - a) + aspect * a
+            m["avg_elongation"] = m["avg_elongation"] * (1 - a) + elongation * a
+            m["samples"] = n + 1
+
+    def get_shape_metrics(self, trk_id):
+        """Retorna metricas de forma promediadas para un track."""
+        return self._shape_metrics.get(trk_id)
+
     # ── Purge stale ───────────────────────────
 
     def purge_stale(self, max_missing_frames=200):
@@ -313,6 +351,7 @@ class VehicleCounter:
             self._id_prev_pos.pop(tid, None)
             self.trails.pop(tid, None)
             self._crossing_history.pop(tid, None)
+            self._shape_metrics.pop(tid, None)
         if stale_ids:
             print(f"  Purgados {len(stale_ids)} tracks viejos — activos: {len(self.tracks_info)}")
         return len(stale_ids)
@@ -326,6 +365,7 @@ class VehicleCounter:
             trail = list(self.trails.get(tid, []))
             first_pos = trail[0] if trail else None
             last_pos = trail[-1] if trail else None
+            shape = self._shape_metrics.get(tid, {})
             rows.append({
                 "track_id": tid,
                 "class": info.get("class", ""),
@@ -338,5 +378,10 @@ class VehicleCounter:
                 "last_y": last_pos[1] if last_pos else "",
                 "trail_length": len(trail),
                 "last_seen_frame": info.get("last_seen_frame", ""),
+                "avg_width": round(shape.get("avg_width", 0), 1),
+                "avg_height": round(shape.get("avg_height", 0), 1),
+                "avg_area": round(shape.get("avg_area", 0), 1),
+                "avg_aspect": round(shape.get("avg_aspect", 0), 2),
+                "avg_elongation": round(shape.get("avg_elongation", 0), 2),
             })
         return rows
