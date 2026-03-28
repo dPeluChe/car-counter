@@ -13,13 +13,14 @@ carcounter/          # Paquete core
   geometry.py        #   Zone masks, point-in-polygon, IoU, NMS, cosine similarity
   counting.py        #   Maquina de estados (zones + lines + directions)
   tracking.py        #   Asociacion clase-track
-  drawing.py         #   Dibujo OpenCV (zonas, HUD, scoreboard, trails)
+  drawing.py         #   Dibujo OpenCV (zonas, HUD, scoreboard, trails, heatmap)
   detection.py       #   Wrapper SAHI + filtros post-deteccion
   calibration.py     #   ROI, escala, muestras, constraints geometricos
   config_io.py       #   Lectura/escritura de config.json
   export.py          #   Export JSON/CSV/OD-matrix de resultados
   device.py          #   Auto-deteccion GPU (CUDA/MPS/CPU)
   paths.py           #   Resolucion centralizada de rutas
+  ocsort_wrapper.py  #   OC-SORT tracker wrapper (opcional)
   sort.py            #   SORT tracker (fallback)
 setup_panels/        # Mixins del configurador GUI
   canvas.py          #   Zoom, pan, redraw, overlays compartidos
@@ -34,7 +35,7 @@ docs/                # Documentacion
 ## Features
 
 - Tres modos de conteo: zonas A->B (rutas), cruce de linea (aforo), y direcciones (cosine similarity)
-- Tracking nativo con ByteTrack o BoT-SORT (fallback SORT)
+- Tracking con ByteTrack, BoT-SORT, OC-SORT o SORT
 - Auto-deteccion de GPU (CUDA/MPS) con `--device auto`
 - SAHI para vehiculos pequenos en tomas aereas
 - Zonas de exclusion para vehiculos estacionados
@@ -46,9 +47,11 @@ docs/                # Documentacion
 - Filtros geometricos aprendidos del configurador
 - NMS post-SAHI configurable
 - Modo demo con scoreboard grande
+- Shape metrics per-track (elongacion, area, aspect ratio)
+- Density heatmap overlay de actividad vehicular
 - Exportacion JSON, CSV, per-track CSV, OD matrix CSV
 - Preview de zonas con detecciones YOLO en vivo
-- 103 tests unitarios
+- 114 tests unitarios
 
 ## Setup
 
@@ -125,7 +128,8 @@ python main.py --config config/config.json --video assets/video.mp4 \
 |------|-------------|
 | `--device auto\|cpu\|cuda\|mps` | Device para inferencia (default: auto) |
 | `--no-sahi` | Sin SAHI (mas rapido) |
-| `--tracker bytetrack\|botsort\|sort` | Algoritmo de tracking |
+| `--tracker bytetrack\|botsort\|sort\|ocsort` | Algoritmo de tracking |
+| `--heatmap` | Density heatmap overlay de actividad |
 | `--demo-mode` | Scoreboard grande |
 | `--headless` | Sin ventana |
 | `--max-frames N` | Limitar frames |
@@ -144,7 +148,7 @@ source env/bin/activate
 python -m pytest tests/ -v
 ```
 
-103 tests cubriendo: geometry, counting (3 modos), config I/O, tracking, device detection.
+114 tests cubriendo: geometry, counting (3 modos), shape metrics, heatmap, config I/O, tracking, device detection.
 
 ## Documentacion
 
