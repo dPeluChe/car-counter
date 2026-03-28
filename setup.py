@@ -200,6 +200,7 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMi
         self.canvas.bind("<Configure>", lambda e: self._redraw())
         self.bind_all("<KeyPress-space>", self._enter_pan_mode)
         self.bind_all("<KeyRelease-space>", self._exit_pan_mode)
+        self.bind_all("<Escape>", self._on_escape)
 
         # Status bar
         self.status_var = tk.StringVar(value="Cargando modelo YOLO…")

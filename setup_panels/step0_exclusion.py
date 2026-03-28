@@ -83,8 +83,8 @@ class ExclusionMixin:
             flat = [c for pt in sp for c in pt]
             if len(flat) >= 4:
                 is_sel = (name == selected)
-                self.canvas.create_polygon(flat, outline=color,
-                                            fill=color + ("88" if is_sel else "44"),
+                self.canvas.create_polygon(flat, outline=color, fill=color,
+                                            stipple="gray50" if is_sel else "gray25",
                                             width=4 if is_sel else 2)
                 cx = sum(p[0] for p in sp) / len(sp)
                 cy = sum(p[1] for p in sp) / len(sp)

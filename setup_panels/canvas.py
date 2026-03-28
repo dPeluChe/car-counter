@@ -31,6 +31,29 @@ class CanvasMixin:
         else:
             self.pan_y = min(0, max(ch - img_h, self.pan_y))
 
+    def _on_escape(self, _event=None):
+        """Cancela cualquier dibujo en progreso."""
+        cancelled = False
+        # Paso 0: exclusion drawing
+        if getattr(self, "excl_drawing", False):
+            self.excl_current_pts = []
+            self.excl_drawing = False
+            cancelled = True
+        # Paso 2: zone drawing
+        if getattr(self, "zone_drawing", False):
+            self.current_zone_pts = []
+            self.zone_drawing = False
+            cancelled = True
+        # Paso 2: line drawing
+        if getattr(self, "line_drawing", False):
+            self.line_start = None
+            self.line_drawing = False
+            cancelled = True
+        if cancelled:
+            self.canvas.config(cursor="crosshair")
+            self.status_var.set("Dibujo cancelado (Escape)")
+            self._redraw()
+
     def _enter_pan_mode(self, _event=None):
         self.pan_mode = True
         self.canvas.config(cursor="fleur")
@@ -123,7 +146,7 @@ class CanvasMixin:
             sp = [self._img_to_screen(p[0], p[1]) for p in pts]
             flat = [c for pt in sp for c in pt]
             if len(flat) >= 4:
-                self.canvas.create_polygon(flat, outline=ec, fill=ec + "33", width=1)
+                self.canvas.create_polygon(flat, outline=ec, fill=ec, stipple="gray12", width=1)
 
     def _draw_calib_overlay(self):
         """Dibuja el recuadro de calibración en el canvas."""
