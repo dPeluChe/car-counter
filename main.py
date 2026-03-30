@@ -51,6 +51,9 @@ def build_parser():
     parser.add_argument("--no-save", dest="no_save", action="store_true")
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--max-frames", type=int, default=None)
+    parser.add_argument("--detector", default="yolo", choices=["yolo", "rfdetr"])
+    parser.add_argument("--rfdetr-variant", default="base",
+                        choices=["nano", "small", "medium", "base", "large"])
     parser.add_argument("--tracker", default="bytetrack", choices=["bytetrack", "botsort", "sort", "ocsort"])
     parser.add_argument("--output-json", default=str(paths.default_output_json))
     parser.add_argument("--no-output-json", dest="no_output_json", action="store_true")
@@ -117,8 +120,10 @@ def main():
     # ─────────────────────────────────────────────
     DEVICE, device_desc = detect_device(args.device)
 
+    DETECTOR_BACKEND = args.detector
+
     print("=" * 65)
-    print(f"Car Counter  |  {COUNTING_MODE}  |  {args.tracker}  |  {'SAHI' if USE_SAHI else 'rapido'}")
+    print(f"Car Counter  |  {COUNTING_MODE}  |  {DETECTOR_BACKEND}  |  {args.tracker}  |  {'SAHI' if USE_SAHI else 'rapido'}")
     print(f"Config: {config_path}  |  Video: {VIDEO_PATH}")
     print(f"Device: {device_desc}")
     print("=" * 65)
@@ -126,23 +131,48 @@ def main():
     # ─────────────────────────────────────────────
     # Modelos
     # ─────────────────────────────────────────────
-    from ultralytics import YOLO
-    model_yolo = YOLO(MODEL_PATH)
+    model_yolo = None
+    rfdetr_model = None
+
+    if DETECTOR_BACKEND == "rfdetr":
+        from carcounter.rfdetr_detector import is_rfdetr_available, load_rfdetr_model
+        if not is_rfdetr_available():
+            print("'rfdetr' no instalado — fallback a YOLO")
+            DETECTOR_BACKEND = "yolo"
+        else:
+            rfdetr_model = load_rfdetr_model(
+                variant=args.rfdetr_variant,
+                weights=MODEL_PATH if not MODEL_PATH.endswith(".pt") else None,
+                device=DEVICE,
+            )
+            print(f"Detector: RF-DETR {args.rfdetr_variant}")
+            # RF-DETR no tiene .track() — forzar SORT/OC-SORT si se pidio ByteTrack nativo
+            if args.tracker in ("bytetrack", "botsort"):
+                print(f"  RF-DETR no soporta {args.tracker} nativo — usando SORT para tracking")
+                args.tracker = "sort"
+
+    if DETECTOR_BACKEND == "yolo":
+        from ultralytics import YOLO
+        model_yolo = YOLO(MODEL_PATH)
 
     sahi_model = None
     sahi_predict_fn = None
     if USE_SAHI:
-        try:
-            from sahi import AutoDetectionModel
-            from sahi.predict import get_sliced_prediction
-            sahi_model = AutoDetectionModel.from_pretrained(
-                model_type="yolov8", model_path=MODEL_PATH,
-                confidence_threshold=EFFECTIVE_CONF, device=DEVICE,
-            )
-            sahi_predict_fn = get_sliced_prediction
-        except ImportError:
-            print("SAHI no instalado — fallback a modo rapido")
+        if DETECTOR_BACKEND == "rfdetr":
+            print("SAHI + RF-DETR no soportado aun — fallback a modo rapido")
             USE_SAHI = False
+        else:
+            try:
+                from sahi import AutoDetectionModel
+                from sahi.predict import get_sliced_prediction
+                sahi_model = AutoDetectionModel.from_pretrained(
+                    model_type="yolov8", model_path=MODEL_PATH,
+                    confidence_threshold=EFFECTIVE_CONF, device=DEVICE,
+                )
+                sahi_predict_fn = get_sliced_prediction
+            except ImportError:
+                print("SAHI no instalado — fallback a modo rapido")
+                USE_SAHI = False
 
     # ─────────────────────────────────────────────
     # Video
@@ -261,6 +291,7 @@ def main():
                 sahi_slice_w=SLICE_W, sahi_slice_h=SLICE_H,
                 sahi_overlap=OVERLAP, sahi_nms_threshold=NMS_SAHI,
                 device=DEVICE,
+                detector_backend=DETECTOR_BACKEND, rfdetr_model=rfdetr_model,
             )
 
             # -- Conteo --

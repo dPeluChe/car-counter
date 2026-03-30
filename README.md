@@ -14,7 +14,8 @@ carcounter/          # Paquete core
   counting.py        #   Maquina de estados (zones + lines + directions)
   tracking.py        #   Asociacion clase-track
   drawing.py         #   Dibujo OpenCV (zonas, HUD, scoreboard, trails, heatmap)
-  detection.py       #   Wrapper SAHI + filtros post-deteccion
+  detection.py       #   Pipeline YOLO/RF-DETR + SAHI + filtros
+  rfdetr_detector.py #   RF-DETR wrapper (opcional)
   calibration.py     #   ROI, escala, muestras, constraints geometricos
   config_io.py       #   Lectura/escritura de config.json
   export.py          #   Export JSON/CSV/OD-matrix de resultados
@@ -34,6 +35,7 @@ docs/                # Documentacion
 
 ## Features
 
+- Detectores: YOLO (ultralytics) o RF-DETR (Roboflow, +9.5 AP50 en COCO)
 - Tres modos de conteo: zonas A->B (rutas), cruce de linea (aforo), y direcciones (cosine similarity)
 - Tracking con ByteTrack, BoT-SORT, OC-SORT o SORT
 - Auto-deteccion de GPU (CUDA/MPS) con `--device auto`
@@ -110,6 +112,25 @@ Clasifica vehiculos por vector de movimiento. Ideal para carreteras rectas.
 
 Config: `"counting_mode": "directions"` con `"directions": {"Norte": [[100,200], [100,0]], "Sur": [[100,0], [100,200]]}`
 
+## Detectores
+
+### YOLO (default)
+
+```bash
+python main.py --config config/config.json --video assets/video.mp4
+```
+
+### RF-DETR (mayor precision, +9.5 AP50 vs YOLO11)
+
+```bash
+# Requiere: pip install rfdetr
+python main.py --config config/config.json --video assets/video.mp4 \
+  --detector rfdetr --rfdetr-variant medium --tracker sort
+```
+
+Variantes: `nano` (2.3ms), `small`, `medium` (4.4ms), `base`, `large` (6.8ms).
+RF-DETR usa SORT/OC-SORT para tracking (no soporta ByteTrack nativo).
+
 ## Exportacion
 
 ```bash
@@ -126,6 +147,8 @@ python main.py --config config/config.json --video assets/video.mp4 \
 
 | Flag | Descripcion |
 |------|-------------|
+| `--detector yolo\|rfdetr` | Motor de deteccion (default: yolo) |
+| `--rfdetr-variant nano\|small\|medium\|base\|large` | Tamaño RF-DETR (default: base) |
 | `--device auto\|cpu\|cuda\|mps` | Device para inferencia (default: auto) |
 | `--no-sahi` | Sin SAHI (mas rapido) |
 | `--tracker bytetrack\|botsort\|sort\|ocsort` | Algoritmo de tracking |

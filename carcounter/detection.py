@@ -24,7 +24,7 @@ def detect_and_track(frame, *, model, sahi_model, sahi_predict_fn, sort_tracker,
                      effective_conf, imgsz, conf_for,
                      geo_constraints, exclusion_np,
                      sahi_slice_w, sahi_slice_h, sahi_overlap, sahi_nms_threshold,
-                     device="cpu"):
+                     device="cpu", detector_backend="yolo", rfdetr_model=None):
     """Ejecuta deteccion + tracking y retorna lista de (x1,y1,x2,y2,id,cls_name)."""
 
     detections = np.empty((0, 5))
@@ -32,7 +32,7 @@ def detect_and_track(frame, *, model, sahi_model, sahi_predict_fn, sort_tracker,
     tracked_boxes = []
 
     if use_sahi and sahi_model is not None:
-        # -- SAHI path --
+        # -- SAHI path (YOLO o RF-DETR via adapter) --
         result = sahi_predict_fn(
             frame, sahi_model,
             slice_height=sahi_slice_h, slice_width=sahi_slice_w,
@@ -54,11 +54,30 @@ def detect_and_track(frame, *, model, sahi_model, sahi_predict_fn, sort_tracker,
             det_list, det_classes = apply_nms(det_list, det_classes, sahi_nms_threshold)
         detections = np.array(det_list) if det_list else np.empty((0, 5))
 
-        # SAHI usa SORT para tracking
+        tracked_boxes = _track_with_sort(sort_tracker, detections, det_classes)
+
+    elif detector_backend == "rfdetr" and rfdetr_model is not None:
+        # -- RF-DETR path (siempre usa SORT/OC-SORT para tracking) --
+        from carcounter.rfdetr_detector import rfdetr_detect
+        raw_dets, raw_classes = rfdetr_detect(rfdetr_model, frame, conf_threshold=effective_conf)
+
+        det_list = []
+        filtered_classes = []
+        for i in range(len(raw_dets)):
+            x1, y1, x2, y2 = map(int, raw_dets[i, :4])
+            conf_val = float(raw_dets[i, 4])
+            cls_name = raw_classes[i]
+            if not _filter_box(cls_name, conf_val, x1, y1, x2, y2, conf_for, geo_constraints, exclusion_np):
+                continue
+            det_list.append([x1, y1, x2, y2, conf_val])
+            filtered_classes.append(cls_name)
+        detections = np.array(det_list) if det_list else np.empty((0, 5))
+        det_classes = filtered_classes
+
         tracked_boxes = _track_with_sort(sort_tracker, detections, det_classes)
 
     elif tracker_backend in ("sort", "ocsort"):
-        # -- SORT path --
+        # -- YOLO + SORT/OC-SORT path --
         results = model(frame, conf=effective_conf, verbose=False,
                         classes=VEHICLE_CLASS_IDS, imgsz=imgsz, device=device)
         det_list = []
@@ -77,7 +96,7 @@ def detect_and_track(frame, *, model, sahi_model, sahi_predict_fn, sort_tracker,
         tracked_boxes = _track_with_sort(sort_tracker, detections, det_classes)
 
     else:
-        # -- ByteTrack/BoT-SORT nativo --
+        # -- YOLO ByteTrack/BoT-SORT nativo --
         track_results = model.track(
             frame, conf=effective_conf, imgsz=imgsz,
             tracker=tracker_yaml, persist=True, verbose=False,
