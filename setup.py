@@ -156,6 +156,9 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMi
                  bg="#11111B", fg="#CDD6F4", font=("Arial", 15, "bold")).pack(side="left", padx=20)
         tk.Button(header, text="📂  Cambiar Video", command=self._choose_video,
                   bg="#313244", fg="#CDD6F4", relief="flat", padx=10).pack(side="right", padx=20, pady=4)
+        tk.Button(header, text="🧠  Modelos", command=self._show_model_manager,
+                  bg="#313244", fg="#A6E3A1", relief="flat", padx=10,
+                  font=("Arial", 10, "bold")).pack(side="right", padx=4, pady=4)
         self.lbl_video = tk.Label(header, text=f"Video: {self.video_path}",
                                   bg="#11111B", fg="#A6ADC8", font=("Arial", 9))
         self.lbl_video.pack(side="right", padx=10)
@@ -288,6 +291,142 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMi
             self.video_path = path
             self._load_frame()
             self._reset_calib()
+
+    # ──────────────────────────────────────────────
+    # Model Manager Dialog
+    # ──────────────────────────────────────────────
+    def _show_model_manager(self):
+        from carcounter.models import MODEL_CATALOG, is_downloaded, download_model, get_model_path
+        dlg = tk.Toplevel(self)
+        dlg.title("Gestor de Modelos")
+        dlg.geometry("750x520")
+        dlg.configure(bg="#1E1E2E")
+        dlg.transient(self)
+        dlg.grab_set()
+
+        # Header
+        tk.Label(dlg, text="🧠  Gestor de Modelos", bg="#1E1E2E", fg="#CDD6F4",
+                 font=("Arial", 14, "bold")).pack(pady=(12, 4))
+        tk.Label(dlg, text="Descarga y selecciona modelos de deteccion",
+                 bg="#1E1E2E", fg="#A6ADC8", font=("Arial", 9)).pack()
+
+        # Table frame with scroll
+        table_frame = tk.Frame(dlg, bg="#11111B")
+        table_frame.pack(fill="both", expand=True, padx=12, pady=8)
+
+        canvas_scroll = tk.Canvas(table_frame, bg="#11111B", highlightthickness=0)
+        scrollbar = tk.Scrollbar(table_frame, orient="vertical", command=canvas_scroll.yview)
+        inner = tk.Frame(canvas_scroll, bg="#11111B")
+
+        inner.bind("<Configure>", lambda e: canvas_scroll.configure(scrollregion=canvas_scroll.bbox("all")))
+        canvas_scroll.create_window((0, 0), window=inner, anchor="nw")
+        canvas_scroll.configure(yscrollcommand=scrollbar.set)
+
+        scrollbar.pack(side="right", fill="y")
+        canvas_scroll.pack(side="left", fill="both", expand=True)
+
+        # Column headers
+        cols = [("Modelo", 14), ("Familia", 7), ("AP50", 6), ("Latencia", 8),
+                ("Params", 8), ("Tamaño", 7), ("Estado", 7), ("", 10)]
+        hdr = tk.Frame(inner, bg="#313244")
+        hdr.pack(fill="x", pady=(0, 2))
+        for label, w in cols:
+            tk.Label(hdr, text=label, bg="#313244", fg="#CDD6F4",
+                     font=("Courier", 10, "bold"), width=w, anchor="w").pack(side="left", padx=2)
+
+        # Status label for download feedback
+        status_var = tk.StringVar(value="")
+        row_widgets = {}
+
+        def _refresh_row(name):
+            if name in row_widgets:
+                downloaded = is_downloaded(name)
+                btn, lbl = row_widgets[name]
+                lbl.config(text="✓" if downloaded else "✗",
+                           fg="#A6E3A1" if downloaded else "#F38BA8")
+                if downloaded:
+                    btn.config(text="Usar", bg="#A6E3A1", fg="#11111B",
+                               command=lambda n=name: _use_model(n))
+                else:
+                    btn.config(text="Descargar", bg="#89B4FA", fg="#11111B",
+                               command=lambda n=name: _download(n))
+
+        def _download(name):
+            status_var.set(f"Descargando {name}...")
+            dlg.update()
+            ok = download_model(name)
+            if ok:
+                status_var.set(f"✅ {name} descargado")
+            else:
+                status_var.set(f"❌ Error descargando {name}")
+            _refresh_row(name)
+            dlg.update()
+
+        def _use_model(name):
+            info = MODEL_CATALOG[name]
+            if info["family"] == "yolo":
+                path = get_model_path(name)
+                if path:
+                    self._model_path = path
+                    self.model = YOLO(path)
+                    self.status_var.set(f"✅ Modelo cambiado a {name}")
+                    status_var.set(f"Usando {name}")
+            else:
+                # RF-DETR: guardamos la variante para uso en main.py
+                status_var.set(f"✅ {name} listo — usa: --detector rfdetr --rfdetr-variant {info.get('variant', 'base')}")
+
+        # Rows
+        for family_label, family_key in [("YOLO", "yolo"), ("RF-DETR", "rfdetr")]:
+            sep = tk.Frame(inner, bg="#45475A", height=1)
+            sep.pack(fill="x", pady=4)
+            tk.Label(inner, text=f"  {family_label}", bg="#11111B", fg="#89B4FA",
+                     font=("Arial", 10, "bold"), anchor="w").pack(fill="x")
+
+            for name, info in MODEL_CATALOG.items():
+                if info["family"] != family_key:
+                    continue
+                downloaded = is_downloaded(name)
+
+                row = tk.Frame(inner, bg="#181825")
+                row.pack(fill="x", pady=1)
+
+                tk.Label(row, text=name, bg="#181825", fg="#CDD6F4",
+                         font=("Courier", 10), width=14, anchor="w").pack(side="left", padx=2)
+                tk.Label(row, text=info["family"].upper(), bg="#181825", fg="#A6ADC8",
+                         font=("Courier", 9), width=7, anchor="w").pack(side="left", padx=2)
+                tk.Label(row, text=f"{info['coco_ap50']:.1f}", bg="#181825", fg="#A6E3A1",
+                         font=("Courier", 10), width=6, anchor="w").pack(side="left", padx=2)
+                tk.Label(row, text=f"{info['latency_ms']}ms", bg="#181825", fg="#CDD6F4",
+                         font=("Courier", 10), width=8, anchor="w").pack(side="left", padx=2)
+                tk.Label(row, text=info["params"], bg="#181825", fg="#A6ADC8",
+                         font=("Courier", 9), width=8, anchor="w").pack(side="left", padx=2)
+                tk.Label(row, text=f"{info['size_mb']}MB", bg="#181825", fg="#A6ADC8",
+                         font=("Courier", 9), width=7, anchor="w").pack(side="left", padx=2)
+
+                status_lbl = tk.Label(row, text="✓" if downloaded else "✗",
+                                      bg="#181825", font=("Courier", 10), width=3,
+                                      fg="#A6E3A1" if downloaded else "#F38BA8")
+                status_lbl.pack(side="left", padx=2)
+
+                if downloaded:
+                    btn = tk.Button(row, text="Usar", bg="#A6E3A1", fg="#11111B",
+                                    font=("Arial", 9, "bold"), relief="flat", width=9,
+                                    command=lambda n=name: _use_model(n))
+                else:
+                    btn = tk.Button(row, text="Descargar", bg="#89B4FA", fg="#11111B",
+                                    font=("Arial", 9, "bold"), relief="flat", width=9,
+                                    command=lambda n=name: _download(n))
+                btn.pack(side="left", padx=4)
+
+                row_widgets[name] = (btn, status_lbl)
+
+        # Bottom bar
+        bottom = tk.Frame(dlg, bg="#1E1E2E")
+        bottom.pack(fill="x", padx=12, pady=8)
+        tk.Label(bottom, textvariable=status_var, bg="#1E1E2E", fg="#A6E3A1",
+                 font=("Courier", 9), anchor="w").pack(side="left")
+        tk.Button(bottom, text="Cerrar", bg="#313244", fg="#CDD6F4",
+                  relief="flat", padx=16, command=dlg.destroy).pack(side="right")
 
     # ──────────────────────────────────────────────
     # Config load
