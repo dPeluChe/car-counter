@@ -67,3 +67,4 @@ env.bak/
 # Project output and config (generated at runtime)
 config/
 output/
+rf-detr-medium.pth
