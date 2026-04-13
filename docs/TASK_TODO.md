@@ -87,21 +87,7 @@ Patrones pendientes de evaluar:
 
 ---
 
-## TODO-025: Config tipado con dataclass
-
-**Prioridad:** P1
-**Origen:** Analisis de rust-road-traffic
-
-### Objetivo
-
-Reemplazar config dict-based con dataclasses tipadas. Base para serializacion limpia a libSQL.
-
-### Criterios de aceptacion
-
-- [ ] `carcounter/config.py` con `AppConfig`, `DetectionConfig`, `TrackingConfig`, etc.
-- [ ] Validacion al cargar (tracker type, ranges, required fields)
-- [ ] Backup timestamped antes de sobreescribir config
-- [ ] Backward compatible con JSON existente
+## ~~TODO-025: Config tipado con dataclass~~ COMPLETADO -> DONE-027
 
 ---
 

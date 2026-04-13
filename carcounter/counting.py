@@ -8,11 +8,14 @@ Tres modos:
 
 import math
 from collections import deque
+from carcounter.logging_config import get_logger
 from carcounter.geometry import (
     point_in_zone, point_in_zone_mask, build_zone_masks,
     point_to_line_side, point_line_distance,
     cosine_similarity_2d,
 )
+
+log = get_logger("counting")
 
 
 class VehicleCounter:
@@ -103,7 +106,7 @@ class VehicleCounter:
                 "dest_frames": 0,
             }
             if current_zone:
-                print(f"  ID={trk_id:>4}  entro en [{current_zone:>10}]  cls={cls_name}")
+                log.debug("  ID=%4d  entro en [%10s]  cls=%s", trk_id, current_zone, cls_name)
             return
 
         info = self.tracks_info[trk_id]
@@ -117,7 +120,7 @@ class VehicleCounter:
                 info["state"] = "origin"
                 info["origin"] = current_zone
                 info["zone_frames"] = 1
-                print(f"  ID={trk_id:>4}  entro en [{current_zone:>10}]  cls={info['class']}")
+                log.debug("  ID=%4d  entro en [%10s]  cls=%s", trk_id, current_zone, info["class"])
             return
 
         if info["state"] == "origin":
@@ -171,7 +174,7 @@ class VehicleCounter:
         cls_counts = self.od_matrix_by_class[origin][destination]
         cls_counts[cls_name] = cls_counts.get(cls_name, 0) + 1
 
-        print(f"  ID={trk_id:>4}  ruta: {route_key}  cls={cls_name}  (total={self.routes_matrix[route_key]})")
+        log.info("  ID=%4d  ruta: %s  cls=%s  (total=%d)", trk_id, route_key, cls_name, self.routes_matrix[route_key])
 
     # ── Lines mode (multi-anchor + crossing threshold) ──
 
@@ -253,7 +256,7 @@ class VehicleCounter:
                 info["state"] = "done"
                 self.routes_matrix[crossing_key] = self.routes_matrix.get(crossing_key, 0) + 1
                 self._crossing_history.pop(trk_id, None)
-                print(f"  ID={trk_id:>4}  cruzo: {crossing_key}  cls={cls_name}  (total={self.routes_matrix[crossing_key]})")
+                log.info("  ID=%4d  cruzo: %s  cls=%s  (total=%d)", trk_id, crossing_key, cls_name, self.routes_matrix[crossing_key])
 
     # ── Directions mode (cosine similarity) ───
 
@@ -303,7 +306,7 @@ class VehicleCounter:
             info["state"] = "done"
             info["assigned_direction"] = best_dir
             self.routes_matrix[best_dir] = self.routes_matrix.get(best_dir, 0) + 1
-            print(f"  ID={trk_id:>4}  direccion: {best_dir}  sim={best_score:.2f}  cls={cls_name}  (total={self.routes_matrix[best_dir]})")
+            log.info("  ID=%4d  direccion: %s  sim=%.2f  cls=%s  (total=%d)", trk_id, best_dir, best_score, cls_name, self.routes_matrix[best_dir])
 
     # ── Shape metrics ─────────────────────────
 
@@ -353,7 +356,7 @@ class VehicleCounter:
             self._crossing_history.pop(tid, None)
             self._shape_metrics.pop(tid, None)
         if stale_ids:
-            print(f"  Purgados {len(stale_ids)} tracks viejos — activos: {len(self.tracks_info)}")
+            log.debug("  Purgados %d tracks viejos — activos: %d", len(stale_ids), len(self.tracks_info))
         return len(stale_ids)
 
     # ── Per-track data export ─────────────────
