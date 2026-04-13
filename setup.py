@@ -20,6 +20,7 @@ from ultralytics import YOLO
 
 from carcounter.paths import paths
 from carcounter.config_io import load_config, parse_exclusion_zones, parse_zones, parse_lines, parse_settings
+from carcounter.autosave import AutoSaveManager, has_checkpoint, load_checkpoint, get_checkpoint_age
 
 from setup_panels.canvas import CanvasMixin
 from setup_panels.step0_exclusion import ExclusionMixin
@@ -139,11 +140,16 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMi
         # Paso actual
         self.current_step = 0
 
+        # Autosave manager
+        self._autosave = AutoSaveManager(self)
+
         # ── UI ────────────────────────────────────
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.bind("<Control-z>", lambda e: self._undo_last_point())
         self._load_video_and_model()
+        self._check_autosave_checkpoint()
+        self._autosave.start()
 
     # ──────────────────────────────────────────────
     # UI principal
@@ -509,7 +515,26 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMi
     # ──────────────────────────────────────────────
     # Navegación entre pasos
     # ──────────────────────────────────────────────
+    def _check_autosave_checkpoint(self):
+        """Ofrece restaurar desde checkpoint si existe."""
+        if not has_checkpoint():
+            return
+        age = get_checkpoint_age()
+        if age is None or age > 86400:  # > 24h, ignorar
+            return
+        age_str = f"{int(age // 60)} min" if age < 3600 else f"{int(age // 3600)}h"
+        if messagebox.askyesno(
+            "Sesion anterior",
+            f"Se encontro un checkpoint de hace {age_str}.\n"
+            "¿Restaurar la sesion anterior?",
+        ):
+            state = load_checkpoint()
+            if state:
+                AutoSaveManager.restore_state(self, state)
+                self.status_var.set("Sesion restaurada desde checkpoint")
+
     def _on_close(self):
+        self._autosave.stop()
         self._stop_zone_preview()
         self._release_nav_cap()
         self.destroy()

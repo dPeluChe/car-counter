@@ -4,24 +4,13 @@ import math
 import cv2
 import numpy as np
 
-from carcounter.constants import ZONE_COLORS_BGR
+from carcounter.theme import ZONE_COLORS_BGR, Draw, Opacity
+from carcounter.draw_utils import TextStyler, ShapeDrawer
 
 
 def draw_zones(frame, zones_np):
     """Dibuja zonas poligonales semi-transparentes."""
-    overlay = frame.copy()
-    zone_meta = []
-    for idx, (name, pts) in enumerate(zones_np.items()):
-        color = ZONE_COLORS_BGR[idx % len(ZONE_COLORS_BGR)]
-        cv2.fillPoly(overlay, [pts], color)
-        zone_meta.append((name, pts, color))
-    cv2.addWeighted(overlay, 0.18, frame, 0.82, 0, frame)
-    for name, pts, color in zone_meta:
-        cv2.polylines(frame, [pts], True, color, 2)
-        cx = int(np.mean(pts[:, 0]))
-        cy = int(np.mean(pts[:, 1]))
-        cv2.putText(frame, name, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX,
-                    0.65, color, 2, cv2.LINE_AA)
+    ShapeDrawer.zone_overlay(frame, zones_np, ZONE_COLORS_BGR, alpha=Opacity.ZONE_FILL)
 
 
 def draw_lines(frame, counting_lines):
@@ -33,10 +22,8 @@ def draw_lines(frame, counting_lines):
         cv2.line(frame, pt1, pt2, color, 3)
         mx = (pt1[0] + pt2[0]) // 2
         my = (pt1[1] + pt2[1]) // 2
-        cv2.putText(frame, line["name"], (mx + 5, my - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA)
-        cv2.putText(frame, "up/dn", (mx + 5, my + 20),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
+        TextStyler.draw(frame, line["name"], (mx + 5, my - 10), color, scale=0.6, thickness=2)
+        TextStyler.draw(frame, "up/dn", (mx + 5, my + 20), color, scale=0.5)
 
 
 def draw_exclusion_zones(frame, exclusion_np):
@@ -45,20 +32,15 @@ def draw_exclusion_zones(frame, exclusion_np):
         return
     overlay = frame.copy()
     for pts in exclusion_np.values():
-        cv2.fillPoly(overlay, [pts], (60, 60, 220))
-    cv2.addWeighted(overlay, 0.22, frame, 0.78, 0, frame)
+        cv2.fillPoly(overlay, [pts], Draw.EXCL_OVERLAY)
+    cv2.addWeighted(overlay, Opacity.EXCL_FILL, frame, Opacity.EXCL_BG, 0, frame)
     for pts in exclusion_np.values():
-        cv2.polylines(frame, [pts], True, (60, 60, 220), 2)
+        cv2.polylines(frame, [pts], True, Draw.EXCL_OVERLAY, 2)
 
 
 def _draw_panel_bg(frame, x0, y0, panel_w, panel_h, bg_color, alpha, border_color):
-    """Dibuja fondo semi-transparente para un panel usando ROI en vez de full frame copy."""
-    rx2 = min(frame.shape[1], x0 + panel_w)
-    ry2 = min(frame.shape[0], y0 + panel_h)
-    roi = frame[y0:ry2, x0:rx2].copy()
-    cv2.rectangle(frame, (x0, y0), (x0 + panel_w, y0 + panel_h), bg_color, -1)
-    cv2.addWeighted(roi, alpha, frame[y0:ry2, x0:rx2], 1.0 - alpha, 0, frame[y0:ry2, x0:rx2])
-    cv2.rectangle(frame, (x0, y0), (x0 + panel_w, y0 + panel_h), border_color, 1)
+    """Dibuja fondo semi-transparente para un panel usando ROI."""
+    ShapeDrawer.panel_bg(frame, x0, y0, panel_w, panel_h, bg_color, alpha, border_color)
 
 
 def draw_routes_panel(frame, routes, n_active):
@@ -72,25 +54,19 @@ def draw_routes_panel(frame, routes, n_active):
     panel_w = 280
     x0, y0 = 10, 10
 
-    _draw_panel_bg(frame, x0, y0, panel_w, panel_h, (0, 0, 0), 0.6, (80, 80, 80))
+    _draw_panel_bg(frame, x0, y0, panel_w, panel_h, Draw.PANEL_BG, Draw.PANEL_ALPHA, Draw.PANEL_BORDER)
 
-    cv2.putText(frame, "RUTAS DETECTADAS", (x0 + pad, y0 + pad + 14),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1, cv2.LINE_AA)
-    cv2.putText(frame, f"Activos: {n_active}", (x0 + pad + 160, y0 + pad + 14),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (180, 180, 100), 1, cv2.LINE_AA)
+    TextStyler.draw(frame, "RUTAS DETECTADAS", (x0 + pad, y0 + pad + 14), Draw.TEXT_LIGHT, scale=0.5)
+    TextStyler.draw(frame, f"Activos: {n_active}", (x0 + pad + 160, y0 + pad + 14), Draw.TEXT_DIM, scale=0.45)
 
     y = y0 + pad + line_h + 4
     total = sum(routes.values())
     for route, count in sorted_routes:
         pct = count / total * 100 if total > 0 else 0
         bar_w = int((panel_w - pad * 2 - 90) * count / max(routes.values()))
-        cv2.rectangle(frame, (x0 + pad, y + 4), (x0 + pad + bar_w, y + 16),
-                      (60, 120, 60), -1)
-        cv2.putText(frame, f"{route}:", (x0 + pad, y + 14),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.42, (200, 255, 200), 1, cv2.LINE_AA)
-        cv2.putText(frame, f"{count}  ({pct:.0f}%)",
-                    (x0 + panel_w - 80, y + 14),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 255, 100), 1, cv2.LINE_AA)
+        ShapeDrawer.bar(frame, x0 + pad, y + 4, bar_w, 12, Draw.BAR_GREEN)
+        TextStyler.draw(frame, f"{route}:", (x0 + pad, y + 14), Draw.TEXT_ROUTES)
+        TextStyler.draw(frame, f"{count}  ({pct:.0f}%)", (x0 + panel_w - 80, y + 14), (255, 255, 100))
         y += line_h
 
 
@@ -106,14 +82,13 @@ def draw_scoreboard(frame, routes, n_active, total_ever, vid_w, zone_names):
     x0 = max(0, vid_w - panel_w - 12)
     y0 = 10
 
-    _draw_panel_bg(frame, x0, y0, panel_w, panel_h, (8, 8, 8), 0.65, (90, 90, 90))
+    _draw_panel_bg(frame, x0, y0, panel_w, panel_h,
+                   Draw.SCOREBOARD_BG, Draw.SCOREBOARD_ALPHA, Draw.SCOREBOARD_BORDER)
 
-    cv2.putText(frame, f"TOTAL: {total_ever}",
-                (x0 + pad, y0 + 40), cv2.FONT_HERSHEY_SIMPLEX, 1.05,
-                (60, 255, 255), 2, cv2.LINE_AA)
-    cv2.putText(frame, f"rutas: {total_confirmed}  activos: {n_active}",
-                (x0 + pad, y0 + 60), cv2.FONT_HERSHEY_SIMPLEX, 0.48,
-                (160, 160, 100), 1, cv2.LINE_AA)
+    TextStyler.draw(frame, f"TOTAL: {total_ever}", (x0 + pad, y0 + 40),
+                    Draw.TEXT_COUNT, scale=1.05, thickness=2)
+    TextStyler.draw(frame, f"rutas: {total_confirmed}  activos: {n_active}",
+                    (x0 + pad, y0 + 60), Draw.TEXT_DIM, scale=0.48)
     cv2.line(frame, (x0 + pad, y0 + 68), (x0 + panel_w - pad, y0 + 68), (70, 70, 70), 1)
 
     max_count = max(routes.values(), default=1)
@@ -127,11 +102,10 @@ def draw_scoreboard(frame, routes, n_active, total_ever, vid_w, zone_names):
                 color = ZONE_COLORS_BGR[zi % len(ZONE_COLORS_BGR)]
                 break
         bar_w = max(2, int((panel_w - pad * 2 - 100) * count / max_count))
-        cv2.rectangle(frame, (x0 + pad, y + 17), (x0 + pad + bar_w, y + 24), color, -1)
-        cv2.putText(frame, route, (x0 + pad, y + 14),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.62, color, 1, cv2.LINE_AA)
-        cv2.putText(frame, f"{count}  ({pct:.0f}%)", (x0 + panel_w - 94, y + 14),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.60, (220, 220, 100), 1, cv2.LINE_AA)
+        ShapeDrawer.bar(frame, x0 + pad, y + 17, bar_w, 7, color)
+        TextStyler.draw(frame, route, (x0 + pad, y + 14), color, scale=0.62)
+        TextStyler.draw(frame, f"{count}  ({pct:.0f}%)", (x0 + panel_w - 94, y + 14),
+                        (220, 220, 100), scale=0.60)
         y += row_h
 
 
@@ -140,11 +114,10 @@ def draw_hud(frame, frame_num, total_f, fps_avg, detections, n_routes_total, vid
     h = frame.shape[0]
     progress = frame_num / total_f if total_f > 0 else 0
     bar_w = int(vid_w * progress)
-    cv2.rectangle(frame, (0, h - 6), (bar_w, h), (80, 200, 80), -1)
+    ShapeDrawer.bar(frame, 0, h - 6, bar_w, 6, Draw.HUD_BAR)
 
     info = f"Frame {frame_num}/{total_f}  FPS:{fps_avg:.1f}  Det:{detections}  Rutas:{n_routes_total}"
-    cv2.putText(frame, info, (10, h - 12), cv2.FONT_HERSHEY_SIMPLEX,
-                0.5, (200, 200, 200), 1, cv2.LINE_AA)
+    TextStyler.draw(frame, info, (10, h - 12), Draw.TEXT_LIGHT, scale=0.5)
 
 
 def draw_tracked_boxes(frame, tracked_boxes, tracks_info, zone_names, trails=None):
@@ -156,37 +129,28 @@ def draw_tracked_boxes(frame, tracked_boxes, tracks_info, zone_names, trails=Non
         origin = info.get("origin", "")
 
         if state == "done":
-            color = (60, 220, 60)
+            color = Draw.STATE_DONE
         elif state in ("origin", "transit") and origin in zone_names:
             zone_idx = zone_names.index(origin)
             color = ZONE_COLORS_BGR[zone_idx % len(ZONE_COLORS_BGR)]
             if state == "transit":
                 color = tuple(min(255, int(c * 1.3)) for c in color)
         else:
-            color = (160, 160, 160)
+            color = Draw.STATE_DEFAULT
 
         # Draw trail
         if trails and trk_id in trails:
-            trail = trails[trk_id]
-            n = len(trail)
-            prev = None
-            for i, pt in enumerate(trail):
-                if prev is not None:
-                    thickness = max(1, int(math.sqrt(float(i) / float(n)) * 2.5))
-                    cv2.line(frame, (int(prev[0]), int(prev[1])),
-                             (int(pt[0]), int(pt[1])), color, thickness)
-                prev = pt
+            ShapeDrawer.trail(frame, trails[trk_id], color)
 
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-        cv2.circle(frame, (cx, cy), 4, color, -1)
+        ShapeDrawer.bbox(frame, x1, y1, x2, y2, color)
+        ShapeDrawer.centroid(frame, cx, cy, color)
 
         state_icon = {"done": "v", "transit": ">", "origin": "o", "new": "?",
                       "tracking": "~"}.get(state, "")
         label = f"{state_icon}{trk_id}"
         if origin:
             label += f"[{origin}]"
-        cv2.putText(frame, label, (x1, max(12, y1 - 5)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.42, color, 1, cv2.LINE_AA)
+        TextStyler.label(frame, label, x1, y1, color)
 
 
 class DensityHeatmap:
