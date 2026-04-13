@@ -16,9 +16,11 @@ import json
 import time
 import os
 import argparse
+from collections import deque
 import importlib.util
 import numpy as np
 from carcounter.paths import paths
+from carcounter.logging_config import setup_logging, get_logger
 from carcounter.counting import VehicleCounter
 from carcounter.detection import detect_and_track
 from carcounter.drawing import (
@@ -31,6 +33,8 @@ from carcounter.export import (
     export_tracks_csv, export_od_matrix_csv,
 )
 from carcounter.device import detect_device
+
+log = get_logger("main")
 
 
 def build_parser():
@@ -62,12 +66,17 @@ def build_parser():
     parser.add_argument("--output-od-csv", default=None)
     parser.add_argument("--heatmap", action="store_true")
     parser.add_argument("--demo-mode", dest="demo_mode", action="store_true")
+    parser.add_argument("--log-level", default="INFO",
+                        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                        help="Nivel de logging (default: INFO)")
     return parser
 
 
 def main():
     parser = build_parser()
     args = parser.parse_args()
+
+    setup_logging(level=args.log_level)
 
     if args.no_save and args.output_json == str(paths.default_output_json):
         args.no_output_json = True
@@ -78,7 +87,7 @@ def main():
     # ─────────────────────────────────────────────
     config_path = args.config
     if not os.path.exists(config_path):
-        print(f"No se encontro: {config_path}\n   Ejecuta primero: python setup.py")
+        log.error("No se encontro: %s — Ejecuta primero: python setup.py", config_path)
         exit(1)
 
     with open(config_path, "r") as f:
@@ -122,11 +131,12 @@ def main():
 
     DETECTOR_BACKEND = args.detector
 
-    print("=" * 65)
-    print(f"Car Counter  |  {COUNTING_MODE}  |  {DETECTOR_BACKEND}  |  {args.tracker}  |  {'SAHI' if USE_SAHI else 'rapido'}")
-    print(f"Config: {config_path}  |  Video: {VIDEO_PATH}")
-    print(f"Device: {device_desc}")
-    print("=" * 65)
+    log.info("=" * 65)
+    log.info("Car Counter  |  %s  |  %s  |  %s  |  %s",
+             COUNTING_MODE, DETECTOR_BACKEND, args.tracker, "SAHI" if USE_SAHI else "rapido")
+    log.info("Config: %s  |  Video: %s", config_path, VIDEO_PATH)
+    log.info("Device: %s", device_desc)
+    log.info("=" * 65)
 
     # ─────────────────────────────────────────────
     # Modelos
@@ -137,7 +147,7 @@ def main():
     if DETECTOR_BACKEND == "rfdetr":
         from carcounter.rfdetr_detector import is_rfdetr_available, load_rfdetr_model
         if not is_rfdetr_available():
-            print("'rfdetr' no instalado — fallback a YOLO")
+            log.warning("'rfdetr' no instalado — fallback a YOLO")
             DETECTOR_BACKEND = "yolo"
         else:
             rfdetr_model = load_rfdetr_model(
@@ -145,10 +155,10 @@ def main():
                 weights=MODEL_PATH if not MODEL_PATH.endswith(".pt") else None,
                 device=DEVICE,
             )
-            print(f"Detector: RF-DETR {args.rfdetr_variant}")
+            log.info("Detector: RF-DETR %s", args.rfdetr_variant)
             # RF-DETR no tiene .track() — forzar SORT/OC-SORT si se pidio ByteTrack nativo
             if args.tracker in ("bytetrack", "botsort"):
-                print(f"  RF-DETR no soporta {args.tracker} nativo — usando SORT para tracking")
+                log.warning("RF-DETR no soporta %s nativo — usando SORT para tracking", args.tracker)
                 args.tracker = "sort"
 
     if DETECTOR_BACKEND == "yolo":
@@ -159,7 +169,7 @@ def main():
     sahi_predict_fn = None
     if USE_SAHI:
         if DETECTOR_BACKEND == "rfdetr":
-            print("SAHI + RF-DETR no soportado aun — fallback a modo rapido")
+            log.warning("SAHI + RF-DETR no soportado aun — fallback a modo rapido")
             USE_SAHI = False
         else:
             try:
@@ -171,7 +181,7 @@ def main():
                 )
                 sahi_predict_fn = get_sliced_prediction
             except ImportError:
-                print("SAHI no instalado — fallback a modo rapido")
+                log.warning("SAHI no instalado — fallback a modo rapido")
                 USE_SAHI = False
 
     # ─────────────────────────────────────────────
@@ -179,7 +189,7 @@ def main():
     # ─────────────────────────────────────────────
     cap = cv2.VideoCapture(VIDEO_PATH)
     if not cap.isOpened():
-        print(f"No se pudo abrir: {VIDEO_PATH}")
+        log.error("No se pudo abrir: %s", VIDEO_PATH)
         exit(1)
 
     VID_W   = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -187,19 +197,19 @@ def main():
     VID_FPS = cap.get(cv2.CAP_PROP_FPS)
     TOTAL_F = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     DURATION = TOTAL_F / VID_FPS if VID_FPS > 0 else 0
-    print(f"{VID_W}x{VID_H} @ {VID_FPS:.1f}fps  —  {DURATION:.1f}s ({TOTAL_F} frames)")
+    log.info("%dx%d @ %.1ffps  —  %.1fs (%d frames)", VID_W, VID_H, VID_FPS, DURATION, TOTAL_F)
 
     # ─────────────────────────────────────────────
     # Tracker fallback
     # ─────────────────────────────────────────────
     TRACKER_BACKEND = args.tracker
     if TRACKER_BACKEND in {"bytetrack", "botsort"} and not importlib.util.find_spec("lap"):
-        print("'lap' no instalado — fallback a SORT")
+        log.warning("'lap' no instalado — fallback a SORT")
         TRACKER_BACKEND = "sort"
     if TRACKER_BACKEND == "ocsort":
         from carcounter.ocsort_wrapper import is_ocsort_available
         if not is_ocsort_available():
-            print("'trackers' no instalado — fallback a SORT")
+            log.warning("'trackers' no instalado — fallback a SORT")
             TRACKER_BACKEND = "sort"
 
     _sort_tracker = None
@@ -212,7 +222,7 @@ def main():
             high_conf_threshold=settings.get("conf_threshold", 0.1),
             frame_rate=VID_FPS,
         )
-        print(f"Tracker: OC-SORT (direction_consistency=0.2)")
+        log.info("Tracker: OC-SORT (direction_consistency=0.2)")
     elif USE_SAHI or TRACKER_BACKEND == "sort":
         try:
             from carcounter.sort import Sort
@@ -264,11 +274,14 @@ def main():
     # ─────────────────────────────────────────────
     frame_count = 0
     start_time = time.time()
-    fps_samples = []
+    fps_samples = deque(maxlen=30)
     benchmark_data = []
     DISPLAY = not args.headless
 
-    print(f"\nIniciando...  ('q' para salir)\n")
+    log.info("Iniciando...  ('q' para salir)")
+
+    _consecutive_errors = 0
+    _MAX_CONSECUTIVE_ERRORS = 10
 
     try:
         while True:
@@ -280,19 +293,30 @@ def main():
             counter.set_frame(frame_count)
             t0 = time.time()
 
-            # -- Deteccion + tracking --
-            tracked_boxes = detect_and_track(
-                frame, model=model_yolo, sahi_model=sahi_model,
-                sahi_predict_fn=sahi_predict_fn, sort_tracker=_sort_tracker,
-                use_sahi=USE_SAHI, tracker_backend=TRACKER_BACKEND,
-                tracker_yaml=TRACKER_YAML, effective_conf=EFFECTIVE_CONF,
-                imgsz=INFER_IMGSZ, conf_for=_conf_for,
-                geo_constraints=_geo_constraints, exclusion_np=_exclusion_np,
-                sahi_slice_w=SLICE_W, sahi_slice_h=SLICE_H,
-                sahi_overlap=OVERLAP, sahi_nms_threshold=NMS_SAHI,
-                device=DEVICE,
-                detector_backend=DETECTOR_BACKEND, rfdetr_model=rfdetr_model,
-            )
+            try:
+                # -- Deteccion + tracking --
+                tracked_boxes = detect_and_track(
+                    frame, model=model_yolo, sahi_model=sahi_model,
+                    sahi_predict_fn=sahi_predict_fn, sort_tracker=_sort_tracker,
+                    use_sahi=USE_SAHI, tracker_backend=TRACKER_BACKEND,
+                    tracker_yaml=TRACKER_YAML, effective_conf=EFFECTIVE_CONF,
+                    imgsz=INFER_IMGSZ, conf_for=_conf_for,
+                    geo_constraints=_geo_constraints, exclusion_np=_exclusion_np,
+                    sahi_slice_w=SLICE_W, sahi_slice_h=SLICE_H,
+                    sahi_overlap=OVERLAP, sahi_nms_threshold=NMS_SAHI,
+                    device=DEVICE,
+                    detector_backend=DETECTOR_BACKEND, rfdetr_model=rfdetr_model,
+                )
+                _consecutive_errors = 0
+
+            except Exception as e:
+                _consecutive_errors += 1
+                log.error("Error en deteccion frame %d: %s", frame_count, e)
+                if _consecutive_errors >= _MAX_CONSECUTIVE_ERRORS:
+                    log.critical("Demasiados errores consecutivos (%d). Abortando.",
+                                 _consecutive_errors)
+                    break
+                tracked_boxes = []
 
             # -- Conteo --
             for (x1, y1, x2, y2, trk_id, cls_name) in tracked_boxes:
@@ -310,36 +334,41 @@ def main():
                 _heatmap.draw(frame)
 
             # -- Visualizacion --
-            draw_exclusion_zones(frame, _exclusion_np)
-            if COUNTING_MODE == "lines":
-                draw_lines(frame, counting_lines)
-            else:
-                draw_zones(frame, zones_np)
+            try:
+                draw_exclusion_zones(frame, _exclusion_np)
+                if COUNTING_MODE == "lines":
+                    draw_lines(frame, counting_lines)
+                else:
+                    draw_zones(frame, zones_np)
 
-            draw_tracked_boxes(frame, tracked_boxes, counter.tracks_info, zone_names,
-                               trails=counter.trails)
+                draw_tracked_boxes(frame, tracked_boxes, counter.tracks_info, zone_names,
+                                   trails=counter.trails)
 
-            if args.demo_mode:
-                draw_scoreboard(frame, counter.routes_matrix, len(tracked_boxes),
-                                counter.total_vehicles_ever, VID_W, zone_names)
-            else:
-                draw_routes_panel(frame, counter.routes_matrix, len(tracked_boxes))
+                if args.demo_mode:
+                    draw_scoreboard(frame, counter.routes_matrix, len(tracked_boxes),
+                                    counter.total_vehicles_ever, VID_W, zone_names)
+                else:
+                    draw_routes_panel(frame, counter.routes_matrix, len(tracked_boxes))
 
-            elapsed = time.time() - t0
-            fps_samples.append(1.0 / elapsed if elapsed > 0 else 0)
-            fps_avg = np.mean(fps_samples[-30:])
+                elapsed = time.time() - t0
+                fps_samples.append(1.0 / elapsed if elapsed > 0 else 0)
+                fps_avg = np.mean(fps_samples)
 
-            if args.show_fps or USE_SAHI:
-                draw_hud(frame, frame_count, TOTAL_F, fps_avg, len(tracked_boxes),
-                         sum(counter.routes_matrix.values()), VID_W)
+                if args.show_fps or USE_SAHI:
+                    draw_hud(frame, frame_count, TOTAL_F, fps_avg, len(tracked_boxes),
+                             sum(counter.routes_matrix.values()), VID_W)
+
+            except Exception as e:
+                log.warning("Error en visualizacion frame %d: %s", frame_count, e)
 
             # Progreso consola
             if frame_count % 60 == 0:
                 et = time.time() - start_time
                 pct = frame_count / TOTAL_F * 100 if TOTAL_F > 0 else 0
                 eta = (et / frame_count) * (TOTAL_F - frame_count) if frame_count > 0 else 0
-                print(f"  {pct:.1f}%  f={frame_count}/{TOTAL_F}  fps={fps_avg:.1f}  "
-                      f"ETA={format_time(eta)}  rutas={sum(counter.routes_matrix.values())}")
+                log.info("  %.1f%%  f=%d/%d  fps=%.1f  ETA=%s  rutas=%d",
+                         pct, frame_count, TOTAL_F, fps_avg,
+                         format_time(eta), sum(counter.routes_matrix.values()))
                 if args.benchmark:
                     benchmark_data.append({"frame": frame_count, "elapsed": et, "fps": fps_avg,
                         "detections": len(tracked_boxes), "tracks": len(tracked_boxes),
@@ -355,7 +384,9 @@ def main():
                 break
 
     except KeyboardInterrupt:
-        pass
+        log.info("Interrumpido por el usuario")
+    except Exception as e:
+        log.critical("Error fatal en el loop principal: %s", e, exc_info=True)
 
     # ─────────────────────────────────────────────
     # Resultados
@@ -397,9 +428,9 @@ def main():
         writer.release()
     cap.release()
     cv2.destroyAllWindows()
-    print("=" * 65)
-    print("Procesamiento completo")
-    print("=" * 65)
+    log.info("=" * 65)
+    log.info("Procesamiento completo")
+    log.info("=" * 65)
 
 
 if __name__ == "__main__":

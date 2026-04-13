@@ -701,3 +701,128 @@ Revision tecnica completa del proyecto con correccion de bugs, optimizaciones y 
 - [x] Export CSV per-track y OD matrix
 - [x] 103 tests (22 nuevos), todos verdes
 - [x] Bug de zone-to-zone bypass corregido
+
+---
+
+## DONE-027: 12 tareas de mejora — logging, theme, validacion, refactors, tests, arquitectura
+
+**Fecha:** 2026-04-13
+**Archivos:** 20 archivos (9 nuevos + 8 modificados + 3 tests nuevos)
+**Branch:** `claude/organize-dev-tasks-8qthz`
+
+### Que se hizo
+
+#### Quick Wins (1-4):
+
+**1. Logging estructurado** (`carcounter/logging_config.py`)
+- Modulo `setup_logging()` + `get_logger()` bajo namespace `carcounter.*`
+- Todos los `print()` reemplazados por `logging` con niveles apropiados (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+- Flag `--log-level` en CLI (default INFO)
+- Archivos afectados: `main.py`, `counting.py`, `export.py`
+
+**2. Theme centralizado** (`carcounter/theme.py`)
+- Single source of truth para colores: `ZONE_COLORS_HEX/RGB/BGR`, `EXCL_COLORS_*`
+- Clases `UI` (Catppuccin Mocha GUI), `Draw` (OpenCV BGR), `Opacity` (alphas)
+- `constants.py` re-exporta desde theme para backward compat
+- Eliminados colores hardcoded de `drawing.py`
+
+**3. Validacion de input en Setup** (`setup_panels/step2_zones.py`)
+- `_validate_zones()` valida: poligonos <3 puntos, area minima (<100px²), lineas cortas (<10px), zonas vacias
+- Reutilizada en Paso 2 (Continuar) y Paso 3 (Guardar)
+
+**4. Drawing helpers** (`carcounter/draw_utils.py`)
+- `TextStyler`: `.draw()`, `.label()`, `.centered()` — elimina 22+ llamadas repetitivas a `cv2.putText`
+- `ShapeDrawer`: `.bbox()`, `.centroid()`, `.panel_bg()`, `.zone_overlay()`, `.bar()`, `.trail()`
+- `drawing.py` refactorizado para usar helpers
+
+#### Medio plazo (5-9):
+
+**5. Config con dataclasses** (`carcounter/app_config.py`) — COMPLETA TODO-025
+- `AppConfig`, `SettingsConfig`, `SAHIConfig`, `TrackerConfig`, `SampleConstraints`, `LineConfig`
+- `validate()` retorna lista de errores
+- `from_dict()` / `to_dict()` / `load()` / `save()` con defaults
+- Backward compatible con JSON existente
+
+**6. Abstract Detector** (`carcounter/detector.py`)
+- ABC `Detector` con `infer()` abstracto + `detect()` con filtrado comun
+- Implementaciones: `YOLODetector`, `RFDETRDetector`, `SAHIDetector`
+- Plug-and-play: agregar detector nuevo = heredar + implementar `infer()`
+
+**7. Error handling en pipeline** (`main.py`)
+- try/except per-frame en deteccion con contador de errores consecutivos (max 10)
+- try/except en visualizacion (no pierde el frame si falla dibujo)
+- `log.critical` con traceback en error fatal del loop
+
+**8. FrameRenderer** (`carcounter/frame_renderer.py`)
+- Rendering GUI-free testeable sin Tkinter
+- Metodos: `draw_exclusion_zones()`, `draw_zones()`, `draw_detections()`, `draw_tile_grid()`, `draw_vehicle_samples()`
+- Opera en RGB (setup) vs BGR (main) — separacion intencional
+- Usa `TextStyler`/`ShapeDrawer` para consistencia
+
+**9. Auto-save** (`carcounter/autosave.py`)
+- `AutoSaveManager` integrado con Tkinter: checkpoint cada 30s
+- `save_checkpoint()` / `load_checkpoint()` / `clear_checkpoint()`
+- Al arrancar: ofrece restaurar sesion anterior si checkpoint < 24h
+- Se limpia al guardar config oficial
+
+#### Refactors grandes (10-12):
+
+**10. Integration tests** (`tests/test_integration.py`)
+- Pipeline completo zones: config → save → load → counter → 5 vehiculos → export JSON/CSV/tracks/OD
+- Pipeline lines: crossing up/down → export
+- Multi-class OD matrix: car + truck + bus → od_matrix_by_class
+- Drawing pipeline: todos los draw_* sin crash
+- Config round-trip: build → save → load → counter
+- AppConfig dataclass round-trip + validation
+- FrameRenderer: zones, exclusion, detections, tile grid
+- DrawUtils: TextStyler, ShapeDrawer
+- Logging idempotent + format_time
+- **39 tests nuevos**, total 153
+
+**11. State dataclasses** (`carcounter/state.py`)
+- `TrackState`: estado del track (state, origin, cls_name, zone_frames, etc.)
+- `ShapeMetrics`: EMA de width/height/area/aspect/elongation con `update()` y `to_dict()`
+- `VehicleSample`: muestra de calibracion
+- Setup state: `ExclusionState`, `CalibrationState`, `ZonesState`, `SAHIState`, `TrackerState`
+
+**12. Event-driven architecture** (`carcounter/engine.py`)
+- `ProcessingEngine` con `EngineState` enum (IDLE/RUNNING/PAUSED/STOPPED/ERROR)
+- Sistema de callbacks: `.on(event, callback)` / `.off(event, callback)` / `._emit(event, **kwargs)`
+- Eventos: `frame_processed`, `route_detected`, `progress`, `state_changed`, `error`, `completed`
+- Control: `.pause()` / `.resume()` / `.stop()` / `.start()` (thread) / `.wait()`
+- Thread-safe: callbacks emitidos fuera del lock, state changes atomicos
+- Base para futuras UIs (web, desktop)
+
+#### Revision /simplify (post-implementacion):
+
+- `draw_utils.py`: `import math` movido de function body a module level
+- `engine.py` + `main.py`: `fps_samples` cambiado de `list` a `deque(maxlen=30)` (memory fix)
+- `engine.py`: route detection snapshot movido fuera del per-box loop (O(R) en vez de O(R*T))
+- `autosave.py`: `save_checkpoint()` ya no muta el dict del caller
+- `frame_renderer.py`: refactorizado para usar `TextStyler`/`ShapeDrawer`
+- `theme.py`: removidos `Draw.FONT` y `Draw.LINE_AA` (dead code)
+- `engine.py`: callbacks emitidos fuera del lock para evitar deadlock en pause/resume/stop
+
+### Metricas
+
+- **20 archivos** (9 nuevos, 8 modificados, 3 tests nuevos)
+- **+2,500 lineas** de codigo nuevo
+- **153 tests** pasando (114 originales + 39 nuevos)
+- **0 tests rotos**
+- **0 regressions**
+
+### Criterios cumplidos
+
+- [x] Todos los `print()` reemplazados por `logging` con `--log-level` flag
+- [x] Theme centralizado en `theme.py` como single source of truth
+- [x] Validacion de zonas/lineas antes de continuar/guardar
+- [x] `TextStyler`/`ShapeDrawer` eliminan repeticion de `cv2.putText/rectangle`
+- [x] `AppConfig` con dataclasses, validacion y round-trip JSON (TODO-025 completado)
+- [x] ABC `Detector` con 3 implementaciones plug-and-play
+- [x] Error handling per-frame con recovery graceful
+- [x] `FrameRenderer` testeable sin Tkinter
+- [x] Auto-save cada 30s con restauracion de sesion
+- [x] 39 integration tests cubriendo pipeline completo
+- [x] State dataclasses para tracks y setup
+- [x] `ProcessingEngine` event-driven con pause/resume/callbacks
+- [x] 153 tests verdes, 0 regresiones

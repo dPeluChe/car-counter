@@ -104,11 +104,10 @@ class SAHIMixin:
 
     def _save_config(self):
         mode = self.counting_mode.get()
-        if mode == "zones" and not self.zones:
-            messagebox.showwarning("Guardar", "No hay zonas definidas. Configura las zonas primero.")
-            return
-        if mode == "lines" and not self.counting_lines:
-            messagebox.showwarning("Guardar", "No hay líneas definidas. Dibuja al menos una línea.")
+        # Reutilizar validacion del paso 2
+        ok, msg = self._validate_zones()
+        if not ok:
+            messagebox.showwarning("Guardar", msg)
             return
 
         config = build_config(
@@ -143,6 +142,9 @@ class SAHIMixin:
 
         try:
             save_config(self._output_config, config)
+            # Limpiar autosave checkpoint despues de guardar exitosamente
+            if hasattr(self, "_autosave"):
+                self._autosave.clear()
             excl_info = f" · {len(self.exclusion_zones)} excl" if self.exclusion_zones else ""
             self.lbl_save_status.config(
                 text=f"✅ Guardado: {self._output_config}\n{len(self.zones)} zonas{excl_info} · SAHI {self.slice_w.get()}×{self.slice_h.get()}",
