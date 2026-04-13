@@ -16,6 +16,7 @@ import json
 import time
 import os
 import argparse
+from collections import deque
 import importlib.util
 import numpy as np
 from carcounter.paths import paths
@@ -273,7 +274,7 @@ def main():
     # ─────────────────────────────────────────────
     frame_count = 0
     start_time = time.time()
-    fps_samples = []
+    fps_samples = deque(maxlen=30)
     benchmark_data = []
     DISPLAY = not args.headless
 
@@ -351,7 +352,7 @@ def main():
 
                 elapsed = time.time() - t0
                 fps_samples.append(1.0 / elapsed if elapsed > 0 else 0)
-                fps_avg = np.mean(fps_samples[-30:])
+                fps_avg = np.mean(fps_samples)
 
                 if args.show_fps or USE_SAHI:
                     draw_hud(frame, frame_count, TOTAL_F, fps_avg, len(tracked_boxes),

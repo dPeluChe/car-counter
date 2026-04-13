@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import time
 import threading
+from collections import deque
 from enum import Enum, auto
 from typing import Callable, Any
 
@@ -137,24 +138,38 @@ class ProcessingEngine:
 
     def pause(self):
         """Pausa el procesamiento."""
+        changed = False
         with self._lock:
             if self._state == EngineState.RUNNING:
-                self._set_state(EngineState.PAUSED)
-                log.info("Engine pausado en frame %d", self.frame_count)
+                self._state = EngineState.PAUSED
+                changed = True
+        if changed:
+            self._emit("state_changed", old_state=EngineState.RUNNING,
+                        new_state=EngineState.PAUSED)
+            log.info("Engine pausado en frame %d", self.frame_count)
 
     def resume(self):
         """Reanuda el procesamiento."""
+        changed = False
         with self._lock:
             if self._state == EngineState.PAUSED:
-                self._set_state(EngineState.RUNNING)
-                log.info("Engine reanudado en frame %d", self.frame_count)
+                self._state = EngineState.RUNNING
+                changed = True
+        if changed:
+            self._emit("state_changed", old_state=EngineState.PAUSED,
+                        new_state=EngineState.RUNNING)
+            log.info("Engine reanudado en frame %d", self.frame_count)
 
     def stop(self):
         """Detiene el procesamiento."""
+        old = None
         with self._lock:
             if self._state in (EngineState.RUNNING, EngineState.PAUSED):
-                self._set_state(EngineState.STOPPED)
-                log.info("Engine detenido en frame %d", self.frame_count)
+                old = self._state
+                self._state = EngineState.STOPPED
+        if old is not None:
+            self._emit("state_changed", old_state=old, new_state=EngineState.STOPPED)
+            log.info("Engine detenido en frame %d", self.frame_count)
 
     def start(self):
         """Inicia procesamiento en un thread separado."""
@@ -189,7 +204,7 @@ class ProcessingEngine:
             )
 
         _heatmap = DensityHeatmap(vid_w, vid_h) if self.heatmap else None
-        fps_samples = []
+        fps_samples = deque(maxlen=30)
         self.frame_count = 0
         self.start_time = time.time()
         self._set_state(EngineState.RUNNING)
@@ -225,17 +240,17 @@ class ProcessingEngine:
                         break
                     tracked_boxes = []
 
-                # Counting
+                # Counting — snapshot routes once before the loop
+                prev_routes = dict(self.counter.routes_matrix)
                 for (x1, y1, x2, y2, trk_id, cls_name) in tracked_boxes:
                     cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-                    prev_routes = dict(self.counter.routes_matrix)
                     self.counter.update(trk_id, cx, cy, cls_name, self.counting_mode,
                                         bbox=(x1, y1, x2, y2))
-                    # Detect new routes
-                    for key, count in self.counter.routes_matrix.items():
-                        if key not in prev_routes or count > prev_routes[key]:
-                            self._emit("route_detected", route_key=key,
-                                       count=count, cls_name=cls_name)
+                # Emit new routes detected this frame
+                for key, count in self.counter.routes_matrix.items():
+                    if key not in prev_routes or count > prev_routes[key]:
+                        self._emit("route_detected", route_key=key,
+                                   count=count, cls_name="")
 
                 if self.frame_count % 120 == 0:
                     self.counter.purge_stale()
@@ -260,7 +275,7 @@ class ProcessingEngine:
 
                 elapsed = time.time() - t0
                 fps_samples.append(1.0 / elapsed if elapsed > 0 else 0)
-                self.fps_avg = float(np.mean(fps_samples[-30:]))
+                self.fps_avg = float(np.mean(fps_samples))
 
                 if self.show_fps:
                     draw_hud(frame, self.frame_count, self.total_frames,

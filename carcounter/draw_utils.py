@@ -5,6 +5,7 @@ y figuras en drawing.py y calibration.py.
 """
 
 import cv2
+import math
 import numpy as np
 
 
@@ -81,7 +82,6 @@ class ShapeDrawer:
     @staticmethod
     def trail(frame, points, color, max_thickness=2.5):
         """Dibuja un trail con grosor gradual."""
-        import math
         n = len(points)
         prev = None
         for i, pt in enumerate(points):

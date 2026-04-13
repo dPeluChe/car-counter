@@ -7,6 +7,7 @@ Extraido de setup_panels/canvas.py para mejorar testabilidad.
 import cv2
 import numpy as np
 from carcounter.theme import ZONE_COLORS_RGB, EXCL_COLORS_RGB, Opacity
+from carcounter.draw_utils import TextStyler, ShapeDrawer
 
 
 class FrameRenderer:
@@ -17,16 +18,7 @@ class FrameRenderer:
 
     @staticmethod
     def draw_exclusion_zones(frame_rgb, exclusion_zones, selected=None):
-        """Dibuja zonas de exclusion semi-transparentes sobre un frame RGB.
-
-        Args:
-            frame_rgb: numpy array RGB
-            exclusion_zones: dict {name: [(x,y), ...]}
-            selected: nombre de zona seleccionada (opcional)
-
-        Returns:
-            Frame RGB con overlays
-        """
+        """Dibuja zonas de exclusion semi-transparentes sobre un frame RGB."""
         if not exclusion_zones:
             return frame_rgb
 
@@ -44,26 +36,14 @@ class FrameRenderer:
             cv2.polylines(result, [np_pts], True, color, 2)
             cx = int(np.mean(np_pts[:, 0]))
             cy = int(np.mean(np_pts[:, 1]))
-            cv2.putText(result, f"EXCL:{name}", (cx, cy),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            TextStyler.draw(result, f"EXCL:{name}", (cx, cy), color, scale=0.5, thickness=2)
 
         return result
 
     @staticmethod
     def draw_zones(frame_rgb, zones, exclusion_zones=None, selected=None):
-        """Dibuja zonas de transito semi-transparentes sobre un frame RGB.
-
-        Args:
-            frame_rgb: numpy array RGB
-            zones: dict {name: [(x,y), ...]}
-            exclusion_zones: dict {name: [(x,y), ...]} (opcional, para referencia)
-            selected: nombre de zona seleccionada
-
-        Returns:
-            Frame RGB con overlays
-        """
-        base = frame_rgb.copy()
-        overlay = base.copy()
+        """Dibuja zonas de transito semi-transparentes sobre un frame RGB."""
+        overlay = frame_rgb.copy()
         excl_meta = []
         zone_meta = []
 
@@ -80,43 +60,31 @@ class FrameRenderer:
             cv2.fillPoly(overlay, [np_pts], color)
             zone_meta.append((name, np_pts, color))
 
-        base = cv2.addWeighted(base, Opacity.SETUP_BG, overlay, Opacity.SETUP_FILL, 0)
+        result = cv2.addWeighted(frame_rgb, Opacity.SETUP_BG, overlay, Opacity.SETUP_FILL, 0)
 
         for name, np_pts, color in excl_meta:
-            cv2.polylines(base, [np_pts], True, color, 2)
+            cv2.polylines(result, [np_pts], True, color, 2)
             cx = int(np.mean(np_pts[:, 0]))
             cy = int(np.mean(np_pts[:, 1]))
-            cv2.putText(base, f"EXCL:{name}", (cx, cy),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            TextStyler.draw(result, f"EXCL:{name}", (cx, cy), color, scale=0.5, thickness=2)
 
         for name, np_pts, color in zone_meta:
-            cv2.polylines(base, [np_pts], True, color, 2)
+            cv2.polylines(result, [np_pts], True, color, 2)
             cx = int(np.mean(np_pts[:, 0]))
             cy = int(np.mean(np_pts[:, 1]))
-            cv2.putText(base, name, (cx, cy),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+            TextStyler.draw(result, name, (cx, cy), color, scale=0.7, thickness=2)
 
-        return base
+        return result
 
     @staticmethod
     def draw_detections(frame_rgb, detections, color=(255, 200, 50)):
-        """Dibuja bounding boxes de detecciones sobre un frame RGB.
-
-        Args:
-            frame_rgb: numpy array RGB
-            detections: list of dicts with 'bbox', 'cls_name', 'conf'
-            color: color RGB para las detecciones
-
-        Returns:
-            Frame RGB con detecciones
-        """
+        """Dibuja bounding boxes de detecciones sobre un frame RGB."""
         result = frame_rgb.copy()
         for det in detections:
             x1, y1, x2, y2 = det["bbox"]
             lbl = f"{det.get('cls_name', '?')} {det.get('conf', 0):.2f}"
-            cv2.rectangle(result, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(result, lbl, (x1, max(12, y1 - 4)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
+            ShapeDrawer.bbox(result, x1, y1, x2, y2, color)
+            TextStyler.label(result, lbl, x1, y1, color)
         return result
 
     @staticmethod
@@ -149,20 +117,12 @@ class FrameRenderer:
 
     @staticmethod
     def draw_vehicle_samples(frame_rgb, samples, color=(166, 227, 161)):
-        """Dibuja recuadros de muestras de vehiculos sobre un frame RGB.
-
-        Args:
-            frame_rgb: numpy array RGB
-            samples: list of dicts with 'bbox', 'width', 'height'
-
-        Returns:
-            Frame RGB con muestras
-        """
+        """Dibuja recuadros de muestras de vehiculos sobre un frame RGB."""
         result = frame_rgb.copy()
         for i, sample in enumerate(samples):
             b = sample["bbox"]
-            cv2.rectangle(result, (b[0], b[1]), (b[2], b[3]), color, 2)
-            cv2.putText(result, f"#{i+1} {sample['width']}x{sample['height']}",
-                        ((b[0] + b[2]) // 2, min(b[1], b[3]) - 8),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1, cv2.LINE_AA)
+            ShapeDrawer.bbox(result, b[0], b[1], b[2], b[3], color)
+            TextStyler.draw(result, f"#{i+1} {sample['width']}x{sample['height']}",
+                            ((b[0] + b[2]) // 2, min(b[1], b[3]) - 8),
+                            color, scale=0.4)
         return result

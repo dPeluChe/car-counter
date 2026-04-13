@@ -128,9 +128,6 @@ class Draw:
     # Route bar chart
     BAR_GREEN      = (60, 120, 60)
 
-    # Font
-    FONT           = 0   # cv2.FONT_HERSHEY_SIMPLEX
-    LINE_AA        = 16  # cv2.LINE_AA
 
 
 # ─── Opacidades ─────────────────────────────────────────────────

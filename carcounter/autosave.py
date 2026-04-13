@@ -56,9 +56,10 @@ def save_checkpoint(state):
     path = _get_autosave_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        state["_autosave_timestamp"] = time.time()
+        data = dict(state)
+        data["_autosave_timestamp"] = time.time()
         with open(path, "w") as f:
-            json.dump(state, f, indent=2)
+            json.dump(data, f, indent=2)
         log.debug("Checkpoint guardado: %s", path)
     except IOError as e:
         log.warning("Error guardando checkpoint: %s", e)
