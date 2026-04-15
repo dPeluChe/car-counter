@@ -1,8 +1,10 @@
 import time
 
 class Profiler:
+    # "tracking" is bundled inside detection (detect_and_track()), so it is not
+    # timed separately. Stages reflect what main.py actually measures.
     def __init__(self):
-        self.stages = ["detection", "tracking", "counting", "visualization", "writing"]
+        self.stages = ["detection", "counting", "visualization", "writing"]
         self.stats = {stage: [] for stage in self.stages}
         self.start_times = {}
 

@@ -400,7 +400,7 @@ def main():
             # Actualizar metadata para API
             if args.serve:
                 _api_meta["frame_count"] = frame_count
-                _api_meta["fps_avg"] = float(fps_avg) if 'fps_avg' in dir() else 0.0
+                _api_meta["fps_avg"] = float(fps_avg) if 'fps_avg' in locals() else 0.0
 
             # Progreso consola
             if frame_count % 60 == 0:
