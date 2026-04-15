@@ -37,6 +37,11 @@ class ZonesMixin:
                                          bg="#313244", fg="#A6ADC8", font=("Arial", 9, "bold"),
                                          relief="flat", pady=4)
         self.btn_mode_lines.pack(side="left", fill="x", expand=True, padx=(2, 0))
+        self.btn_mode_directions = tk.Button(mode_frame, text="➡ Direcciones",
+                                         command=lambda: self._set_counting_mode("directions"),
+                                         bg="#313244", fg="#A6ADC8", font=("Arial", 9, "bold"),
+                                         relief="flat", pady=4)
+        self.btn_mode_directions.pack(side="left", fill="x", expand=True, padx=(2, 0))
 
         # ── Subpanel zonas ──
         self.subpanel_zones = tk.Frame(self.panel_step2, bg="#181825")
@@ -72,7 +77,7 @@ class ZonesMixin:
         self.btn_undo_point.pack(fill="x", pady=2)
         self.subpanel_zones.pack(fill="x")
 
-        # ── Subpanel líneas ──
+# ── Subpanel líneas ──
         self.subpanel_lines = tk.Frame(self.panel_step2, bg="#181825")
         self._lbl(self.subpanel_lines,
                   "Dibuja líneas de cruce. Cada\n"
@@ -95,9 +100,35 @@ class ZonesMixin:
         self.btn_new_line.pack(fill="x", pady=4)
 
         self.btn_del_line = tk.Button(self.subpanel_lines, text="🗑  Eliminar línea seleccionada",
-                                       command=self._delete_selected_line,
-                                       bg="#313244", fg="#F38BA8", relief="flat", pady=4)
+                                      command=self._delete_selected_line,
+                                      bg="#313244", fg="#F38BA8", relief="flat", pady=4)
         self.btn_del_line.pack(fill="x", pady=2)
+
+        # ── Subpanel direcciones ──
+        self.subpanel_directions = tk.Frame(self.panel_step2, bg="#181825")
+        self._lbl(self.subpanel_directions,
+                  "Dibuja vectores de dirección para\n"
+                  "clasificar vehículos por su trayectoria.\n\n"
+                  "• Clic: punto inicio\n"
+                  "• Segundo clic: punto final", color="#A6ADC8")
+
+        tk.Frame(self.subpanel_directions, bg="#313244", height=1).pack(fill="x", pady=8)
+        self._lbl(self.subpanel_directions, "Nombre de la dirección:", color="#CDD6F4")
+        self.direction_name_entry = ttk.Entry(self.subpanel_directions,
+                                               textvariable=self.current_direction_name,
+                                               font=("Arial", 11))
+        self.direction_name_entry.pack(fill="x", pady=4)
+
+        self.btn_new_direction = tk.Button(self.subpanel_directions, text="➡  Nueva Dirección (dibujar)",
+                                       command=self._start_direction_draw,
+                                       bg="#89B4FA", fg="#11111B", font=("Arial", 10, "bold"),
+                                       relief="flat", pady=6)
+        self.btn_new_direction.pack(fill="x", pady=4)
+
+        self.btn_del_direction = tk.Button(self.subpanel_directions, text="🗑  Eliminar dirección seleccionada",
+                                       command=self._delete_selected_direction,
+                                       bg="#313244", fg="#F38BA8", relief="flat", pady=4)
+        self.btn_del_direction.pack(fill="x", pady=2)
 
         tk.Frame(self.panel_step2, bg="#313244", height=1).pack(fill="x", pady=8)
         self.btn_preview = tk.Button(self.panel_step2, text="▶  Reproducir",
@@ -136,13 +167,24 @@ class ZonesMixin:
         if mode == "zones":
             self.btn_mode_zones.config(bg="#89B4FA", fg="#11111B")
             self.btn_mode_lines.config(bg="#313244", fg="#A6ADC8")
+            self.btn_mode_directions.config(bg="#313244", fg="#A6ADC8")
             self.subpanel_lines.pack_forget()
+            self.subpanel_directions.pack_forget()
             self.subpanel_zones.pack(fill="x")
-        else:
+        elif mode == "lines":
             self.btn_mode_lines.config(bg="#89B4FA", fg="#11111B")
             self.btn_mode_zones.config(bg="#313244", fg="#A6ADC8")
+            self.btn_mode_directions.config(bg="#313244", fg="#A6ADC8")
             self.subpanel_zones.pack_forget()
+            self.subpanel_directions.pack_forget()
             self.subpanel_lines.pack(fill="x")
+        else:  # directions
+            self.btn_mode_directions.config(bg="#89B4FA", fg="#11111B")
+            self.btn_mode_zones.config(bg="#313244", fg="#A6ADC8")
+            self.btn_mode_lines.config(bg="#313244", fg="#A6ADC8")
+            self.subpanel_zones.pack_forget()
+            self.subpanel_lines.pack_forget()
+            self.subpanel_directions.pack(fill="x")
         self._refresh_zones_list()
         self._redraw()
 
@@ -182,6 +224,41 @@ class ZonesMixin:
         name = list(self.counting_lines.keys())[sel[0]]
         if messagebox.askyesno("Eliminar", f"¿Eliminar línea '{name}'?"):
             del self.counting_lines[name]
+            self._refresh_zones_list()
+            self._redraw()
+
+    # ── Direcciones ───────────────────────────────
+    def _start_direction_draw(self):
+        name = self.current_direction_name.get().strip()
+        if not name:
+            messagebox.showwarning("Dirección", "Escribe un nombre para la dirección.")
+            return
+        if name in self.directions:
+            if not messagebox.askyesno("Dirección existe", f"La dirección '{name}' ya existe. ¿Sobreescribir?"):
+                return
+            del self.directions[name]
+        self.direction_drawing = True
+        self.direction_start = None
+        self.canvas.config(cursor="crosshair")
+        self.status_var.set(f"Dibujando dirección '{name}' — clic para punto inicio, segundo clic para punto final")
+
+    def _finish_direction(self, ix, iy):
+        name = self.current_direction_name.get().strip()
+        self.directions[name] = [list(self.direction_start), [ix, iy]]
+        self.direction_drawing = False
+        self.direction_start = None
+        self._refresh_zones_list()
+        self.status_var.set(f"Dirección '{name}' guardada ({len(self.directions)} en total)")
+        self._redraw()
+
+    def _delete_selected_direction(self):
+        sel = self.zones_listbox.curselection()
+        if not sel:
+            messagebox.showinfo("Eliminar", "Selecciona una dirección de la lista.")
+            return
+        name = list(self.directions.keys())[sel[0]]
+        if messagebox.askyesno("Eliminar", f"¿Eliminar dirección '{name}'?"):
+            del self.directions[name]
             self._refresh_zones_list()
             self._redraw()
 
@@ -225,22 +302,30 @@ class ZonesMixin:
 
     def _refresh_zones_list(self):
         self.zones_listbox.delete(0, "end")
-        if self.counting_mode.get() == "lines":
+        mode = self.counting_mode.get()
+        if mode == "lines":
             for name in self.counting_lines:
                 self.zones_listbox.insert("end", f"  📏 {name}")
+        elif mode == "directions":
+            for name in self.directions:
+                self.zones_listbox.insert("end", f"  ➡ {name}")
         else:
             for name in self.zones:
                 self.zones_listbox.insert("end", f"  {name}  ({len(self.zones[name])} pts)")
 
     def _on_zone_select(self, event):
         sel = self.zones_listbox.curselection()
-        if sel:
-            if self.counting_mode.get() == "lines":
-                keys = list(self.counting_lines.keys())
-            else:
-                keys = list(self.zones.keys())
-            if sel[0] < len(keys):
-                self.selected_zone.set(keys[sel[0]])
+        if not sel:
+            return
+        mode = self.counting_mode.get()
+        if mode == "lines":
+            keys = list(self.counting_lines.keys())
+        elif mode == "directions":
+            keys = list(self.directions.keys())
+        else:
+            keys = list(self.zones.keys())
+        if sel[0] < len(keys):
+            self.selected_zone.set(keys[sel[0]])
 
     def _delete_selected_zone(self):
         name = self.selected_zone.get()
@@ -434,7 +519,6 @@ class ZonesMixin:
             for name, pts in self.counting_lines.items():
                 if len(pts) < 2:
                     return False, f"La linea '{name}' no tiene 2 puntos definidos."
-                # Verificar que la linea tenga longitud minima
                 p1, p2 = pts[0], pts[1]
                 length = math.hypot(p2[0] - p1[0], p2[1] - p1[1])
                 if length < 10:
@@ -443,6 +527,13 @@ class ZonesMixin:
                         "Dibuja una linea mas larga."
                     )
 
+        elif mode == "directions":
+            if not self.directions:
+                return False, "No hay direcciones definidas. Dibuja al menos un vector de direccion."
+            for name, pts in self.directions.items():
+                if len(pts) < 2:
+                    return False, f"La direccion '{name}' no tiene 2 puntos definidos."
+
         return True, ""
 
     def _confirm_zones(self):
@@ -450,7 +541,13 @@ class ZonesMixin:
         if not ok:
             messagebox.showwarning("Validacion", msg)
             return
-        n = len(self.zones) if self.counting_mode.get() == "zones" else len(self.counting_lines)
+        mode = self.counting_mode.get()
+        if mode == "zones":
+            n = len(self.zones)
+        elif mode == "lines":
+            n = len(self.counting_lines)
+        else:
+            n = len(self.directions)
         self.status_var.set(f"{n} elemento(s) confirmado(s) — pasando a Paso 3")
         self.after(300, lambda: self._activate_step(3))
 
@@ -466,6 +563,15 @@ class ZonesMixin:
                 self._redraw()
             else:
                 self._finish_line(ix, iy)
+            return
+
+        if self.direction_drawing:
+            if self.direction_start is None:
+                self.direction_start = (ix, iy)
+                self.status_var.set("Clic en el segundo punto de la dirección")
+                self._redraw()
+            else:
+                self._finish_direction(ix, iy)
             return
 
         if self.zone_drawing:

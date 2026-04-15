@@ -21,3 +21,9 @@ sahi>=0.11.14
 
 # Opcional: RF-DETR detector (--detector rfdetr)
 # pip install rfdetr
+
+# Opcional: libSQL database (local DB for runs history)
+# pip install libsql-experimental
+
+# Opcional: FastAPI REST API (--serve flag)
+# pip install fastapi uvicorn

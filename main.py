@@ -16,9 +16,11 @@ import json
 import time
 import os
 import argparse
+import threading
 from collections import deque
 import importlib.util
 import numpy as np
+from carcounter.profiler import Profiler
 from carcounter.paths import paths
 from carcounter.logging_config import setup_logging, get_logger
 from carcounter.counting import VehicleCounter
@@ -26,13 +28,15 @@ from carcounter.detection import detect_and_track
 from carcounter.drawing import (
     draw_zones, draw_lines, draw_exclusion_zones, draw_tracked_boxes,
     draw_routes_panel, draw_scoreboard, draw_hud, format_time,
-    DensityHeatmap,
+    DensityHeatmap, draw_direction_vectors,
 )
 from carcounter.export import (
     print_summary, export_json, export_csv, export_benchmark,
     export_tracks_csv, export_od_matrix_csv,
 )
 from carcounter.device import detect_device
+from carcounter import db
+from carcounter import api as carcounter_api
 
 log = get_logger("main")
 
@@ -66,6 +70,8 @@ def build_parser():
     parser.add_argument("--output-od-csv", default=None)
     parser.add_argument("--heatmap", action="store_true")
     parser.add_argument("--demo-mode", dest="demo_mode", action="store_true")
+    parser.add_argument("--serve", action="store_true", help="Start FastAPI server")
+    parser.add_argument("--serve-port", type=int, default=8000, help="FastAPI server port")
     parser.add_argument("--log-level", default="INFO",
                         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                         help="Nivel de logging (default: INFO)")
@@ -271,10 +277,31 @@ def main():
     _heatmap = DensityHeatmap(VID_W, VID_H) if args.heatmap else None
 
     # ─────────────────────────────────────────────
+    # FastAPI server (optional)
+    # ─────────────────────────────────────────────
+    api_thread = None
+    _api_meta = {"frame_count": 0, "total_frames": TOTAL_F, "fps_avg": 0.0, "start_time": 0.0}
+    if args.serve:
+        try:
+            from carcounter.api import set_current_engine, set_current_frame, run_server
+            carcounter_api.set_current_engine(counter, _api_meta)
+            api_thread = threading.Thread(
+                target=run_server,
+                kwargs={"host": "0.0.0.0", "port": args.serve_port},
+                daemon=True
+            )
+            api_thread.start()
+            log.info("FastAPI server started on port %d", args.serve_port)
+        except ImportError as e:
+            log.warning("FastAPI not available: %s", e)
+
+    # ─────────────────────────────────────────────
     # Main loop
     # ─────────────────────────────────────────────
+    profiler = Profiler()
     frame_count = 0
     start_time = time.time()
+    _api_meta["start_time"] = start_time
     fps_samples = deque(maxlen=30)
     benchmark_data = []
     DISPLAY = not args.headless
@@ -294,8 +321,9 @@ def main():
             counter.set_frame(frame_count)
             t0 = time.time()
 
+            # -- Deteccion + tracking --
+            profiler.start("detection")
             try:
-                # -- Deteccion + tracking --
                 tracked_boxes = detect_and_track(
                     frame, model=model_yolo, sahi_model=sahi_model,
                     sahi_predict_fn=sahi_predict_fn, sort_tracker=_sort_tracker,
@@ -309,7 +337,6 @@ def main():
                     detector_backend=DETECTOR_BACKEND, rfdetr_model=rfdetr_model,
                 )
                 _consecutive_errors = 0
-
             except Exception as e:
                 _consecutive_errors += 1
                 log.error("Error en deteccion frame %d: %s", frame_count, e)
@@ -318,27 +345,31 @@ def main():
                                  _consecutive_errors)
                     break
                 tracked_boxes = []
+            profiler.end("detection")
 
             # -- Conteo --
+            profiler.start("counting")
             for (x1, y1, x2, y2, trk_id, cls_name) in tracked_boxes:
                 cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
                 counter.update(trk_id, cx, cy, cls_name, COUNTING_MODE,
                                bbox=(x1, y1, x2, y2))
-
             if frame_count % 120 == 0:
                 counter.purge_stale()
+            profiler.end("counting")
 
-            # -- Heatmap --
+            # -- Heatmap y Visualizacion --
+            profiler.start("visualization")
             if _heatmap:
                 centroids = [((x1+x2)//2, (y1+y2)//2) for x1,y1,x2,y2,_,_ in tracked_boxes]
                 _heatmap.update(centroids)
                 _heatmap.draw(frame)
 
-            # -- Visualizacion --
             try:
                 draw_exclusion_zones(frame, _exclusion_np)
                 if COUNTING_MODE == "lines":
                     draw_lines(frame, counting_lines)
+                elif COUNTING_MODE == "directions":
+                    draw_direction_vectors(frame, directions_config)
                 else:
                     draw_zones(frame, zones_np)
 
@@ -351,16 +382,25 @@ def main():
                 else:
                     draw_routes_panel(frame, counter.routes_matrix, len(tracked_boxes))
 
-                elapsed = time.time() - t0
-                fps_samples.append(1.0 / elapsed if elapsed > 0 else 0)
+                fps_samples.append(1.0 / (time.time() - t0) if (time.time() - t0) > 0 else 0)
                 fps_avg = np.mean(fps_samples)
-
                 if args.show_fps or USE_SAHI:
                     draw_hud(frame, frame_count, TOTAL_F, fps_avg, len(tracked_boxes),
                              sum(counter.routes_matrix.values()), VID_W)
-
             except Exception as e:
                 log.warning("Error en visualizacion frame %d: %s", frame_count, e)
+            profiler.end("visualization")
+
+            # -- Escritura --
+            if writer:
+                profiler.start("writing")
+                writer.write(frame)
+                profiler.end("writing")
+
+            # Actualizar metadata para API
+            if args.serve:
+                _api_meta["frame_count"] = frame_count
+                _api_meta["fps_avg"] = float(fps_avg) if 'fps_avg' in dir() else 0.0
 
             # Progreso consola
             if frame_count % 60 == 0:
@@ -371,12 +411,26 @@ def main():
                          pct, frame_count, TOTAL_F, fps_avg,
                          format_time(eta), sum(counter.routes_matrix.values()))
                 if args.benchmark:
-                    benchmark_data.append({"frame": frame_count, "elapsed": et, "fps": fps_avg,
-                        "detections": len(tracked_boxes), "tracks": len(tracked_boxes),
-                        "routes": sum(counter.routes_matrix.values())})
+                    benchmark_data.append({
+                        "frame": frame_count, 
+                        "elapsed": et, 
+                        "fps": fps_avg,
+                        "stages": profiler.get_averages(),
+                        "detections": len(tracked_boxes), 
+                        "tracks": len(tracked_boxes),
+                        "routes": sum(counter.routes_matrix.values())
+                    })
 
             if DISPLAY:
                 cv2.imshow("Car Counter", frame)
+            
+            # Update API frame if server is running
+            if args.serve:
+                try:
+                    from carcounter.api import set_current_frame
+                    set_current_frame(frame)
+                except ImportError:
+                    pass
             if writer:
                 writer.write(frame)
             if args.max_frames and frame_count >= args.max_frames:
@@ -429,6 +483,18 @@ def main():
         writer.release()
     cap.release()
     cv2.destroyAllWindows()
+
+    # Save run to local DB
+    db.save_run(
+        video_path=VIDEO_PATH,
+        config_path=config_path,
+        frames=frame_count,
+        duration=total_time,
+        vehicles=counter.total_vehicles_ever,
+        routes_matrix=rm,
+        od_matrix=counter.od_matrix,
+    )
+
     log.info("=" * 65)
     log.info("Procesamiento completo")
     log.info("=" * 65)

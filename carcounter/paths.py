@@ -37,6 +37,10 @@ class Paths:
     def benchmarks_dir(self) -> Path:
         return self.root / "output" / "benchmarks"
 
+    @property
+    def data_dir(self) -> Path:
+        return self.root / "data"
+
     # ── Default file paths ───────────────────────
     @property
     def default_config(self) -> Path:
@@ -75,6 +79,7 @@ class Paths:
         """Create output and config directories if they don't exist."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
 
     def resolve(self, path_str: str) -> Path:
         """Resolve a possibly-relative path against project root."""

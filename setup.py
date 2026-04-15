@@ -116,6 +116,12 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMi
         self.current_line_name = tk.StringVar(value="Línea 1")
         self.display_frame_zones = None
 
+        # Direcciones (para modo directions)
+        self.directions = {}
+        self.direction_drawing = False
+        self.direction_start = None
+        self.current_direction_name = tk.StringVar(value="Norte")
+
         # Preview
         self._preview_playing = False
         self._preview_job = None
