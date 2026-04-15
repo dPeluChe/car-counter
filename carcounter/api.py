@@ -103,7 +103,7 @@ def _get_app():
             return {
                 "status": "ok",
                 "fastapi_available": FASTAPI_AVAILABLE,
-                "engine_running": _current_engine is not None,
+                "processing_running": _current_counter is not None,
             }
     
     return app
