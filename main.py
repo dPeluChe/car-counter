@@ -102,7 +102,8 @@ def main():
     tracker_cfg   = config.get("tracker", {})
 
     VIDEO_PATH   = args.video or config.get("video_path", str(paths.default_video))
-    MODEL_PATH   = args.model or config.get("model_path", str(paths.default_model))
+    _default_model = str(paths.default_rfdetr_model) if args.detector == "rfdetr" else str(paths.default_model)
+    MODEL_PATH   = args.model or config.get("model_path", _default_model)
     CONF_THRESH  = settings.get("conf_threshold", 0.10)
     CONF_PER_CLASS = settings.get("conf_per_class", {})
     EFFECTIVE_CONF = min(min(CONF_PER_CLASS.values()), CONF_THRESH) if CONF_PER_CLASS else CONF_THRESH
