@@ -190,3 +190,55 @@ GET  /api/stream         -> MJPEG stream del video procesado (frame actual)
 - [ ] El stream MJPEG funciona mientras el video se procesa
 - [ ] Sin autenticacion (es localhost only)
 - [ ] Tests: `tests/test_api.py` con test de cada endpoint usando `httpx` + `TestClient`
+
+---
+
+## TODO-028: Dataset de validacion con LabelMe + SAM3
+
+**Prioridad:** P2
+**Referencia:** https://labelme.io/blog/labelme-v6.1
+**Dependencia:** Smoke test manual completado
+
+### Objetivo
+
+Crear un dataset de validacion pequeño anotando manualmente frames de
+`glorieta_fast.MP4` para poder medir la **precision real** del pipeline
+(que tan bien detecta el sistema vs ground truth humano).
+
+Hoy no sabemos si contamos el 85% o el 99% de los vehiculos. Esta tarea
+permite responder esa pregunta con numeros.
+
+### Por que LabelMe v6.1
+
+- **SAM3 AI-Box mode**: "arrastras un box y devuelve multiples shapes" — ideal
+  para escenas densas de glorietas donde hay muchos vehiculos
+- **Multiplataforma** (macOS / Linux / Windows)
+- **Progreso de descarga de modelos** visible, se puede cancelar
+- Exporta a formatos compatibles con YOLO
+
+### Flujo de validacion propuesto
+
+1. Extraer ~50-100 frames de `glorieta_fast.MP4` (cada N segundos)
+2. Anotar manualmente cada vehiculo con LabelMe + SAM3
+3. Correr el pipeline sobre esos mismos frames
+4. Comparar detecciones del pipeline vs anotaciones humanas
+5. Calcular precision / recall / counting accuracy
+
+### Criterios de aceptacion
+
+- [ ] Script `scripts/extract_validation_frames.py` que saca N frames equidistantes del video
+- [ ] Carpeta `data/validation/frames/` con los frames extraidos (gitignored)
+- [ ] Carpeta `data/validation/annotations/` con anotaciones LabelMe (JSON formato nativo)
+- [ ] Script `scripts/evaluate_pipeline.py` que:
+  - Carga anotaciones LabelMe
+  - Corre el pipeline sobre los mismos frames
+  - Reporta precision, recall, F1 y counting accuracy por clase
+- [ ] Guia corta en `docs/GUIDES/validation_workflow.md` con el proceso end-to-end
+- [ ] Al menos 1 ejecucion documentada con numeros reales sobre `glorieta_fast.MP4`
+
+### Notas
+
+- Es una herramienta **externa** — no agregar LabelMe como dependencia de Python
+- Solo el parser de anotaciones LabelMe (formato JSON) va en `scripts/evaluate_pipeline.py`
+- Si el counting accuracy es >95% no hay nada que optimizar; si es <85% considerar fine-tuning
+
