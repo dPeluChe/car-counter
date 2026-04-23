@@ -7,13 +7,7 @@ from tkinter import ttk, messagebox
 import cv2
 import numpy as np
 
-from carcounter.constants import (
-    PREVIEW_VEH_NAMES,
-    ZONE_COLORS_HEX as ZONE_COLORS,
-    ZONE_COLORS_RGB,
-    EXCL_COLORS_HEX as EXCL_COLORS,
-    EXCL_COLORS_RGB,
-)
+from carcounter.constants import ZONE_COLORS_RGB, EXCL_COLORS_RGB
 
 
 class ZonesMixin:
@@ -313,102 +307,7 @@ class ZonesMixin:
         self.display_frame_zones = base
         self._redraw()
 
-    # ── Preview ──────────────────────────────────
-    def _toggle_zone_preview(self):
-        if self._preview_playing:
-            self._stop_zone_preview()
-        else:
-            self._start_zone_preview()
-
-    def _start_zone_preview(self):
-        if self.zone_drawing:
-            self.status_var.set("⚠ Termina de dibujar la zona actual antes de reproducir.")
-            return
-        self._preview_playing = True
-        self._preview_frame_idx = self.current_frame_idx
-        self._preview_cap = cv2.VideoCapture(self.video_path)
-        self._preview_cap.set(cv2.CAP_PROP_POS_FRAMES, self._preview_frame_idx)
-        self.btn_preview.config(text="⏸  Pausar", bg="#F38BA8", fg="#11111B")
-        self.status_var.set("▶ Reproduciendo con zonas — ⏸ para pausar")
-        self._zone_preview_tick()
-
-    def _stop_zone_preview(self):
-        if not self._preview_playing and self._preview_job is None:
-            return
-        self._preview_playing = False
-        if self._preview_job is not None:
-            self.after_cancel(self._preview_job)
-            self._preview_job = None
-        if self._preview_cap is not None:
-            self._preview_cap.release()
-            self._preview_cap = None
-        if hasattr(self, "btn_preview") and self.btn_preview:
-            self.btn_preview.config(text="▶  Reproducir zonas", bg="#F9E2AF", fg="#11111B")
-        self._redraw_zones()
-
-    def _zone_preview_tick(self):
-        if not self._preview_playing or self._preview_cap is None:
-            return
-        SKIP = 15 if self._preview_show_detections else 5
-        for _ in range(SKIP - 1):
-            self._preview_cap.grab()
-        ret, frame = self._preview_cap.read()
-        self._preview_frame_idx += SKIP
-
-        if not ret or self._preview_frame_idx >= self.total_frames:
-            self._preview_frame_idx = 0
-            self._preview_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            self._preview_job = self.after(80, self._zone_preview_tick)
-            return
-
-        base = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-        if self._preview_show_detections and self.model is not None:
-            results = self.model(
-                frame, conf=self.conf_threshold.get(), verbose=False,
-                classes=[2, 3, 5, 7], imgsz=self.infer_imgsz.get())
-            for r in results:
-                for box in r.boxes:
-                    x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-                    if self._is_in_exclusion(cx, cy):
-                        continue
-                    lbl = f"{PREVIEW_VEH_NAMES.get(int(box.cls[0]), '?')} {float(box.conf[0]):.2f}"
-                    cv2.rectangle(base, (x1, y1), (x2, y2), (255, 200, 50), 2)
-                    cv2.putText(base, lbl, (x1, max(12, y1 - 4)),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 200, 50), 1, cv2.LINE_AA)
-
-        overlay = base.copy()
-        zone_meta = []
-        for idx, (name, pts) in enumerate(self.zones.items()):
-            color = ZONE_COLORS_RGB[idx % len(ZONE_COLORS_RGB)]
-            np_pts = np.array(pts, dtype=np.int32)
-            cv2.fillPoly(overlay, [np_pts], color)
-            zone_meta.append((name, np_pts, color))
-        base = cv2.addWeighted(base, 0.75, overlay, 0.25, 0)
-        for name, np_pts, color in zone_meta:
-            cv2.polylines(base, [np_pts], True, color, 2)
-            cx = int(np.mean(np_pts[:, 0]))
-            cy = int(np.mean(np_pts[:, 1]))
-            cv2.putText(base, name, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-
-        self.display_frame_zones = base
-        self._redraw()
-        det_tag = "  🔍 YOLO" if self._preview_show_detections else ""
-        self.status_var.set(f"▶{det_tag}  Frame {self._preview_frame_idx}/{self.total_frames}  |  ⏸ para pausar")
-        self._preview_job = self.after(80, self._zone_preview_tick)
-
-    def _toggle_yolo_preview(self):
-        if self.model is None:
-            self.status_var.set("⚠ Modelo YOLO no cargado — completa el Paso 1 primero.")
-            return
-        self._preview_show_detections = not self._preview_show_detections
-        if self._preview_show_detections:
-            self.btn_det_toggle.config(
-                text="🔍  Detecciones YOLO: ON  ⚠ más lento", fg="#CBA6F7")
-        else:
-            self.btn_det_toggle.config(
-                text="🔍  Detecciones YOLO: OFF", fg="#6C7086")
+    # Preview logic extraida a setup_panels/step2_preview.py (PreviewMixin)
 
     def _validate_zones(self):
         """Valida zonas/lineas antes de continuar. Retorna (ok, mensaje)."""

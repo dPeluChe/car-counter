@@ -25,10 +25,13 @@ from carcounter.autosave import AutoSaveManager, has_checkpoint, load_checkpoint
 from setup_panels.canvas import CanvasMixin
 from setup_panels.step0_exclusion import ExclusionMixin
 from setup_panels.step1_calibration import CalibrationMixin
+from setup_panels.calib_tests import CalibTestsMixin
 from setup_panels.step2_zones import ZonesMixin
 from setup_panels.step2_lines import LinesMixin
 from setup_panels.step2_directions import DirectionsMixin
+from setup_panels.step2_preview import PreviewMixin
 from setup_panels.step3_sahi import SAHIMixin
+from setup_panels.state import init_state
 
 # ─────────────────────────────────────────────
 # Constantes
@@ -48,8 +51,8 @@ STEP_TITLES = [
 # ─────────────────────────────────────────────
 # Aplicación principal (compone los mixins)
 # ─────────────────────────────────────────────
-class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin,
-               ZonesMixin, LinesMixin, DirectionsMixin,
+class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, CalibTestsMixin,
+               ZonesMixin, LinesMixin, DirectionsMixin, PreviewMixin,
                SAHIMixin, tk.Tk):
     def __init__(self):
         super().__init__()
@@ -58,102 +61,12 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin,
         self.configure(bg="#1E1E2E")
         self.resizable(True, True)
 
-        # Rutas (accesibles por mixins via self._model_path, self._output_config)
-        self._model_path = MODEL_PATH
-        self._output_config = OUTPUT_CONFIG
+        # Inicializacion de estado (variables de Tk por dominio) — ver setup_panels/state.py
+        init_state(self, video_path=DEFAULT_VIDEO, model_path=MODEL_PATH,
+                   output_config=OUTPUT_CONFIG)
 
-        # ── Estado general ────────────────────────
-        self.video_path = DEFAULT_VIDEO
-        self.model = None
-        self.sahi_model = None
-        self.frame_orig = None
-        self.frame_rgb = None
-        self.img_h = self.img_w = 0
-        self.total_frames = 0
-        self.current_frame_idx = 0
-        self._nav_cap = None  # VideoCapture persistente para navegacion de frames
-
-        # Zoom / pan
-        self.zoom = 1.0
-        self.pan_x = self.pan_y = 0
-        self.drag_start = None
-        self.pan_mode = False
-
-        # Calibración
-        self.calib_rect_start = None
-        self.calib_rect_end = None
-        self.calib_drawing = False
-        self.conf_threshold = tk.DoubleVar(value=0.10)
-        self.infer_imgsz = tk.IntVar(value=1600)
-        self.min_area = tk.IntVar(value=0)
-        self.max_area = tk.IntVar(value=999999)
-        self.vehicle_samples = []
-        self.calib_confirmed = False
-        self.calib_test_passed = False
-        self.conf_car = tk.DoubleVar(value=0.10)
-        self.conf_motorbike = tk.DoubleVar(value=0.10)
-        self.conf_bus = tk.DoubleVar(value=0.10)
-        self.conf_truck = tk.DoubleVar(value=0.10)
-        self._conf_per_class_modified = False
-
-        # Zonas de exclusión
-        self.exclusion_zones = {}
-        self._excl_np_cached = None
-        self.excl_current_pts = []
-        self.excl_drawing = False
-        self.excl_zone_name = tk.StringVar(value="Exclusion 1")
-        self.excl_selected = tk.StringVar(value="")
-
-        # Modo de conteo
-        self.counting_mode = tk.StringVar(value="zones")
-
-        # Zonas de tránsito
-        self.zones = {}
-        self.current_zone_pts = []
-        self.zone_drawing = False
-        self.current_zone_name = tk.StringVar(value="Norte")
-
-        # Líneas de cruce
-        self.counting_lines = {}
-        self.line_drawing = False
-        self.line_start = None
-        self.current_line_name = tk.StringVar(value="Línea 1")
-        self.display_frame_zones = None
-
-        # Direcciones (para modo directions)
-        self.directions = {}
-        self.direction_drawing = False
-        self.direction_start = None
-        self.current_direction_name = tk.StringVar(value="Norte")
-
-        # Preview
-        self._preview_playing = False
-        self._preview_job = None
-        self._preview_cap = None
-        self._preview_frame_idx = 0
-        self._preview_show_detections = False
-
-        # SAHI / tracker
-        self.slice_w = tk.IntVar(value=512)
-        self.slice_h = tk.IntVar(value=512)
-        self.overlap = tk.DoubleVar(value=0.2)
-        self.nms_threshold = tk.DoubleVar(value=0.3)
-        self.max_age = tk.IntVar(value=40)
-        self.min_hits = tk.IntVar(value=3)
-        self.iou_thresh = tk.DoubleVar(value=0.2)
-        self._tile_grid_visible = True
-
-        # Config cargada (para merge al guardar)
-        self._loaded_config = None
-        self._loaded_sample_constraints = None
-
-        # Paso actual
-        self.current_step = 0
-
-        # Autosave manager
         self._autosave = AutoSaveManager(self)
 
-        # ── UI ────────────────────────────────────
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.bind("<Control-z>", lambda e: self._undo_last_point())
