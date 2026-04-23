@@ -131,8 +131,11 @@ class CanvasMixin:
         elif self.current_step == 1:
             self._draw_calib_overlay()
         elif self.current_step == 2:
-            if self.counting_mode.get() == "lines":
+            mode = self.counting_mode.get()
+            if mode == "lines":
                 self._draw_lines_overlay()
+            elif mode == "directions":
+                self._draw_directions_overlay()
             else:
                 self._draw_zones_overlay()
         elif self.current_step == 3:
@@ -229,6 +232,32 @@ class CanvasMixin:
 
         if self.line_drawing and self.line_start:
             sp = self._img_to_screen(self.line_start[0], self.line_start[1])
+            self.canvas.create_oval(sp[0]-6, sp[1]-6, sp[0]+6, sp[1]+6,
+                                     fill="#FFE66D", outline="white", width=2)
+
+    def _draw_directions_overlay(self):
+        """Dibuja vectores de dirección en el canvas."""
+        self._draw_excl_ref()
+
+        for idx, (name, pts) in enumerate(self.directions.items()):
+            color = ZONE_COLORS[idx % len(ZONE_COLORS)]
+            sp1 = self._img_to_screen(pts[0][0], pts[0][1])
+            sp2 = self._img_to_screen(pts[1][0], pts[1][1])
+
+            self.canvas.create_line(sp1[0], sp1[1], sp2[0], sp2[1],
+                                     fill=color, width=3, arrow="last")
+
+            mx = (sp1[0] + sp2[0]) / 2
+            my = (sp1[1] + sp2[1]) / 2
+            self.canvas.create_text(mx + 15, my - 10, text=f"➡ {name}", fill=color,
+                                     font=("Arial", 10, "bold"))
+
+            for pt in (sp1, sp2):
+                self.canvas.create_oval(pt[0]-5, pt[1]-5, pt[0]+5, pt[1]+5,
+                                         fill=color, outline="white", width=1)
+
+        if self.direction_drawing and self.direction_start:
+            sp = self._img_to_screen(self.direction_start[0], self.direction_start[1])
             self.canvas.create_oval(sp[0]-6, sp[1]-6, sp[0]+6, sp[1]+6,
                                      fill="#FFE66D", outline="white", width=2)
 

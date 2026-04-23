@@ -82,20 +82,16 @@ def rfdetr_detect(model, frame_bgr, conf_threshold=0.1):
     if sv_dets is None or len(sv_dets) == 0:
         return np.empty((0, 5)), []
 
-    det_list = []
-    det_classes = []
-    for i in range(len(sv_dets)):
-        x1, y1, x2, y2 = sv_dets.xyxy[i].astype(int)
-        conf = float(sv_dets.confidence[i])
-        cls_id = int(sv_dets.class_id[i])
-        cls_name = COCO_NAMES[cls_id] if cls_id < len(COCO_NAMES) else ""
+    # Vectorized vehicle filter
+    cls_ids = sv_dets.class_id
+    cls_names = [COCO_NAMES[c] if c < len(COCO_NAMES) else "" for c in cls_ids]
+    keep = [i for i, n in enumerate(cls_names) if n in VEHICLE_CLASSES]
 
-        # Solo vehiculos
-        if cls_name not in VEHICLE_CLASSES:
-            continue
+    if not keep:
+        return np.empty((0, 5)), []
 
-        det_list.append([int(x1), int(y1), int(x2), int(y2), conf])
-        det_classes.append(cls_name)
-
-    detections = np.array(det_list, dtype=np.float64) if det_list else np.empty((0, 5))
+    xyxy = sv_dets.xyxy[keep].astype(np.int32)
+    confs = sv_dets.confidence[keep].reshape(-1, 1)
+    detections = np.hstack([xyxy, confs]).astype(np.float64)
+    det_classes = [cls_names[i] for i in keep]
     return detections, det_classes

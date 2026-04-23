@@ -115,6 +115,7 @@ class SAHIMixin:
             exclusion_zones=self.exclusion_zones,
             zones=self.zones,
             counting_lines=self.counting_lines,
+            directions=self.directions,
             min_area=self.min_area.get(),
             max_area=self.max_area.get(),
             conf_threshold=self.conf_threshold.get(),

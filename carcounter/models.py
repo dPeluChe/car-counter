@@ -134,12 +134,32 @@ def _model_path(model_info):
 
 
 def is_downloaded(model_name):
-    """True si el modelo ya esta descargado localmente."""
+    """True si el modelo ya esta descargado localmente o en cache."""
     info = MODEL_CATALOG.get(model_name)
     if not info:
         return False
+    # Check local marker/file
     path = _model_path(info)
-    return path.exists() and path.stat().st_size > 1000
+    if path.exists() and path.stat().st_size > 0:
+        return True
+    # RF-DETR models are cached by HuggingFace, check cache
+    if info["source"] == "rfdetr":
+        return _rfdetr_in_cache(info)
+    return False
+
+
+def _rfdetr_in_cache(info):
+    """Check if RF-DETR weights exist in HuggingFace cache."""
+    try:
+        from pathlib import Path
+        cache_dir = Path.home() / ".cache" / "rf-detr"
+        if not cache_dir.exists():
+            return False
+        variant = info.get("variant", "base")
+        pth_name = f"rf-detr-{variant}.pth"
+        return any(f.name == pth_name for f in cache_dir.rglob("*.pth"))
+    except Exception:
+        return False
 
 
 def get_model_path(model_name):

@@ -37,6 +37,10 @@ class Paths:
     def benchmarks_dir(self) -> Path:
         return self.root / "output" / "benchmarks"
 
+    @property
+    def data_dir(self) -> Path:
+        return self.root / "data"
+
     # ── Default file paths ───────────────────────
     @property
     def default_config(self) -> Path:
@@ -47,8 +51,16 @@ class Paths:
         return self.models_dir / "yolov11l.pt"
 
     @property
+    def rfdetr_models_dir(self) -> Path:
+        return self.root / "models" / "rfdetr"
+
+    @property
+    def default_rfdetr_model(self) -> Path:
+        return self.rfdetr_models_dir / "rfdetr-medium.pth"
+
+    @property
     def default_video(self) -> Path:
-        return self.assets_dir / "video.mp4"
+        return self.assets_dir / "glorieta_fast.MP4"
 
     @property
     def default_output_video(self) -> Path:
@@ -67,6 +79,7 @@ class Paths:
         """Create output and config directories if they don't exist."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
 
     def resolve(self, path_str: str) -> Path:
         """Resolve a possibly-relative path against project root."""

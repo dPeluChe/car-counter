@@ -34,7 +34,7 @@ def parse_lines(cfg):
     return result
 
 
-def build_config(*, counting_mode, exclusion_zones, zones, counting_lines,
+def build_config(*, counting_mode, exclusion_zones, zones, counting_lines, directions=None,
                  min_area, max_area, conf_threshold, imgsz,
                  sample_constraints, sample_count,
                  conf_per_class, conf_per_class_modified,
@@ -50,6 +50,7 @@ def build_config(*, counting_mode, exclusion_zones, zones, counting_lines,
             {"name": name, "points": pts, "tolerance": 15}
             for name, pts in counting_lines.items()
         ],
+        "directions": dict(directions) if directions else {},
         "settings": {
             "min_area": min_area,
             "max_area": max_area,

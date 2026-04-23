@@ -25,8 +25,13 @@ from carcounter.autosave import AutoSaveManager, has_checkpoint, load_checkpoint
 from setup_panels.canvas import CanvasMixin
 from setup_panels.step0_exclusion import ExclusionMixin
 from setup_panels.step1_calibration import CalibrationMixin
+from setup_panels.calib_tests import CalibTestsMixin
 from setup_panels.step2_zones import ZonesMixin
+from setup_panels.step2_lines import LinesMixin
+from setup_panels.step2_directions import DirectionsMixin
+from setup_panels.step2_preview import PreviewMixin
 from setup_panels.step3_sahi import SAHIMixin
+from setup_panels.state import init_state
 
 # ─────────────────────────────────────────────
 # Constantes
@@ -46,7 +51,9 @@ STEP_TITLES = [
 # ─────────────────────────────────────────────
 # Aplicación principal (compone los mixins)
 # ─────────────────────────────────────────────
-class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMixin, tk.Tk):
+class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, CalibTestsMixin,
+               ZonesMixin, LinesMixin, DirectionsMixin, PreviewMixin,
+               SAHIMixin, tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Car Counter — Configurador")
@@ -54,96 +61,12 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMi
         self.configure(bg="#1E1E2E")
         self.resizable(True, True)
 
-        # Rutas (accesibles por mixins via self._model_path, self._output_config)
-        self._model_path = MODEL_PATH
-        self._output_config = OUTPUT_CONFIG
+        # Inicializacion de estado (variables de Tk por dominio) — ver setup_panels/state.py
+        init_state(self, video_path=DEFAULT_VIDEO, model_path=MODEL_PATH,
+                   output_config=OUTPUT_CONFIG)
 
-        # ── Estado general ────────────────────────
-        self.video_path = DEFAULT_VIDEO
-        self.model = None
-        self.sahi_model = None
-        self.frame_orig = None
-        self.frame_rgb = None
-        self.img_h = self.img_w = 0
-        self.total_frames = 0
-        self.current_frame_idx = 0
-        self._nav_cap = None  # VideoCapture persistente para navegacion de frames
-
-        # Zoom / pan
-        self.zoom = 1.0
-        self.pan_x = self.pan_y = 0
-        self.drag_start = None
-        self.pan_mode = False
-
-        # Calibración
-        self.calib_rect_start = None
-        self.calib_rect_end = None
-        self.calib_drawing = False
-        self.conf_threshold = tk.DoubleVar(value=0.10)
-        self.infer_imgsz = tk.IntVar(value=1600)
-        self.min_area = tk.IntVar(value=0)
-        self.max_area = tk.IntVar(value=999999)
-        self.vehicle_samples = []
-        self.calib_confirmed = False
-        self.calib_test_passed = False
-        self.conf_car = tk.DoubleVar(value=0.10)
-        self.conf_motorbike = tk.DoubleVar(value=0.10)
-        self.conf_bus = tk.DoubleVar(value=0.10)
-        self.conf_truck = tk.DoubleVar(value=0.10)
-        self._conf_per_class_modified = False
-
-        # Zonas de exclusión
-        self.exclusion_zones = {}
-        self._excl_np_cached = None
-        self.excl_current_pts = []
-        self.excl_drawing = False
-        self.excl_zone_name = tk.StringVar(value="Exclusion 1")
-        self.excl_selected = tk.StringVar(value="")
-
-        # Modo de conteo
-        self.counting_mode = tk.StringVar(value="zones")
-
-        # Zonas de tránsito
-        self.zones = {}
-        self.current_zone_pts = []
-        self.zone_drawing = False
-        self.current_zone_name = tk.StringVar(value="Norte")
-
-        # Líneas de cruce
-        self.counting_lines = {}
-        self.line_drawing = False
-        self.line_start = None
-        self.current_line_name = tk.StringVar(value="Línea 1")
-        self.display_frame_zones = None
-
-        # Preview
-        self._preview_playing = False
-        self._preview_job = None
-        self._preview_cap = None
-        self._preview_frame_idx = 0
-        self._preview_show_detections = False
-
-        # SAHI / tracker
-        self.slice_w = tk.IntVar(value=512)
-        self.slice_h = tk.IntVar(value=512)
-        self.overlap = tk.DoubleVar(value=0.2)
-        self.nms_threshold = tk.DoubleVar(value=0.3)
-        self.max_age = tk.IntVar(value=40)
-        self.min_hits = tk.IntVar(value=3)
-        self.iou_thresh = tk.DoubleVar(value=0.2)
-        self._tile_grid_visible = True
-
-        # Config cargada (para merge al guardar)
-        self._loaded_config = None
-        self._loaded_sample_constraints = None
-
-        # Paso actual
-        self.current_step = 0
-
-        # Autosave manager
         self._autosave = AutoSaveManager(self)
 
-        # ── UI ────────────────────────────────────
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.bind("<Control-z>", lambda e: self._undo_last_point())
@@ -302,137 +225,15 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMi
     # Model Manager Dialog
     # ──────────────────────────────────────────────
     def _show_model_manager(self):
-        from carcounter.models import MODEL_CATALOG, is_downloaded, download_model, get_model_path
-        dlg = tk.Toplevel(self)
-        dlg.title("Gestor de Modelos")
-        dlg.geometry("750x520")
-        dlg.configure(bg="#1E1E2E")
-        dlg.transient(self)
-        dlg.grab_set()
+        from carcounter.ui_models import show_model_dialog
+        show_model_dialog(self, on_select=self._on_model_selected)
 
-        # Header
-        tk.Label(dlg, text="🧠  Gestor de Modelos", bg="#1E1E2E", fg="#CDD6F4",
-                 font=("Arial", 14, "bold")).pack(pady=(12, 4))
-        tk.Label(dlg, text="Descarga y selecciona modelos de deteccion",
-                 bg="#1E1E2E", fg="#A6ADC8", font=("Arial", 9)).pack()
-
-        # Table frame with scroll
-        table_frame = tk.Frame(dlg, bg="#11111B")
-        table_frame.pack(fill="both", expand=True, padx=12, pady=8)
-
-        canvas_scroll = tk.Canvas(table_frame, bg="#11111B", highlightthickness=0)
-        scrollbar = tk.Scrollbar(table_frame, orient="vertical", command=canvas_scroll.yview)
-        inner = tk.Frame(canvas_scroll, bg="#11111B")
-
-        inner.bind("<Configure>", lambda e: canvas_scroll.configure(scrollregion=canvas_scroll.bbox("all")))
-        canvas_scroll.create_window((0, 0), window=inner, anchor="nw")
-        canvas_scroll.configure(yscrollcommand=scrollbar.set)
-
-        scrollbar.pack(side="right", fill="y")
-        canvas_scroll.pack(side="left", fill="both", expand=True)
-
-        # Column headers
-        cols = [("Modelo", 14), ("Familia", 7), ("AP50", 6), ("Latencia", 8),
-                ("Params", 8), ("Tamaño", 7), ("Estado", 7), ("", 10)]
-        hdr = tk.Frame(inner, bg="#313244")
-        hdr.pack(fill="x", pady=(0, 2))
-        for label, w in cols:
-            tk.Label(hdr, text=label, bg="#313244", fg="#CDD6F4",
-                     font=("Courier", 10, "bold"), width=w, anchor="w").pack(side="left", padx=2)
-
-        # Status label for download feedback
-        status_var = tk.StringVar(value="")
-        row_widgets = {}
-
-        def _refresh_row(name):
-            if name in row_widgets:
-                downloaded = is_downloaded(name)
-                btn, lbl = row_widgets[name]
-                lbl.config(text="✓" if downloaded else "✗",
-                           fg="#A6E3A1" if downloaded else "#F38BA8")
-                if downloaded:
-                    btn.config(text="Usar", bg="#A6E3A1", fg="#11111B",
-                               command=lambda n=name: _use_model(n))
-                else:
-                    btn.config(text="Descargar", bg="#89B4FA", fg="#11111B",
-                               command=lambda n=name: _download(n))
-
-        def _download(name):
-            status_var.set(f"Descargando {name}...")
-            dlg.update()
-            ok = download_model(name)
-            if ok:
-                status_var.set(f"✅ {name} descargado")
-            else:
-                status_var.set(f"❌ Error descargando {name}")
-            _refresh_row(name)
-            dlg.update()
-
-        def _use_model(name):
-            info = MODEL_CATALOG[name]
-            if info["family"] == "yolo":
-                path = get_model_path(name)
-                if path:
-                    self._model_path = path
-                    self.model = YOLO(path)
-                    self.status_var.set(f"✅ Modelo cambiado a {name}")
-                    status_var.set(f"Usando {name}")
-            else:
-                # RF-DETR: guardamos la variante para uso en main.py
-                status_var.set(f"✅ {name} listo — usa: --detector rfdetr --rfdetr-variant {info.get('variant', 'base')}")
-
-        # Rows
-        for family_label, family_key in [("YOLO", "yolo"), ("RF-DETR", "rfdetr")]:
-            sep = tk.Frame(inner, bg="#45475A", height=1)
-            sep.pack(fill="x", pady=4)
-            tk.Label(inner, text=f"  {family_label}", bg="#11111B", fg="#89B4FA",
-                     font=("Arial", 10, "bold"), anchor="w").pack(fill="x")
-
-            for name, info in MODEL_CATALOG.items():
-                if info["family"] != family_key:
-                    continue
-                downloaded = is_downloaded(name)
-
-                row = tk.Frame(inner, bg="#181825")
-                row.pack(fill="x", pady=1)
-
-                tk.Label(row, text=name, bg="#181825", fg="#CDD6F4",
-                         font=("Courier", 10), width=14, anchor="w").pack(side="left", padx=2)
-                tk.Label(row, text=info["family"].upper(), bg="#181825", fg="#A6ADC8",
-                         font=("Courier", 9), width=7, anchor="w").pack(side="left", padx=2)
-                tk.Label(row, text=f"{info['coco_ap50']:.1f}", bg="#181825", fg="#A6E3A1",
-                         font=("Courier", 10), width=6, anchor="w").pack(side="left", padx=2)
-                tk.Label(row, text=f"{info['latency_ms']}ms", bg="#181825", fg="#CDD6F4",
-                         font=("Courier", 10), width=8, anchor="w").pack(side="left", padx=2)
-                tk.Label(row, text=info["params"], bg="#181825", fg="#A6ADC8",
-                         font=("Courier", 9), width=8, anchor="w").pack(side="left", padx=2)
-                tk.Label(row, text=f"{info['size_mb']}MB", bg="#181825", fg="#A6ADC8",
-                         font=("Courier", 9), width=7, anchor="w").pack(side="left", padx=2)
-
-                status_lbl = tk.Label(row, text="✓" if downloaded else "✗",
-                                      bg="#181825", font=("Courier", 10), width=3,
-                                      fg="#A6E3A1" if downloaded else "#F38BA8")
-                status_lbl.pack(side="left", padx=2)
-
-                if downloaded:
-                    btn = tk.Button(row, text="Usar", bg="#A6E3A1", fg="#11111B",
-                                    font=("Arial", 9, "bold"), relief="flat", width=9,
-                                    command=lambda n=name: _use_model(n))
-                else:
-                    btn = tk.Button(row, text="Descargar", bg="#89B4FA", fg="#11111B",
-                                    font=("Arial", 9, "bold"), relief="flat", width=9,
-                                    command=lambda n=name: _download(n))
-                btn.pack(side="left", padx=4)
-
-                row_widgets[name] = (btn, status_lbl)
-
-        # Bottom bar
-        bottom = tk.Frame(dlg, bg="#1E1E2E")
-        bottom.pack(fill="x", padx=12, pady=8)
-        tk.Label(bottom, textvariable=status_var, bg="#1E1E2E", fg="#A6E3A1",
-                 font=("Courier", 9), anchor="w").pack(side="left")
-        tk.Button(bottom, text="Cerrar", bg="#313244", fg="#CDD6F4",
-                  relief="flat", padx=16, command=dlg.destroy).pack(side="right")
+    def _on_model_selected(self, name, path):
+        """Callback cuando se selecciona un modelo en el dialogo."""
+        if path:
+            self._model_path = path
+            self.model = YOLO(path)
+            self.status_var.set(f"Modelo cambiado a {name}")
 
     # ──────────────────────────────────────────────
     # Config load

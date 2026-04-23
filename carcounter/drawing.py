@@ -26,6 +26,27 @@ def draw_lines(frame, counting_lines):
         TextStyler.draw(frame, "up/dn", (mx + 5, my + 20), color, scale=0.5)
 
 
+def draw_direction_vectors(frame, directions_config):
+    """Dibuja flechas de direccion con su nombre encima."""
+    if not directions_config:
+        return
+    
+    for idx, (name, pts) in enumerate(directions_config.items()):
+        if not pts or len(pts) < 2:
+            continue
+        
+        pt_start = tuple(pts[0])
+        pt_end = tuple(pts[1])
+        
+        color = ZONE_COLORS_BGR[idx % len(ZONE_COLORS_BGR)]
+        
+        cv2.arrowedLine(frame, pt_start, pt_end, color, 3, tipLength=0.2)
+        
+        mx = (pt_start[0] + pt_end[0]) // 2
+        my = (pt_start[1] + pt_end[1]) // 2
+        TextStyler.draw(frame, name, (mx + 10, my - 10), color, scale=0.6, thickness=2)
+
+
 def draw_exclusion_zones(frame, exclusion_np):
     """Dibuja zonas de exclusion en rojo semi-transparente."""
     if not exclusion_np:

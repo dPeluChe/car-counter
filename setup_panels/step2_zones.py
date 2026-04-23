@@ -7,13 +7,7 @@ from tkinter import ttk, messagebox
 import cv2
 import numpy as np
 
-from carcounter.constants import (
-    PREVIEW_VEH_NAMES,
-    ZONE_COLORS_HEX as ZONE_COLORS,
-    ZONE_COLORS_RGB,
-    EXCL_COLORS_HEX as EXCL_COLORS,
-    EXCL_COLORS_RGB,
-)
+from carcounter.constants import ZONE_COLORS_RGB, EXCL_COLORS_RGB
 
 
 class ZonesMixin:
@@ -37,6 +31,11 @@ class ZonesMixin:
                                          bg="#313244", fg="#A6ADC8", font=("Arial", 9, "bold"),
                                          relief="flat", pady=4)
         self.btn_mode_lines.pack(side="left", fill="x", expand=True, padx=(2, 0))
+        self.btn_mode_directions = tk.Button(mode_frame, text="➡ Direcciones",
+                                         command=lambda: self._set_counting_mode("directions"),
+                                         bg="#313244", fg="#A6ADC8", font=("Arial", 9, "bold"),
+                                         relief="flat", pady=4)
+        self.btn_mode_directions.pack(side="left", fill="x", expand=True, padx=(2, 0))
 
         # ── Subpanel zonas ──
         self.subpanel_zones = tk.Frame(self.panel_step2, bg="#181825")
@@ -72,7 +71,7 @@ class ZonesMixin:
         self.btn_undo_point.pack(fill="x", pady=2)
         self.subpanel_zones.pack(fill="x")
 
-        # ── Subpanel líneas ──
+# ── Subpanel líneas ──
         self.subpanel_lines = tk.Frame(self.panel_step2, bg="#181825")
         self._lbl(self.subpanel_lines,
                   "Dibuja líneas de cruce. Cada\n"
@@ -95,9 +94,35 @@ class ZonesMixin:
         self.btn_new_line.pack(fill="x", pady=4)
 
         self.btn_del_line = tk.Button(self.subpanel_lines, text="🗑  Eliminar línea seleccionada",
-                                       command=self._delete_selected_line,
-                                       bg="#313244", fg="#F38BA8", relief="flat", pady=4)
+                                      command=self._delete_selected_line,
+                                      bg="#313244", fg="#F38BA8", relief="flat", pady=4)
         self.btn_del_line.pack(fill="x", pady=2)
+
+        # ── Subpanel direcciones ──
+        self.subpanel_directions = tk.Frame(self.panel_step2, bg="#181825")
+        self._lbl(self.subpanel_directions,
+                  "Dibuja vectores de dirección para\n"
+                  "clasificar vehículos por su trayectoria.\n\n"
+                  "• Clic: punto inicio\n"
+                  "• Segundo clic: punto final", color="#A6ADC8")
+
+        tk.Frame(self.subpanel_directions, bg="#313244", height=1).pack(fill="x", pady=8)
+        self._lbl(self.subpanel_directions, "Nombre de la dirección:", color="#CDD6F4")
+        self.direction_name_entry = ttk.Entry(self.subpanel_directions,
+                                               textvariable=self.current_direction_name,
+                                               font=("Arial", 11))
+        self.direction_name_entry.pack(fill="x", pady=4)
+
+        self.btn_new_direction = tk.Button(self.subpanel_directions, text="➡  Nueva Dirección (dibujar)",
+                                       command=self._start_direction_draw,
+                                       bg="#89B4FA", fg="#11111B", font=("Arial", 10, "bold"),
+                                       relief="flat", pady=6)
+        self.btn_new_direction.pack(fill="x", pady=4)
+
+        self.btn_del_direction = tk.Button(self.subpanel_directions, text="🗑  Eliminar dirección seleccionada",
+                                       command=self._delete_selected_direction,
+                                       bg="#313244", fg="#F38BA8", relief="flat", pady=4)
+        self.btn_del_direction.pack(fill="x", pady=2)
 
         tk.Frame(self.panel_step2, bg="#313244", height=1).pack(fill="x", pady=8)
         self.btn_preview = tk.Button(self.panel_step2, text="▶  Reproducir",
@@ -136,54 +161,28 @@ class ZonesMixin:
         if mode == "zones":
             self.btn_mode_zones.config(bg="#89B4FA", fg="#11111B")
             self.btn_mode_lines.config(bg="#313244", fg="#A6ADC8")
+            self.btn_mode_directions.config(bg="#313244", fg="#A6ADC8")
             self.subpanel_lines.pack_forget()
+            self.subpanel_directions.pack_forget()
             self.subpanel_zones.pack(fill="x")
-        else:
+        elif mode == "lines":
             self.btn_mode_lines.config(bg="#89B4FA", fg="#11111B")
             self.btn_mode_zones.config(bg="#313244", fg="#A6ADC8")
+            self.btn_mode_directions.config(bg="#313244", fg="#A6ADC8")
             self.subpanel_zones.pack_forget()
+            self.subpanel_directions.pack_forget()
             self.subpanel_lines.pack(fill="x")
+        else:  # directions
+            self.btn_mode_directions.config(bg="#89B4FA", fg="#11111B")
+            self.btn_mode_zones.config(bg="#313244", fg="#A6ADC8")
+            self.btn_mode_lines.config(bg="#313244", fg="#A6ADC8")
+            self.subpanel_zones.pack_forget()
+            self.subpanel_lines.pack_forget()
+            self.subpanel_directions.pack(fill="x")
         self._refresh_zones_list()
         self._redraw()
 
-    # ── Líneas ───────────────────────────────────
-    def _start_line_draw(self):
-        name = self.current_line_name.get().strip()
-        if not name:
-            messagebox.showwarning("Línea", "Escribe un nombre para la línea.")
-            return
-        if name in self.counting_lines:
-            if not messagebox.askyesno("Línea existe", f"La línea '{name}' ya existe. ¿Sobreescribir?"):
-                return
-            del self.counting_lines[name]
-        self.line_drawing = True
-        self.line_start = None
-        self.canvas.config(cursor="crosshair")
-        self.status_var.set(f"Dibujando línea '{name}' — clic para punto inicio, segundo clic para punto final")
-
-    def _finish_line(self, ix, iy):
-        name = self.current_line_name.get().strip()
-        self.counting_lines[name] = [list(self.line_start), [ix, iy]]
-        self.line_drawing = False
-        self.line_start = None
-        self._refresh_zones_list()
-        self.status_var.set(f"Línea '{name}' guardada ({len(self.counting_lines)} en total)")
-        n = len(self.counting_lines) + 1
-        while f"Línea {n}" in self.counting_lines:
-            n += 1
-        self.current_line_name.set(f"Línea {n}")
-        self._redraw()
-
-    def _delete_selected_line(self):
-        sel = self.zones_listbox.curselection()
-        if not sel:
-            messagebox.showinfo("Eliminar", "Selecciona una línea de la lista.")
-            return
-        name = list(self.counting_lines.keys())[sel[0]]
-        if messagebox.askyesno("Eliminar", f"¿Eliminar línea '{name}'?"):
-            del self.counting_lines[name]
-            self._refresh_zones_list()
-            self._redraw()
+    # Logica de Lineas y Direcciones extraida a step2_lines.py y step2_directions.py
 
     # ── Zonas ────────────────────────────────────
     def _start_zone_draw(self):
@@ -225,22 +224,30 @@ class ZonesMixin:
 
     def _refresh_zones_list(self):
         self.zones_listbox.delete(0, "end")
-        if self.counting_mode.get() == "lines":
+        mode = self.counting_mode.get()
+        if mode == "lines":
             for name in self.counting_lines:
                 self.zones_listbox.insert("end", f"  📏 {name}")
+        elif mode == "directions":
+            for name in self.directions:
+                self.zones_listbox.insert("end", f"  ➡ {name}")
         else:
             for name in self.zones:
                 self.zones_listbox.insert("end", f"  {name}  ({len(self.zones[name])} pts)")
 
     def _on_zone_select(self, event):
         sel = self.zones_listbox.curselection()
-        if sel:
-            if self.counting_mode.get() == "lines":
-                keys = list(self.counting_lines.keys())
-            else:
-                keys = list(self.zones.keys())
-            if sel[0] < len(keys):
-                self.selected_zone.set(keys[sel[0]])
+        if not sel:
+            return
+        mode = self.counting_mode.get()
+        if mode == "lines":
+            keys = list(self.counting_lines.keys())
+        elif mode == "directions":
+            keys = list(self.directions.keys())
+        else:
+            keys = list(self.zones.keys())
+        if sel[0] < len(keys):
+            self.selected_zone.set(keys[sel[0]])
 
     def _delete_selected_zone(self):
         name = self.selected_zone.get()
@@ -300,102 +307,7 @@ class ZonesMixin:
         self.display_frame_zones = base
         self._redraw()
 
-    # ── Preview ──────────────────────────────────
-    def _toggle_zone_preview(self):
-        if self._preview_playing:
-            self._stop_zone_preview()
-        else:
-            self._start_zone_preview()
-
-    def _start_zone_preview(self):
-        if self.zone_drawing:
-            self.status_var.set("⚠ Termina de dibujar la zona actual antes de reproducir.")
-            return
-        self._preview_playing = True
-        self._preview_frame_idx = self.current_frame_idx
-        self._preview_cap = cv2.VideoCapture(self.video_path)
-        self._preview_cap.set(cv2.CAP_PROP_POS_FRAMES, self._preview_frame_idx)
-        self.btn_preview.config(text="⏸  Pausar", bg="#F38BA8", fg="#11111B")
-        self.status_var.set("▶ Reproduciendo con zonas — ⏸ para pausar")
-        self._zone_preview_tick()
-
-    def _stop_zone_preview(self):
-        if not self._preview_playing and self._preview_job is None:
-            return
-        self._preview_playing = False
-        if self._preview_job is not None:
-            self.after_cancel(self._preview_job)
-            self._preview_job = None
-        if self._preview_cap is not None:
-            self._preview_cap.release()
-            self._preview_cap = None
-        if hasattr(self, "btn_preview") and self.btn_preview:
-            self.btn_preview.config(text="▶  Reproducir zonas", bg="#F9E2AF", fg="#11111B")
-        self._redraw_zones()
-
-    def _zone_preview_tick(self):
-        if not self._preview_playing or self._preview_cap is None:
-            return
-        SKIP = 15 if self._preview_show_detections else 5
-        for _ in range(SKIP - 1):
-            self._preview_cap.grab()
-        ret, frame = self._preview_cap.read()
-        self._preview_frame_idx += SKIP
-
-        if not ret or self._preview_frame_idx >= self.total_frames:
-            self._preview_frame_idx = 0
-            self._preview_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            self._preview_job = self.after(80, self._zone_preview_tick)
-            return
-
-        base = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-        if self._preview_show_detections and self.model is not None:
-            results = self.model(
-                frame, conf=self.conf_threshold.get(), verbose=False,
-                classes=[2, 3, 5, 7], imgsz=self.infer_imgsz.get())
-            for r in results:
-                for box in r.boxes:
-                    x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-                    if self._is_in_exclusion(cx, cy):
-                        continue
-                    lbl = f"{PREVIEW_VEH_NAMES.get(int(box.cls[0]), '?')} {float(box.conf[0]):.2f}"
-                    cv2.rectangle(base, (x1, y1), (x2, y2), (255, 200, 50), 2)
-                    cv2.putText(base, lbl, (x1, max(12, y1 - 4)),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 200, 50), 1, cv2.LINE_AA)
-
-        overlay = base.copy()
-        zone_meta = []
-        for idx, (name, pts) in enumerate(self.zones.items()):
-            color = ZONE_COLORS_RGB[idx % len(ZONE_COLORS_RGB)]
-            np_pts = np.array(pts, dtype=np.int32)
-            cv2.fillPoly(overlay, [np_pts], color)
-            zone_meta.append((name, np_pts, color))
-        base = cv2.addWeighted(base, 0.75, overlay, 0.25, 0)
-        for name, np_pts, color in zone_meta:
-            cv2.polylines(base, [np_pts], True, color, 2)
-            cx = int(np.mean(np_pts[:, 0]))
-            cy = int(np.mean(np_pts[:, 1]))
-            cv2.putText(base, name, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-
-        self.display_frame_zones = base
-        self._redraw()
-        det_tag = "  🔍 YOLO" if self._preview_show_detections else ""
-        self.status_var.set(f"▶{det_tag}  Frame {self._preview_frame_idx}/{self.total_frames}  |  ⏸ para pausar")
-        self._preview_job = self.after(80, self._zone_preview_tick)
-
-    def _toggle_yolo_preview(self):
-        if self.model is None:
-            self.status_var.set("⚠ Modelo YOLO no cargado — completa el Paso 1 primero.")
-            return
-        self._preview_show_detections = not self._preview_show_detections
-        if self._preview_show_detections:
-            self.btn_det_toggle.config(
-                text="🔍  Detecciones YOLO: ON  ⚠ más lento", fg="#CBA6F7")
-        else:
-            self.btn_det_toggle.config(
-                text="🔍  Detecciones YOLO: OFF", fg="#6C7086")
+    # Preview logic extraida a setup_panels/step2_preview.py (PreviewMixin)
 
     def _validate_zones(self):
         """Valida zonas/lineas antes de continuar. Retorna (ok, mensaje)."""
@@ -434,7 +346,6 @@ class ZonesMixin:
             for name, pts in self.counting_lines.items():
                 if len(pts) < 2:
                     return False, f"La linea '{name}' no tiene 2 puntos definidos."
-                # Verificar que la linea tenga longitud minima
                 p1, p2 = pts[0], pts[1]
                 length = math.hypot(p2[0] - p1[0], p2[1] - p1[1])
                 if length < 10:
@@ -443,6 +354,13 @@ class ZonesMixin:
                         "Dibuja una linea mas larga."
                     )
 
+        elif mode == "directions":
+            if not self.directions:
+                return False, "No hay direcciones definidas. Dibuja al menos un vector de direccion."
+            for name, pts in self.directions.items():
+                if len(pts) < 2:
+                    return False, f"La direccion '{name}' no tiene 2 puntos definidos."
+
         return True, ""
 
     def _confirm_zones(self):
@@ -450,7 +368,13 @@ class ZonesMixin:
         if not ok:
             messagebox.showwarning("Validacion", msg)
             return
-        n = len(self.zones) if self.counting_mode.get() == "zones" else len(self.counting_lines)
+        mode = self.counting_mode.get()
+        if mode == "zones":
+            n = len(self.zones)
+        elif mode == "lines":
+            n = len(self.counting_lines)
+        else:
+            n = len(self.directions)
         self.status_var.set(f"{n} elemento(s) confirmado(s) — pasando a Paso 3")
         self.after(300, lambda: self._activate_step(3))
 
@@ -466,6 +390,15 @@ class ZonesMixin:
                 self._redraw()
             else:
                 self._finish_line(ix, iy)
+            return
+
+        if self.direction_drawing:
+            if self.direction_start is None:
+                self.direction_start = (ix, iy)
+                self.status_var.set("Clic en el segundo punto de la dirección")
+                self._redraw()
+            else:
+                self._finish_direction(ix, iy)
             return
 
         if self.zone_drawing:

@@ -121,13 +121,34 @@ def export_benchmark(benchmarks_dir, *, video_path, config_path, use_sahi,
     """Guarda metricas de rendimiento."""
     os.makedirs(benchmarks_dir, exist_ok=True)
     path = os.path.join(benchmarks_dir, "benchmark_results.txt")
+    
+    # Calcular promedios de stages
+    stage_sums = {stage: 0.0 for stage in ["detection", "tracking", "counting", "visualization", "writing"]}
+    count = len(benchmark_data)
+    for d in benchmark_data:
+        stages = d.get("stages", {})
+        for stage, val in stages.items():
+            if stage in stage_sums:
+                stage_sums[stage] += val
+    
+    stage_avgs = {stage: total / count if count > 0 else 0 for stage, total in stage_sums.items()}
+    
     with open(path, "w", encoding="utf-8") as f:
         f.write("Car Counter Benchmark\n" + "=" * 50 + "\n")
         f.write(f"Video: {video_path}\nConfig: {config_path}\nSAHI: {use_sahi}\n")
         f.write(f"Tiempo total: {format_time(total_time)}\nFPS promedio: {avg_fps:.2f}\n")
-        f.write(f"Rutas totales: {sum(routes_matrix.values())}\n\nRutas:\n")
-        for route, count in sorted(routes_matrix.items(), key=lambda x: -x[1]):
-            f.write(f"  {route}: {count}\n")
+        f.write(f"Rutas totales: {sum(routes_matrix.values())}\n\n")
+        
+        f.write("FPS por etapa (promedio por frame):\n")
+        for stage, avg_sec in stage_avgs.items():
+            fps_stage = 1.0 / avg_sec if avg_sec > 0 else 0
+            pct = (avg_sec / (total_time / count)) * 100 if count > 0 else 0
+            f.write(f"  {stage:<15} {avg_sec*1000:>8.2f} ms  ({fps_stage:>6.1f} fps)  ({pct:>5.1f}%)\n")
+        
+        f.write(f"\nRutas:\n")
+        for route, count_route in sorted(routes_matrix.items(), key=lambda x: -x[1]):
+            f.write(f"  {route}: {count_route}\n")
+        
         f.write(f"\n{'Frame':<10}{'Elapsed':<12}{'FPS':<8}{'Det':<8}{'Tracks':<8}{'Routes':<8}\n")
         f.write("-" * 50 + "\n")
         for d in benchmark_data:
