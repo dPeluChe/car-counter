@@ -125,7 +125,8 @@ son lentos con modelos `.pt`. ONNX puede dar 2-3x speedup en CPU. TensorRT es so
 - [ ] Script `scripts/export_model.py --model models/yolo/yolov11l.pt --format onnx`
 - [ ] `main.py` acepta modelos `.onnx` sin cambios al CLI (ya detecta por extension)
 - [ ] Verificar que `carcounter/detection.py` funciona con modelo ONNX cargado via YOLO wrapper
-- [ ] Benchmark comparativo documentado: `.pt` vs `.onnx` FPS en `glorieta_fast.MP4`
+- [ ] Benchmark comparativo documentado: `.pt` vs `.onnx` (FP32) vs `.onnx` (FP16) FPS en `glorieta_fast.MP4`
+- [ ] Flag `--half` para exportar en FP16 (inspirado en ALICE — da ~2x speedup en GPU sin perdida perceptible)
 - [ ] TensorRT: solo si hay GPU CUDA disponible, documentar como opcional
 - [ ] `paths.py` no necesita cambios (el usuario pasa `--model` con la ruta)
 
@@ -218,27 +219,40 @@ permite responder esa pregunta con numeros.
 
 ### Flujo de validacion propuesto
 
-1. Extraer ~50-100 frames de `glorieta_fast.MP4` (cada N segundos)
-2. Anotar manualmente cada vehiculo con LabelMe + SAM3
-3. Correr el pipeline sobre esos mismos frames
-4. Comparar detecciones del pipeline vs anotaciones humanas
-5. Calcular precision / recall / counting accuracy
+1. **Extraer** ~200 frames candidatos de `glorieta_fast.MP4` (cada N segundos)
+2. **Dedup perceptual** (inspirado en ALICE): descartar frames casi identicos con DCT 64-bit hash
+   - De 200 candidatos, quedan ~50-80 frames realmente diferentes
+3. **Pre-labeling con teacher model** (inspirado en ALICE): correr YOLO-large sobre los frames
+   y generar anotaciones LabelMe iniciales
+4. **Anotacion manual con LabelMe + SAM3**: el humano solo corrige los errores del teacher
+   (3-5x mas rapido que anotar desde cero)
+5. **Correr el pipeline** sobre esos mismos frames
+6. **Comparar** detecciones del pipeline vs anotaciones humanas (IoU matching)
+7. **Calcular** precision / recall / F1 / counting accuracy por clase
 
 ### Criterios de aceptacion
 
-- [ ] Script `scripts/extract_validation_frames.py` que saca N frames equidistantes del video
-- [ ] Carpeta `data/validation/frames/` con los frames extraidos (gitignored)
-- [ ] Carpeta `data/validation/annotations/` con anotaciones LabelMe (JSON formato nativo)
-- [ ] Script `scripts/evaluate_pipeline.py` que:
-  - Carga anotaciones LabelMe
+- [ ] Script `scripts/extract_validation_frames.py`:
+  - Saca N frames candidatos del video (ej. N=200)
+  - Aplica dedup con perceptual hashing DCT 64-bit (referencia: ALICE — github.com/simoncirstoiu/alice)
+  - Guarda solo frames unicos en `data/validation/frames/`
+- [ ] Script `scripts/pre_label_frames.py`:
+  - Corre YOLO-large sobre los frames extraidos
+  - Exporta anotaciones en formato LabelMe JSON (shapes + labels)
+  - Guarda en `data/validation/annotations/` para edicion humana
+- [ ] Carpeta `data/validation/` gitignored
+- [ ] Script `scripts/evaluate_pipeline.py`:
+  - Carga anotaciones LabelMe (post-correccion humana)
   - Corre el pipeline sobre los mismos frames
+  - Matching por IoU entre detecciones y ground truth
   - Reporta precision, recall, F1 y counting accuracy por clase
 - [ ] Guia corta en `docs/GUIDES/validation_workflow.md` con el proceso end-to-end
 - [ ] Al menos 1 ejecucion documentada con numeros reales sobre `glorieta_fast.MP4`
 
 ### Notas
 
-- Es una herramienta **externa** — no agregar LabelMe como dependencia de Python
-- Solo el parser de anotaciones LabelMe (formato JSON) va en `scripts/evaluate_pipeline.py`
+- LabelMe es herramienta **externa** — no agregar como dependencia de Python
+- Solo el parser/exporter de anotaciones LabelMe (formato JSON) va en los scripts
 - Si el counting accuracy es >95% no hay nada que optimizar; si es <85% considerar fine-tuning
+- Perceptual hashing: `imagehash` (pip install imagehash) o implementacion propia con `cv2.dct()`
 
