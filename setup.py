@@ -26,6 +26,8 @@ from setup_panels.canvas import CanvasMixin
 from setup_panels.step0_exclusion import ExclusionMixin
 from setup_panels.step1_calibration import CalibrationMixin
 from setup_panels.step2_zones import ZonesMixin
+from setup_panels.step2_lines import LinesMixin
+from setup_panels.step2_directions import DirectionsMixin
 from setup_panels.step3_sahi import SAHIMixin
 
 # ─────────────────────────────────────────────
@@ -46,7 +48,9 @@ STEP_TITLES = [
 # ─────────────────────────────────────────────
 # Aplicación principal (compone los mixins)
 # ─────────────────────────────────────────────
-class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, ZonesMixin, SAHIMixin, tk.Tk):
+class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin,
+               ZonesMixin, LinesMixin, DirectionsMixin,
+               SAHIMixin, tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Car Counter — Configurador")
