@@ -24,6 +24,7 @@ import cv2
 
 from carcounter import api as carcounter_api
 from carcounter import db
+from carcounter.constants import resolve_vehicle_classes
 from carcounter.device import detect_device
 from carcounter.drawing import DensityHeatmap, format_time
 from carcounter.logging_config import get_logger, setup_logging
@@ -123,6 +124,8 @@ def main():
 
     # ── Estado del loop ────────────────────────────────────
     profiler = Profiler()
+    vehicle_class_ids, class_names = resolve_vehicle_classes(model_yolo)
+    log.info("Clases de vehiculo: %s", [class_names[i] for i in vehicle_class_ids])
     detect_state = {
         "profiler": profiler,
         "fn_kwargs": dict(
@@ -135,6 +138,7 @@ def main():
             sahi_slice_w=cfg["sahi_slice_w"], sahi_slice_h=cfg["sahi_slice_h"],
             sahi_overlap=cfg["sahi_overlap"], sahi_nms_threshold=cfg["sahi_nms"],
             device=device, detector_backend=detector_backend, rfdetr_model=rfdetr_model,
+            vehicle_class_ids=vehicle_class_ids, class_names=class_names,
         ),
         "consecutive_errors": 0,
     }

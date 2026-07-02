@@ -21,7 +21,24 @@ COCO_NAMES = [
     "teddy bear", "hair drier", "toothbrush",
 ]
 
-VEHICLE_CLASSES = {"car", "truck", "bus", "motorbike"}
-VEHICLE_CLASS_IDS = [2, 3, 5, 7]  # car, motorbike, bus, truck
+# Nombres de vehiculo en COCO ("motorbike") y en datasets aereos como
+# VisDrone ("motor", "van", "motorcycle"). Superset para que el filtro por
+# nombre funcione con cualquiera de los dos modelos.
+VEHICLE_CLASSES = {"car", "truck", "bus", "motorbike", "motorcycle", "motor", "van"}
+VEHICLE_CLASS_IDS = [2, 3, 5, 7]  # car, motorbike, bus, truck (COCO por defecto)
 
 PREVIEW_VEH_NAMES = {2: "car", 3: "moto", 5: "bus", 7: "truck"}
+
+
+def resolve_vehicle_classes(model):
+    """Deriva (ids, names) de vehiculo desde el modelo cargado.
+
+    Hace el pipeline agnostico al esquema de clases: COCO (car=2, truck=7...)
+    o VisDrone (car=3, van=4, truck=5, bus=8, motor=9). Cae a COCO si el
+    modelo no expone .names.
+    """
+    names = getattr(model, "names", None)
+    if not names:
+        return VEHICLE_CLASS_IDS, COCO_NAMES
+    ids = [i for i, n in names.items() if str(n).lower() in VEHICLE_CLASSES]
+    return (ids or VEHICLE_CLASS_IDS), names

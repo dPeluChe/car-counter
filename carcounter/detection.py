@@ -24,8 +24,22 @@ def detect_and_track(frame, *, model, sahi_model, sahi_predict_fn, sort_tracker,
                      effective_conf, imgsz, conf_for,
                      geo_constraints, exclusion_np,
                      sahi_slice_w, sahi_slice_h, sahi_overlap, sahi_nms_threshold,
-                     device="cpu", detector_backend="yolo", rfdetr_model=None):
+                     device="cpu", detector_backend="yolo", rfdetr_model=None,
+                     vehicle_class_ids=None, class_names=None):
     """Ejecuta deteccion + tracking y retorna lista de (x1,y1,x2,y2,id,cls_name)."""
+
+    # Agnostico al esquema de clases: usa los ids/nombres del modelo cargado
+    # (COCO o VisDrone). Cae a COCO si no se proveen.
+    if vehicle_class_ids is None:
+        vehicle_class_ids = VEHICLE_CLASS_IDS
+    if class_names is None:
+        class_names = COCO_NAMES
+
+    def _name_of(cls_id):
+        try:
+            return class_names[cls_id]
+        except (KeyError, IndexError):
+            return ""
 
     detections = np.empty((0, 5))
     det_classes = []
@@ -79,13 +93,13 @@ def detect_and_track(frame, *, model, sahi_model, sahi_predict_fn, sort_tracker,
     elif tracker_backend in ("sort", "ocsort"):
         # -- YOLO + SORT/OC-SORT path --
         results = model(frame, conf=effective_conf, verbose=False,
-                        classes=VEHICLE_CLASS_IDS, imgsz=imgsz, device=device)
+                        classes=vehicle_class_ids, imgsz=imgsz, device=device)
         det_list = []
         for r in results:
             for box in r.boxes:
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
                 cls_id = int(box.cls[0])
-                cls_name = COCO_NAMES[cls_id] if cls_id < len(COCO_NAMES) else ""
+                cls_name = _name_of(cls_id)
                 conf_val = float(box.conf[0])
                 if not _filter_box(cls_name, conf_val, x1, y1, x2, y2, conf_for, geo_constraints, exclusion_np):
                     continue
@@ -100,7 +114,7 @@ def detect_and_track(frame, *, model, sahi_model, sahi_predict_fn, sort_tracker,
         track_results = model.track(
             frame, conf=effective_conf, imgsz=imgsz,
             tracker=tracker_yaml, persist=True, verbose=False,
-            classes=VEHICLE_CLASS_IDS, device=device,
+            classes=vehicle_class_ids, device=device,
         )
         if track_results and track_results[0].boxes is not None:
             for box in track_results[0].boxes:
@@ -109,7 +123,7 @@ def detect_and_track(frame, *, model, sahi_model, sahi_predict_fn, sort_tracker,
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
                 tid = int(box.id[0])
                 cls_id = int(box.cls[0])
-                cls_name = COCO_NAMES[cls_id] if cls_id < len(COCO_NAMES) else "car"
+                cls_name = _name_of(cls_id) or "car"
                 conf_val = float(box.conf[0])
                 if not _filter_box(cls_name, conf_val, x1, y1, x2, y2, conf_for, geo_constraints, exclusion_np):
                     continue
