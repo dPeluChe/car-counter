@@ -190,8 +190,10 @@ class CanvasMixin:
             flat = [coord for pt in screen_pts for coord in pt]
             if len(flat) >= 4:
                 is_sel = (name == selected)
-                self.canvas.create_polygon(flat, outline=color,
-                                            fill=color + ("88" if is_sel else "44"),
+                # Tkinter no soporta alpha en el color (#RRGGBBAA); la
+                # transparencia se simula con stipple, como en _draw_excl_ref.
+                self.canvas.create_polygon(flat, outline=color, fill=color,
+                                            stipple="gray50" if is_sel else "gray25",
                                             width=4 if is_sel else 2)
                 cx = sum(p[0] for p in screen_pts) / len(screen_pts)
                 cy = sum(p[1] for p in screen_pts) / len(screen_pts)
