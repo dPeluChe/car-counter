@@ -114,6 +114,18 @@ pip install fastapi uvicorn httpx
 pip install libsql-experimental
 ```
 
+## Atajos con make
+
+```bash
+make help              # lista todos los comandos
+make setup             # dibuja zonas (GUI)      -> config/config.json
+make run               # pipeline en clip corto  -> output/results.json
+make validate-routes   # compara conteo vs humano por ruta
+make test              # suite de tests
+```
+
+Ver [docs/GUIDES/route_validation.md](docs/GUIDES/route_validation.md) para validar el conteo A->B.
+
 ## Flujo basico
 
 1. **Configurar** (una vez por video):

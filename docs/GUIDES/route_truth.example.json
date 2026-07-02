@@ -1,0 +1,6 @@
+{
+  "Norte -> Este": 40,
+  "Norte -> Sur": 12,
+  "Sur -> Oeste": 18,
+  "Este -> Oeste": 7
+}
