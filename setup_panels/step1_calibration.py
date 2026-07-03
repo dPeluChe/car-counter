@@ -267,11 +267,20 @@ class CalibrationMixin:
     # viven ahora en setup_panels/calib_tests.py (CalibTestsMixin).
 
     def _confirm_calib(self):
+        # La calibracion (filtro min/max area) es opcional: con tomas aereas de
+        # autos muy chicos el test YOLO puede no validar. Permitir continuar sin
+        # filtro de area (permisivo) en vez de bloquear.
         if not self.calib_test_passed:
-            messagebox.showwarning(
-                "Calibración",
-                "Primero ejecuta [Probar YOLO] y confirma que el recuadro sí coincide con un vehículo detectado.")
-            return
+            if not messagebox.askyesno(
+                "Calibración opcional",
+                "No validaste ningún vehículo con [Probar YOLO].\n\n"
+                "¿Continuar sin filtro de área? (recomendado para tomas aéreas "
+                "de autos muy pequeños; el pipeline detectará por confianza)."):
+                return
+            self.min_area.set(0)
+            self.max_area.set(999999)
+            self.lbl_min_area.config(text="0 px²")
+            self.lbl_max_area.config(text="999999 px²")
         self.calib_confirmed = True
         self.lbl_calib_status.config(text="✅  Calibración confirmada", fg="#A6E3A1")
         self.status_var.set("Calibración confirmada — pasando a Paso 2")
