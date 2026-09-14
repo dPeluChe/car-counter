@@ -13,16 +13,15 @@ Genera: config.json con zonas, calibracion y parametros SAHI/tracker.
 """
 
 import tkinter as tk
-from tkinter import messagebox, filedialog
-import cv2
+from tkinter import messagebox
 import os
-from ultralytics import YOLO
 
 from carcounter.paths import paths
-from carcounter.config_io import load_config, parse_exclusion_zones, parse_zones, parse_lines, parse_settings
 from carcounter.autosave import AutoSaveManager, has_checkpoint, load_checkpoint, get_checkpoint_age
 
 from setup_panels.canvas import CanvasMixin
+from setup_panels.video_model import VideoModelMixin
+from setup_panels.config_loader import ConfigLoaderMixin
 from setup_panels.step0_exclusion import ExclusionMixin
 from setup_panels.step1_calibration import CalibrationMixin
 from setup_panels.calib_tests import CalibTestsMixin
@@ -30,6 +29,7 @@ from setup_panels.step2_zones import ZonesMixin
 from setup_panels.step2_lines import LinesMixin
 from setup_panels.step2_directions import DirectionsMixin
 from setup_panels.step2_preview import PreviewMixin
+from setup_panels.step2_validation import ZoneValidationMixin
 from setup_panels.step3_sahi import SAHIMixin
 from setup_panels.state import init_state
 
@@ -51,9 +51,9 @@ STEP_TITLES = [
 # ─────────────────────────────────────────────
 # Aplicación principal (compone los mixins)
 # ─────────────────────────────────────────────
-class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, CalibTestsMixin,
-               ZonesMixin, LinesMixin, DirectionsMixin, PreviewMixin,
-               SAHIMixin, tk.Tk):
+class SetupApp(CanvasMixin, VideoModelMixin, ConfigLoaderMixin, ExclusionMixin,
+               CalibrationMixin, CalibTestsMixin, ZonesMixin, LinesMixin, DirectionsMixin,
+               PreviewMixin, ZoneValidationMixin, SAHIMixin, tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Car Counter — Configurador")
@@ -61,6 +61,8 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, CalibTestsMixin,
         self.configure(bg="#1E1E2E")
         self.resizable(True, True)
 
+        # carcounter/app.py sobreescribe DEFAULT_VIDEO antes de instanciar; se lee aqui, no al importar
+        self._default_video = DEFAULT_VIDEO
         # Inicializacion de estado (variables de Tk por dominio) — ver setup_panels/state.py
         init_state(self, video_path=DEFAULT_VIDEO, model_path=MODEL_PATH,
                    output_config=OUTPUT_CONFIG)
@@ -162,184 +164,6 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, CalibTestsMixin,
         tk.Label(parent, text=text, bg="#181825", fg=color,
                  font=font, justify="left", anchor="w",
                  wraplength=270).pack(fill="x", pady=2)
-
-    # ──────────────────────────────────────────────
-    # Video y modelo
-    # ──────────────────────────────────────────────
-    def _load_video_and_model(self):
-        self.status_var.set("Cargando modelo YOLO…")
-        self.update()
-        try:
-            self.model = YOLO(self._model_path)
-            self.status_var.set(f"✅ Modelo cargado: {self._model_path}")
-        except Exception as e:
-            self.status_var.set(f"❌ Error cargando modelo: {e}")
-            messagebox.showerror("Error", f"No se pudo cargar el modelo YOLO:\n{e}")
-        self._load_frame()
-
-    def _load_frame(self):
-        self._load_frame_at(0)
-
-    def _ensure_nav_cap(self):
-        """Abre o reutiliza el VideoCapture para navegacion."""
-        if self._nav_cap is None or not self._nav_cap.isOpened():
-            self._nav_cap = cv2.VideoCapture(self.video_path)
-        return self._nav_cap
-
-    def _release_nav_cap(self):
-        if self._nav_cap is not None:
-            self._nav_cap.release()
-            self._nav_cap = None
-
-    def _load_frame_at(self, frame_idx):
-        cap = self._ensure_nav_cap()
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        if total_frames > 0:
-            frame_idx = max(0, min(total_frames - 1, frame_idx))
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-        ret, frame = cap.read()
-        if not ret:
-            self._release_nav_cap()
-            messagebox.showerror("Error", f"No se pudo leer el video:\n{self.video_path}")
-            return
-        self.frame_orig = frame.copy()
-        self.frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        self.img_h, self.img_w = frame.shape[:2]
-        self.total_frames = max(1, total_frames)
-        self.current_frame_idx = frame_idx
-        self.zoom = 1.0
-        self.pan_x = self.pan_y = 0
-        self.lbl_video.config(text=f"Video: {os.path.basename(self.video_path)}  ({self.img_w}×{self.img_h})")
-        self.lbl_frame_info.config(text=f"Frame {self.current_frame_idx + 1}/{self.total_frames}")
-        self.display_frame_zones = self.frame_rgb.copy()
-        self._redraw()
-        self.status_var.set(f"Video cargado: {self.img_w}x{self.img_h}")
-
-    def _step_frame(self, delta):
-        self._load_frame_at(self.current_frame_idx + delta)
-        self._reset_calib()
-        self.status_var.set(
-            f"Frame {self.current_frame_idx + 1}/{self.total_frames} cargado. "
-            "Repite la calibración en este frame.")
-
-    def _choose_video(self):
-        path = filedialog.askopenfilename(
-            title="Seleccionar video",
-            filetypes=[("Video", "*.mp4 *.avi *.mov *.mkv *.MOV"), ("Todos", "*.*")])
-        if path:
-            self._release_nav_cap()
-            self.video_path = path
-            self._load_frame()
-            self._clear_vehicle_samples()
-            self._reset_calib()
-
-    # ──────────────────────────────────────────────
-    # Model Manager Dialog
-    # ──────────────────────────────────────────────
-    def _show_model_manager(self):
-        from carcounter.ui_models import show_model_dialog
-        show_model_dialog(self, on_select=self._on_model_selected)
-
-    def _on_model_selected(self, name, path):
-        """Callback cuando se selecciona un modelo en el dialogo."""
-        if path:
-            model = YOLO(path)
-            self._model_path = path
-            self.model = model
-            self.sahi_model = None
-            self.calib_test_passed = self.calib_confirmed = False
-            self.status_var.set(f"Modelo cambiado a {name}")
-
-    # ──────────────────────────────────────────────
-    # Config load
-    # ──────────────────────────────────────────────
-    def _load_from_config(self, path):
-        try:
-            cfg = load_config(path)
-        except Exception as e:
-            messagebox.showerror("Error cargando config", str(e))
-            return
-
-        cfg_model = cfg.get("model_path")
-        if cfg_model and cfg_model != self._model_path:
-            try:
-                self._on_model_selected(os.path.basename(cfg_model), cfg_model)
-            except Exception as error:
-                messagebox.showerror("Modelo de configuración", str(error))
-                return
-        self.sahi_enabled.set(cfg.get("sahi", {}).get("enabled", True))
-        self.vehicle_samples = cfg.get("settings", {}).get("vehicle_samples", [])
-        excl = parse_exclusion_zones(cfg)
-        if excl:
-            self.exclusion_zones = excl
-            self._invalidate_excl_cache()
-            self._refresh_excl_list()
-            n = len(self.exclusion_zones) + 1
-            while f"Exclusion {n}" in self.exclusion_zones:
-                n += 1
-            self.excl_zone_name.set(f"Exclusion {n}")
-
-        cfg_video = cfg.get("video_path", "")
-        if cfg_video and cfg_video != self.video_path \
-                and os.path.isfile(cfg_video) and self.video_path == DEFAULT_VIDEO:
-            self._release_nav_cap()
-            self.video_path = cfg_video
-            self._load_frame()
-
-        loaded_mode = cfg.get("counting_mode", "zones")
-        self.counting_mode.set(loaded_mode)
-        self._set_counting_mode(loaded_mode)
-
-        zones = parse_zones(cfg)
-        if zones:
-            self.zones = zones
-        lines = parse_lines(cfg)
-        if lines:
-            self.counting_lines = lines
-
-        self._refresh_zones_list()
-        self._redraw_zones()
-
-        self._loaded_config = cfg
-
-        # Aplicar settings/sahi/tracker al estado Tk
-        p = parse_settings(cfg)
-        sc = p["sample_constraints"]
-        if sc:
-            self._loaded_sample_constraints = sc
-            self.lbl_samples_info.config(
-                text=f"Muestras: cargadas  w[{sc['min_width']}–{sc['max_width']}] h[{sc['min_height']}–{sc['max_height']}]")
-        # Mapeo campo → (tk_var, label_widget_opcional)
-        _set = lambda var, val: var.set(val) if val is not None else None
-        _set(self.min_area, p["min_area"])
-        _set(self.max_area, p["max_area"])
-        _set(self.conf_threshold, p["conf_threshold"])
-        _set(self.infer_imgsz, p["imgsz"])
-        _set(self.slice_w, p["slice_width"])
-        _set(self.slice_h, p["slice_height"])
-        _set(self.overlap, p["overlap_ratio"])
-        _set(self.nms_threshold, p["nms_threshold"])
-        _set(self.max_age, p["max_age"])
-        _set(self.min_hits, p["min_hits"])
-        _set(self.iou_thresh, p["iou_threshold"])
-        for key in ("track_low_thresh", "track_high_thresh", "new_track_thresh", "track_buffer", "fuse_score"):
-            _set(getattr(self, key), cfg.get("tracker", {}).get(key))
-        if p["min_area"] is not None:
-            self.lbl_min_area.config(text=f"{self.min_area.get()} px²")
-        if p["max_area"] is not None:
-            self.lbl_max_area.config(text=f"{self.max_area.get()} px²")
-        cp = p["conf_per_class"]
-        if cp:
-            _set(self.conf_car, cp.get("car"))
-            _set(self.conf_motorbike, cp.get("motorbike", cp.get("motor", cp.get("motorcycle"))))
-            _set(self.conf_bus, cp.get("bus"))
-            _set(self.conf_truck, cp.get("truck"))
-            _set(self.conf_van, cp.get("van"))
-            self._conf_per_class_modified = True
-
-        n = len(self.zones)
-        self.status_var.set(
-            f"✅ Config cargada: {n} zona{'s' if n != 1 else ''} — {os.path.basename(path)}")
 
     # ──────────────────────────────────────────────
     # Navegación entre pasos
