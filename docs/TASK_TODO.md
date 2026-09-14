@@ -18,7 +18,7 @@
 | Operación opcional | TODO-034 | Cron activado y verificado desde entorno permitido |
 | Opcional | TODO-036 | Replay y control de cámara desde el wizard |
 
-No hay porcentaje aprobado de precisión todavía. El revisor define con el responsable de la presentación el alcance, las clases y los umbrales antes de seleccionar parámetros.
+Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNTING_SCOPE.md](GUIDES/COUNTING_SCOPE.md). La aceptación se confirma con la primera referencia humana.
 
 ## TODO-028: Referencias humanas de detección y rutas
 
@@ -32,8 +32,9 @@ No hay porcentaje aprobado de precisión todavía. El revisor define con el resp
 - [ ] Separar tramos usados para ajustar parámetros de los usados para aceptar el cambio; evitar usar imágenes casi iguales como validación independiente.
 - [ ] Corregir todas las cajas/clases del alcance en LabelMe u otro editor compatible; añadir también autos omitidos. Registrar revisor, fecha y alcance antes de marcar `flags.reviewed=true`.
 - [ ] Contar eventos humanos independientemente del overlay: frame, ruta/sentido, clase y casos incompletos; no copiar eventos predichos a la referencia.
-- [ ] Acordar clases incluidas en el aforo (por ejemplo autos, buses, motos y vans), tratamiento de ambiguos y márgenes al inicio/final.
-- [ ] Acordar por escrito los umbrales de aceptación de precisión, recall y F1 por clase/ruta y una tolerancia temporal justificada por FPS y confirmación.
+- [ ] Acordar márgenes al inicio/final del tramo y el trato de vehículos que ya están dentro del encuadre.
+- [ ] Contar eventos humanos con grupos EPS en dos pasadas o por dos personas y reconciliar diferencias antes de `reviewed=true`.
+- [ ] Confirmar o ajustar con esa referencia la [propuesta de aceptación](GUIDES/COUNTING_SCOPE.md#criterio-de-aceptación-propuesta) y fijar la tolerancia temporal según FPS y confirmación.
 - [ ] Guardar ejecución de evaluación real con perfiles y reportes; no usar porcentajes de ejemplo como resultado.
 
 **Archivos relevantes:** `scripts/extract_validation_frames.py`, `scripts/pre_label_frames.py`, `scripts/evaluate_pipeline.py`, `carcounter/validation.py`, `scripts/validate_routes.py`. **Entregable:** imágenes, anotaciones revisadas, manifiesto, referencia de eventos y reporte. `data/` y `output/` están ignorados por Git; acordar copia de respaldo del dataset sin subir videos ni datos por defecto.
@@ -44,7 +45,7 @@ No hay porcentaje aprobado de precisión todavía. El revisor define con el resp
 
 **Prioridad:** P0. **Depende de:** TODO-028. **Estado:** detector compartido implementado; mejora de precisión real sin acreditar.
 
-**Especificación:** separar falsos positivos del fondo, autos omitidos, cajas duplicadas y clase errónea. Revisar autos pequeños/ocluídos, vehículos estacionados y bordes de ROI. El modelo de referencia es VisDrone y no debe interpretarse con IDs de clase COCO. Las clases incluidas en aforo se acuerdan antes de excluir buses, vans o motos.
+**Especificación:** separar falsos positivos del fondo, autos omitidos, cajas duplicadas y clase errónea. Revisar autos pequeños/ocluídos, vehículos estacionados y bordes de ROI. El modelo de referencia es VisDrone y no debe interpretarse con IDs de clase COCO. Medir en especial los cruces entre grupos EPS: combi detectada como `van`, pickup como `truck`, remolques y patines sin clase ([COUNTING_SCOPE.md](GUIDES/COUNTING_SCOPE.md#donde-el-modelo-y-el-criterio-eps-no-coinciden)).
 
 **Archivos relevantes:** `carcounter/detection.py`, `carcounter/detector.py`, `carcounter/constants.py`, `carcounter/calibration.py`, `scripts/evaluate_pipeline.py`, `tests/test_detection.py`, `tests/test_pipeline_profile.py`.
 
@@ -53,6 +54,8 @@ No hay porcentaje aprobado de precisión todavía. El revisor define con el resp
 - [ ] Medir precisión, recall y F1 de `car` y de las demás clases del alcance, separando localización de clasificación y mostrando TP/FP/FN.
 - [ ] Probar autos próximos y límites de tiles antes de aceptar NMS más agresivo; documentar si elimina autos distintos.
 - [ ] Probar consenso de clase contra etiquetas humanas. La clase se congela tras el primer conteo; documentar errores persistentes y decidir si hace falta otro criterio.
+- [ ] Hacer configurable por perfil el mapeo clase → grupo (`settings.class_groups`, con `CLASS_GROUPS` como valor por defecto).
+- [ ] En la referencia humana anotar también el tipo visible (auto, van, combi, pickup, remolque) y, con la matriz de confusión, decidir con datos a qué grupo van `van` y `truck`.
 - [ ] Evaluar pesos alternativos o entrenamiento solo cuando los errores medidos justifiquen el costo, con tramos reservados de validación.
 
 **Entregable:** perfil candidato, matriz de experimentos, imágenes de errores y reporte contra referencia revisada. Qué cambios exigen otra caché: [DETECTION_TUNING.md](GUIDES/DETECTION_TUNING.md#grabar-una-vez-y-repetir-sin-inferencia).
@@ -92,6 +95,8 @@ No hay porcentaje aprobado de precisión todavía. El revisor define con el resp
 **Archivos relevantes:** `carcounter/counting.py`, `carcounter/tracking.py`, `carcounter/export.py`, `scripts/validate_routes.py`, `tests/test_route_validation.py`, `tests/test_counting_regressions.py`.
 
 - [ ] Revisar pérdidas de ID en oclusiones, cambios de ID cerca de líneas/zonas y IDs duplicados del mismo auto.
+- [ ] Reporte de vehículos incompletos: tracks que confirmaron origen y nunca destino, contados por acceso, con recorte de imagen del primer y último frame (caja, ID, clase, frame) para revisar si falló por oclusión, imagen poco clara o geometría.
+- [ ] Marcar candidatos a cambio de ID: un track que termina y otro que empieza cerca, con clase compatible, en pocos frames; incluirlos en el mismo reporte con ambas imágenes.
 - [ ] Comparar ByteTrack y BoT-SORT sobre una caché común; variar un parámetro por experimento y registrar parámetros efectivos. `with_reid=true` no está soportado en el wrapper actual.
 - [ ] Añadir referencia de identidad física por auto para casos ambiguos; el evaluador actual solo empareja ruta/clase/tiempo, no valida identidad.
 - [ ] Distinguir con evidencia duplicación, falso positivo, clase errónea y desfase temporal; no llamar duplicado a toda predicción sin pareja.
@@ -114,13 +119,14 @@ No hay porcentaje aprobado de precisión todavía. El revisor define con el resp
 - [ ] Añadir validación de geometría que identifique zonas inalcanzables por la región de detección y destinos prematuros, con diagnóstico comprensible.
 - [ ] Reproducir A→B, paso junto a una salida sin tomarla y trayectoria incompleta con reglas documentadas.
 - [ ] Comparar eventos y matriz origen/destino contra revisión humana del mismo video y tramo.
+- [ ] Exportar la matriz origen/destino por grupo EPS también en CSV (hoy está en `routes_by_group` del JSON).
 - [ ] Entregar video, JSON con eventos, CSV de tracks/OD y reporte de rutas revisadas, sin presentar IDs como autos.
 
 **Pruebas manuales:** PRUEBA-04 y PRUEBA-06. **Cierre:** rutas del alcance revisadas, incidentes clasificados y umbrales acordados alcanzados; no basta conservar los cruces de una sola línea.
 
 ## TODO-029: Movimiento de cámara y geometría del conteo `added: 2026-09-07`
 
-**Prioridad:** P0 cuando afecta el tramo presentado. **Estado:** monitor implementado (ver [2609](TASK_COMPLETED/2609.md)); corrección geométrica pendiente. Mediciones de deriva en [VERIFIED_STATE.md](GUIDES/VERIFIED_STATE.md).
+**Prioridad:** P0 cuando afecta el tramo presentado. **Estado:** monitor implementado (ver [2609](TASK_COMPLETED/2609.md)); corrección geométrica pendiente. Mediciones de deriva en [VERIFIED_STATE.md](GUIDES/VERIFIED_STATE.md). En el video completo, contra el frame de las 3:00: estable (5 px o menos) entre 1:30 y 9:30; 6 a 9 px dentro del tramo oficial; 7 a 19 px antes de 1:15 y 5 a 13 px después de 9:44 ([detalle](GUIDES/COUNTING_SCOPE.md#estabilidad-del-dron-en-el-video-completo)).
 
 **Especificación:** elegir un sistema de referencia único para imagen, cajas, ROI, exclusiones y zonas/líneas. Comparar estabilizar imágenes antes de inferencia frente a transformar coordenadas; documentar qué se hace en bordes sin cobertura y cómo afecta la firma de caché. No reutilizar una caché incompatible ni aplicar dos compensaciones inconsistentes. La compensación del tracker BoT-SORT no mueve las zonas de conteo.
 

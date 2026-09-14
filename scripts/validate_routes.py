@@ -26,6 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from carcounter.constants import CLASS_GROUPS, class_group
 from carcounter.validation import canonical_vehicle_label, compute_metrics, counting_accuracy
 
 
@@ -115,7 +116,14 @@ def validate(results_path, truth_path):
     }
 
 
-def _event_rows(rows, start, end):
+def _event_label(label, by_group):
+    label = canonical_vehicle_label(label)
+    if not by_group or label in CLASS_GROUPS:
+        return label
+    return class_group(label) or label
+
+
+def _event_rows(rows, start, end, by_group=False):
     if not isinstance(rows, list):
         raise ValueError("events debe ser una lista")
     normalized = []
@@ -127,11 +135,11 @@ def _event_rows(rows, start, end):
         if not start <= row["frame"] <= end:
             raise ValueError("Evento fuera del tramo declarado")
         normalized.append(dict(row, index=index, route=_normalize_key(row["route"]),
-                               **{"class": canonical_vehicle_label(row["class"])}))
+                               **{"class": _event_label(row["class"], by_group)}))
     return normalized
 
 
-def validate_events(results_path, truth_path, tolerance_frames=15):
+def validate_events(results_path, truth_path, tolerance_frames=15, by_group=False):
     if type(tolerance_frames) is not int or tolerance_frames < 0:
         raise ValueError("La tolerancia requiere un entero no negativo")
     results = json.loads(Path(results_path).read_text())
@@ -148,9 +156,9 @@ def validate_events(results_path, truth_path, tolerance_frames=15):
         raise ValueError("El tramo revisado debe estar dentro de los frames procesados")
     if results.get("run", {}).get("status") != "completed":
         raise ValueError("La ejecución no está completada")
-    all_pred = _event_rows(results.get("counting_events"), 1, processed)
+    all_pred = _event_rows(results.get("counting_events"), 1, processed, by_group)
     pred = [row for row in all_pred if start <= row["frame"] <= end]
-    reference = _event_rows(truth.get("events"), start, end)
+    reference = _event_rows(truth.get("events"), start, end, by_group)
     groups = sorted({(row["route"], row["class"]) for row in pred + reference})
     matched_pred, matched_truth, matches = set(), set(), []
     for route, cls_name in groups:
@@ -175,8 +183,9 @@ def validate_events(results_path, truth_path, tolerance_frames=15):
     metrics = compute_metrics(len(matches), len(unmatched_pred), len(unmatched_truth))
     return dict(metrics=metrics, matches=matches, unmatched_predictions=unmatched_pred,
                 missed_events=unmatched_truth, start_frame=start, end_frame=end,
-                tolerance_frames=tolerance_frames,
-                scope="Emparejamiento temporal por ruta y clase; no comprueba identidad física del vehículo")
+                tolerance_frames=tolerance_frames, by_group=by_group,
+                scope=f"Emparejamiento temporal por ruta y {'grupo' if by_group else 'clase'}; "
+                      "no comprueba identidad física del vehículo")
 
 
 def main():
@@ -191,6 +200,8 @@ def main():
                         help="sale con codigo 1 si la accuracy ponderada por ruta es menor")
     parser.add_argument("--events", action="store_true", help="Compara eventos por ruta, clase y frame")
     parser.add_argument("--tolerance-frames", type=int, default=15)
+    parser.add_argument("--by-group", action="store_true",
+                        help="Con --events empareja por grupo EPS (ligeros/pesados/dos_ruedas) en vez de clase")
     parser.add_argument("--min-f1", type=float, help="Rechaza la validación de eventos bajo este F1")
     args = parser.parse_args()
     if args.min_accuracy is not None and not 0 <= args.min_accuracy <= 1:
@@ -199,6 +210,8 @@ def main():
         parser.error("--min-f1 requiere --events y un valor entre 0 y 1")
     if args.events and args.min_accuracy is not None:
         parser.error("Con --events usa --min-f1")
+    if args.by_group and not args.events:
+        parser.error("--by-group requiere --events")
 
     if not Path(args.results).exists():
         print(f"ERROR: no existe {args.results}. Corre 'make run' primero.")
@@ -209,7 +222,8 @@ def main():
         sys.exit(1)
 
     try:
-        report = validate_events(args.results, args.truth, args.tolerance_frames) if args.events else validate(args.results, args.truth)
+        report = (validate_events(args.results, args.truth, args.tolerance_frames, args.by_group)
+                  if args.events else validate(args.results, args.truth))
     except (ValueError, TypeError, AttributeError) as e:
         parser.error(str(e))
 

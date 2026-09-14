@@ -7,7 +7,7 @@ Compara el conteo del sistema contra una referencia humana del mismo video y tra
 El JSON de `main.py` contiene `counting_events`: un registro por cruce, ruta entre zonas o dirección confirmada, con ID del evento, ID del track, clase, ruta, frame de confirmación, posición y origen/destino o línea/sentido.
 
 - Los frames empiezan en 1. Tiempo en el video: `(frame - 1) / run.source_fps`. El frame es el de confirmación, que puede ir después del contacto físico.
-- La clase es la mayoría de observaciones del track (empate: se mantiene la anterior) y se congela en el primer conteo.
+- La clase es la mayoría de observaciones del track (empate: se mantiene la anterior) y se congela en el primer conteo. Cada evento trae además su grupo EPS (`group`) y el JSON resume `routes_by_group` ([COUNTING_SCOPE.md](COUNTING_SCOPE.md)).
 - Los eventos sobreviven a la purga de tracks inactivos; los cruces de varias líneas del mismo vehículo se guardan por separado.
 - `--output-tracks-csv` conserva tracks retirados con `first_seen_frame`, `observed_frames`, `destination` y `counted_frame`. Un ID es una trayectoria del tracker: un cambio de ID parte un auto en varias. **El número de IDs no es el aforo.**
 
@@ -37,7 +37,7 @@ El JSON de `main.py` contiene `counting_events`: un registro por cruce, ruta ent
      --output "$CARCOUNTER_REVIEW_DIR/event_validation.json"
    ```
 
-Empareja uno a uno por ruta, clase y cercanía temporal, y devuelve precisión, recall, F1, predicciones sin pareja y omisiones. Dos predicciones sobre el primer auto y ninguna sobre el segundo dan un falso positivo y una omisión aunque el total cuadre. `--min-f1` fija el criterio acordado; una referencia vacía no lo aprueba.
+Empareja uno a uno por ruta, clase y cercanía temporal, y devuelve precisión, recall, F1, predicciones sin pareja y omisiones. Dos predicciones sobre el primer auto y ninguna sobre el segundo dan un falso positivo y una omisión aunque el total cuadre. `--min-f1` fija el criterio acordado; una referencia vacía no lo aprueba. Con `--by-group` empareja por grupo EPS en vez de clase: la referencia puede escribir `ligeros`, `pesados` o `dos_ruedas`, o la clase, que se convierte a su grupo.
 
 Los 15 frames son un valor inicial: ajústalo al FPS, a la separación entre autos y al criterio humano de cruce. Ampliarlo demasiado oculta errores. Una predicción sin pareja puede ser duplicado, falso positivo, clase equivocada o desfase; el evaluador **no comprueba identidad física** cuando dos autos iguales pasan juntos.
 

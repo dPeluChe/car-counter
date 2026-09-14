@@ -31,6 +31,13 @@ Punto de partida: [KICKOFF_260914.md](KICKOFF_260914.md). Todo el trabajo de sep
 3. TODO-032 / TODO-030 / TODO-031 sobre esa referencia humana.
 4. Opcionales: TODO-036 (replay y cámara en el wizard), TODO-034 (cron).
 
+## Tarde: alcance EPS
+
+- Grupos definidos con el responsable: `ligeros` (autos, vans, pickups, taxis, mototaxis), `pesados` (autobuses, combis, microbuses, camiones, remolques), `dos_ruedas` (motos, bicicletas, patines). Implementados en código y validador (`--by-group`).
+- Objetivo confirmado: matriz origen/destino por acceso y grupo, siguiendo cada vehículo hasta su salida; aplica también a calles de uno y dos sentidos.
+- Margen propuesto ±20 % con regla para conteos chicos, respaldado en [la investigación](../RESEARCH/COUNTING_ACCURACY_2026_09_14.md).
+- Hallazgo: `glorieta_test1min.mp4` es el minuto 3:00 a 4:00 de `glorieta_normal.mp4`; el 1:00 a 2:00 tiene otro encuadre. Tramo oficial pendiente de confirmar.
+
 ## Fuera del repo
 
 `env/bin/pip` apunta a la ruta anterior del proyecto; usar `env/bin/python -m pip` o recrear el entorno.
