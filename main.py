@@ -24,6 +24,7 @@ import cv2
 
 from carcounter import api as carcounter_api
 from carcounter import db
+from carcounter.app_config import AppConfig
 from carcounter.constants import resolve_vehicle_classes
 from carcounter.device import detect_device
 from carcounter.drawing import DensityHeatmap, format_time
@@ -88,6 +89,11 @@ def main():
 
     # ── Inicializacion ─────────────────────────────────────
     cfg = load_runtime_config(args)
+    config_errors = AppConfig.from_dict(cfg["raw_config"]).validate()
+    if config_errors:
+        for error in config_errors:
+            log.error("Perfil inválido: %s", error)
+        raise SystemExit(1)
     device, device_desc = detect_device(args.device)
 
     if args.max_frames is not None and args.max_frames < 1:
@@ -150,11 +156,11 @@ def main():
 
     # ── Estado del loop ────────────────────────────────────
     profiler = Profiler()
-    vehicle_class_ids, class_names = resolve_vehicle_classes(model_yolo)
-    if cache_reader is None:
-        log.info("Clases de vehiculo: %s", [class_names[i] for i in vehicle_class_ids])
-    else:
+    if cache_reader is not None:
         log.info("Replay: clases y cajas originales de la caché; inferencia desactivada")
+    elif model_yolo is not None:
+        vehicle_class_ids, class_names = resolve_vehicle_classes(model_yolo)
+        log.info("Clases de vehiculo: %s", [class_names[i] for i in vehicle_class_ids])
     from importlib.metadata import version
     from carcounter.detection_cache import file_digest
     cfg["run_metadata"] = {
@@ -162,7 +168,10 @@ def main():
         "config_snapshot": cfg["raw_config"], "model_path": cfg["model_path"],
         "effective_conf": cfg["effective_conf"], "imgsz": cfg["imgsz"],
         "detector": detector_backend, "device": device,
-        "tracker_parameters": getattr(sort_tracker, "options", cfg["tracker_cfg"]),
+        "tracker": tracker_backend, "requested_tracker": args.tracker,
+        "tracker_parameters": getattr(sort_tracker, "options", None) or {
+            key: cfg["tracker_cfg"][key] for key in ("max_age", "min_hits", "iou_threshold")
+            if key in cfg["tracker_cfg"]},
         "ultralytics_version": version("ultralytics"),
         "detection_source": "cache" if cache_reader is not None else "inference",
         "cache_path": args.record_detections or args.replay_detections,
@@ -175,15 +184,13 @@ def main():
         "profiler": profiler,
         "fn_kwargs": dict(
             model=model_yolo, sahi_model=sahi_model, sahi_predict_fn=sahi_predict_fn,
-            sort_tracker=sort_tracker, use_sahi=use_sahi, tracker_backend=tracker_backend,
-            tracker_yaml=f"{args.tracker}.yaml", effective_conf=cfg["effective_conf"],
-            imgsz=cfg["imgsz"],
+            sort_tracker=sort_tracker, use_sahi=use_sahi,
+            effective_conf=cfg["effective_conf"], imgsz=cfg["imgsz"],
             conf_for=lambda c: cfg["conf_per_class"].get(c, cfg["conf_threshold"]),
             geo_constraints=cfg["geo_constraints"], exclusion_np=exclusion_np,
             sahi_slice_w=cfg["sahi_slice_w"], sahi_slice_h=cfg["sahi_slice_h"],
             sahi_overlap=cfg["sahi_overlap"], sahi_nms_threshold=cfg["sahi_nms"],
             device=device, detector_backend=detector_backend, rfdetr_model=rfdetr_model,
-            vehicle_class_ids=vehicle_class_ids, class_names=class_names,
             inference_roi=cfg["settings"].get("inference_roi"),
         ),
         "consecutive_errors": 0,
@@ -324,6 +331,7 @@ def main():
         frames=frame_count, duration=total_time,
         vehicles=counter.total_vehicles_ever,
         routes_matrix=counter.routes_matrix, od_matrix=counter.od_matrix,
+        counting_events=counter.counting_events,
     )
 
     log.info("=" * 65)

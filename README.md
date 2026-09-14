@@ -55,11 +55,10 @@ main.py                  CLI del pipeline
 setup.py                 configurador Tk (paneles en setup_panels/)
 carcounter/
   runtime.py             inicialización, loop y export usados por main.py
-  engine.py              ProcessingEngine event-driven (pause/resume/callbacks)
   detection.py           detección + SAHI + filtros, entrega cajas al tracker
   detector.py            interfaz y backends YOLO, RF-DETR y SAHI; filtros de detección
   detection_cache.py     caché SQLite para replay
-  counting.py            máquinas de estado (zonas, líneas, direcciones) y consenso de clase
+  counting.py            máquina de zonas, eventos y consenso de clase; lines/directions en counting_modes.py
   tracking.py            wrapper de ByteTrack/BoT-SORT y clase por track; sort.py y ocsort_wrapper.py
   camera_motion.py       monitor ORB/RANSAC de deriva de cámara
   calibration.py         calibración del configurador

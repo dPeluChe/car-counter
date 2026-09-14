@@ -8,7 +8,7 @@ e implementar infer().
 from abc import ABC, abstractmethod
 import numpy as np
 from carcounter.constants import VEHICLE_CLASSES, resolve_vehicle_classes
-from carcounter.geometry import apply_nms, passes_geometry_filter, in_exclusion_zone
+from carcounter.geometry import passes_geometry_filter, in_exclusion_zone
 from carcounter.logging_config import get_logger
 
 log = get_logger("detector")
@@ -18,7 +18,8 @@ class Detector(ABC):
     """Interfaz abstracta para backends de deteccion.
 
     Subclasses deben implementar infer() que retorna detecciones crudas.
-    La logica de filtrado (clase, confianza, geometria, exclusion) es comun.
+    El filtrado comun vive en filter_detections() y el NMS post-SAHI en
+    carcounter.detection.detect_objects().
     """
 
     @abstractmethod
@@ -36,17 +37,6 @@ class Detector(ABC):
                 - conf: float
         """
         ...
-
-    def detect(self, frame, conf_threshold, conf_for, geo_constraints,
-               exclusion_np, **kwargs):
-        """Detecta y filtra vehiculos. Wrapper sobre infer().
-
-        Returns:
-            (detections_np, det_classes): numpy array (N,5) y lista de nombres
-        """
-        raw = self.infer(frame, conf_threshold, **kwargs)
-        return filter_detections(raw, conf_for, geo_constraints, exclusion_np)
-
 
 
 class YOLODetector(Detector):
@@ -78,33 +68,6 @@ class YOLODetector(Detector):
                     "conf": conf_val,
                 })
         return detections
-
-    def track(self, frame, conf_threshold, tracker_yaml, **kwargs):
-        """YOLO native tracking (ByteTrack/BoT-SORT)."""
-        imgsz = kwargs.get("imgsz", self.imgsz)
-        device = kwargs.get("device", self.device)
-        track_results = self.model.track(
-            frame, conf=conf_threshold, imgsz=imgsz,
-            tracker=tracker_yaml, persist=True, verbose=False,
-            classes=self.vehicle_ids, device=device,
-        )
-        tracked = []
-        if track_results and track_results[0].boxes is not None:
-            for box in track_results[0].boxes:
-                if box.id is None:
-                    continue
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                tid = int(box.id[0])
-                cls_id = int(box.cls[0])
-                cls_name = self.class_names[cls_id]
-                conf_val = float(box.conf[0])
-                tracked.append({
-                    "bbox": (x1, y1, x2, y2),
-                    "cls_name": cls_name,
-                    "conf": conf_val,
-                    "track_id": tid,
-                })
-        return tracked
 
 
 class RFDETRDetector(Detector):
@@ -161,19 +124,6 @@ class SAHIDetector(Detector):
                 "conf": float(pred.score.value),
             })
         return detections
-
-    def detect(self, frame, conf_threshold, conf_for, geo_constraints,
-               exclusion_np, **kwargs):
-        """Override para aplicar NMS post-SAHI."""
-        detections, det_classes = super().detect(
-            frame, conf_threshold, conf_for, geo_constraints,
-            exclusion_np, **kwargs,
-        )
-        if self.nms_threshold > 0 and len(detections) > 0:
-            det_list = detections.tolist()
-            det_list, det_classes = apply_nms(det_list, det_classes, self.nms_threshold)
-            detections = np.array(det_list) if det_list else np.empty((0, 5))
-        return detections, det_classes
 
 
 def filter_detections(raw, conf_for, geo_constraints, exclusion_np):

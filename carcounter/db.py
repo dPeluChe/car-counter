@@ -58,6 +58,7 @@ def init_db():
             duration REAL,
             vehicles INTEGER,
             routes_json TEXT,
+            events_json TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY (config_id) REFERENCES configs(id)
         )
@@ -80,23 +81,34 @@ def init_db():
     return conn
 
 
+def _add_events_column(conn):
+    # DBs creadas antes de counting_events no tienen la columna; el ALTER falla si ya existe
+    try:
+        conn.execute("ALTER TABLE runs ADD COLUMN events_json TEXT")
+        conn.commit()
+    except Exception:
+        pass
+
+
 def _get_conn():
     """Get or create database connection."""
     if not LIBSQL_AVAILABLE:
         return None
-    
+
     if not os.path.exists(DB_PATH):
         return init_db()
-    
+
     conn = libsql.connect(DB_PATH)
+    _add_events_column(conn)
     return conn
 
 
 def save_run(video_path: str, config_path: str, frames: int, duration: float,
              vehicles: int, routes_matrix: Dict[str, int], 
-             od_matrix: Optional[Dict] = None) -> Optional[int]:
+             od_matrix: Optional[Dict] = None,
+             counting_events: Optional[List[Dict]] = None) -> Optional[int]:
     """Save a run to the database.
-    
+
     Returns the run_id if successful, None otherwise.
     """
     if not LIBSQL_AVAILABLE:
@@ -111,8 +123,9 @@ def save_run(video_path: str, config_path: str, frames: int, duration: float,
         now = datetime.now().isoformat()
         
         conn.execute(
-            "INSERT INTO runs (config_id, frames, duration, vehicles, routes_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (None, frames, duration, vehicles, json.dumps(routes_matrix), now)
+            "INSERT INTO runs (config_id, frames, duration, vehicles, routes_json, events_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (None, frames, duration, vehicles, json.dumps(routes_matrix),
+             json.dumps(counting_events or []), now)
         )
         
         run_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -179,7 +192,7 @@ def get_run(run_id: int) -> Optional[Dict[str, Any]]:
     
     try:
         row = conn.execute(
-            "SELECT id, frames, duration, vehicles, routes_json, created_at FROM runs WHERE id = ?",
+            "SELECT id, frames, duration, vehicles, routes_json, created_at, events_json FROM runs WHERE id = ?",
             (run_id,)
         ).fetchone()
         
@@ -206,6 +219,7 @@ def get_run(run_id: int) -> Optional[Dict[str, Any]]:
             "routes_json": row[4],
             "created_at": row[5],
             "od_matrix": od_matrix,
+            "counting_events": json.loads(row[6] or "[]"),
         }
         
     except Exception as e:

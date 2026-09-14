@@ -6,8 +6,7 @@ from tkinter import messagebox
 import cv2
 
 from carcounter.calibration import (
-    compute_sample_constraints, passes_sample_constraints,
-    predict_roi_boxes, draw_detection_overlay,
+    compute_sample_constraints, passes_sample_constraints, draw_detection_overlay,
 )
 
 class CalibrationMixin:
@@ -276,14 +275,6 @@ class CalibrationMixin:
             image_size=self.infer_imgsz.get(),
         )
         return self.sahi_model
-
-    def _predict_roi_boxes(self, roi_frame, conf, scale, use_sahi=False, force_imgsz=None):
-        sahi_model = self._ensure_sahi_model(conf) if use_sahi else None
-        return predict_roi_boxes(
-            roi_frame, conf, scale, model=self.model,
-            sahi_model=sahi_model, use_sahi=use_sahi,
-            force_imgsz=force_imgsz,
-        )
 
     def _draw_detection_overlay(self, detections, frame_origin=(0, 0),
                                 frame_base=None, highlight_box=None):

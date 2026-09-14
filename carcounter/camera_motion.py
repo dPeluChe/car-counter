@@ -3,6 +3,8 @@ import math
 import cv2
 import numpy as np
 
+from carcounter.geometry import validate_inference_roi
+
 
 class CameraMotionMonitor:
     def __init__(self, reference, *, anchors=None, inference_roi=None, max_drift_px=5.0,
@@ -24,11 +26,7 @@ class CameraMotionMonitor:
         self.min_inlier_ratio = min_inlier_ratio
         self.mask = np.full(self.size[::-1], 255, np.uint8)
         if inference_roi is not None:
-            if len(inference_roi) != 4 or any(type(v) is not int for v in inference_roi):
-                raise ValueError("inference_roi requiere cuatro enteros")
-            x1, y1, x2, y2 = inference_roi
-            if not 0 <= x1 < x2 <= width or not 0 <= y1 < y2 <= height:
-                raise ValueError("inference_roi fuera del frame")
+            x1, y1, x2, y2 = validate_inference_roi(inference_roi, width, height)
             sx, sy = self.scale[0, 0], self.scale[1, 1]
             self.mask[int(y1 * sy):math.ceil(y2 * sy), int(x1 * sx):math.ceil(x2 * sx)] = 0
         self.orb = cv2.ORB_create(nfeatures=2000)

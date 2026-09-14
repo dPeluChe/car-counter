@@ -7,29 +7,34 @@ import pytest
 from carcounter.detection import detect_and_track
 
 
-def detect(frame, model, roi, exclusion=None):
+def make_model():
+    box = SimpleNamespace(xyxy=np.array([[10, 20, 30, 40]]), cls=np.array([2]), conf=np.array([0.9]))
+    model = Mock()
+    model.names = {2: "car"}
+    model.return_value = [SimpleNamespace(boxes=[box])]
+    return model
+
+
+def echo_tracker():
+    return SimpleNamespace(update_detections=Mock(side_effect=lambda frame, dets, classes: [
+        (*map(int, row[:4]), 7, name) for row, name in zip(dets, classes)]))
+
+
+def detect(frame, model, roi, exclusion=None, tracker="echo"):
     return detect_and_track(
-        frame, model=model, sahi_model=None, sahi_predict_fn=None, sort_tracker=None,
-        use_sahi=False, tracker_backend="bytetrack", tracker_yaml="bytetrack.yaml",
-        effective_conf=0.1, imgsz=640, conf_for=lambda name: 0.1,
+        frame, model=model, sahi_model=None, sahi_predict_fn=None,
+        sort_tracker=echo_tracker() if tracker == "echo" else tracker,
+        use_sahi=False, effective_conf=0.1, imgsz=640, conf_for=lambda name: 0.1,
         geo_constraints={}, exclusion_np=exclusion or {},
         sahi_slice_w=256, sahi_slice_h=256, sahi_overlap=0.2, sahi_nms_threshold=0.3,
         inference_roi=roi,
     )
 
 
-def make_model():
-    box = SimpleNamespace(xyxy=np.array([[10, 20, 30, 40]]), id=np.array([7]),
-                          cls=np.array([2]), conf=np.array([0.9]))
-    model = Mock()
-    model.track.return_value = [SimpleNamespace(boxes=[box])]
-    return model
-
-
 def test_crop_restores_global_coordinates_and_preserves_id():
     model = make_model()
     result = detect(np.zeros((200, 300, 3), np.uint8), model, [100, 50, 250, 150])
-    assert model.track.call_args.args[0].shape == (100, 150, 3)
+    assert model.call_args.args[0].shape == (100, 150, 3)
     assert result == [(110, 70, 130, 90, 7, "car")]
 
 
@@ -49,14 +54,21 @@ def test_invalid_crop_fails_before_inference(roi):
     model = make_model()
     with pytest.raises(ValueError, match="inference_roi"):
         detect(np.zeros((200, 300, 3), np.uint8), model, roi)
-    model.track.assert_not_called()
+    model.assert_not_called()
 
 
 def test_no_crop_preserves_full_frame_behavior():
     model = make_model()
     result = detect(np.zeros((200, 300, 3), np.uint8), model, None)
-    assert model.track.call_args.args[0].shape == (200, 300, 3)
+    assert model.call_args.args[0].shape == (200, 300, 3)
     assert result == [(10, 20, 30, 40, 7, "car")]
+
+
+def test_missing_tracker_fails_before_inference():
+    model = make_model()
+    with pytest.raises(RuntimeError, match="IDs persistentes"):
+        detect(np.zeros((200, 300, 3), np.uint8), model, None, tracker=None)
+    model.assert_not_called()
 
 
 def test_config_roundtrip_preserves_crop_and_counting_thresholds():
@@ -65,3 +77,16 @@ def test_config_roundtrip_preserves_crop_and_counting_thresholds():
                 "min_dest_frames": 2, "min_crossing_frames": 4}
     saved = AppConfig.from_dict({"settings": settings}).to_dict()["settings"]
     assert {key: saved[key] for key in settings} == settings
+
+
+@pytest.mark.parametrize("settings,fragment", [
+    ({"inference_roi": [10, 10, 5, 50]}, "inference_roi"),
+    ({"inference_roi": [0, 0, 100]}, "inference_roi"),
+    ({"camera_max_drift_px": 0}, "camera_max_drift_px"),
+    ({"camera_max_drift_px": "5"}, "camera_max_drift_px"),
+])
+def test_profile_validation_rejects_bad_roi_and_drift(settings, fragment):
+    from carcounter.app_config import AppConfig
+    errors = AppConfig.from_dict({"counting_mode": "lines", "lines": [{"name": "L", "points": [[0, 0], [9, 9]]}],
+                                  "settings": settings}).validate()
+    assert any(fragment in error for error in errors)

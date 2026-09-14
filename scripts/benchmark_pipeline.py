@@ -63,13 +63,8 @@ def run_benchmark(video_path, model_path, max_frames=200, use_sahi=False, device
             print("SAHI: no disponible, usando modo rapido")
             use_sahi = False
 
-    try:
-        from carcounter.sort import Sort
-        sort_tracker = Sort(max_age=40, min_hits=3, iou_threshold=0.2)
-        tracker_backend = "sort"
-    except ImportError:
-        sort_tracker = None
-        tracker_backend = "bytetrack"
+    from carcounter.sort import Sort
+    sort_tracker = Sort(max_age=40, min_hits=3, iou_threshold=0.2)
 
     counter = VehicleCounter(zones_np={}, counting_lines=[], frame_size=(VID_W, VID_H))
     profiler = Profiler()
@@ -97,8 +92,7 @@ def run_benchmark(video_path, model_path, max_frames=200, use_sahi=False, device
         tracked_boxes = detect_and_track(
             frame, model=model, sahi_model=sahi_model,
             sahi_predict_fn=sahi_predict_fn, sort_tracker=sort_tracker,
-            use_sahi=use_sahi, tracker_backend=tracker_backend,
-            tracker_yaml="bytetrack.yaml", effective_conf=0.1,
+            use_sahi=use_sahi, effective_conf=0.1,
             imgsz=1280, conf_for=lambda _: 0.1,
             geo_constraints=_geo_constraints, exclusion_np=_exclusion_np,
             sahi_slice_w=512, sahi_slice_h=512,

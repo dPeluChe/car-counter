@@ -62,7 +62,7 @@ def test_sahi_updates_confidence_and_merges_before_global_tracker():
     recorded = []
     detect_and_track(np.zeros((200, 300, 3), np.uint8), model=None,
         sahi_model=model, sahi_predict_fn=predict, sort_tracker=tracker, use_sahi=True,
-        tracker_backend="bytetrack", tracker_yaml="bytetrack.yaml", effective_conf=0.1,
+        effective_conf=0.1,
         imgsz=640, conf_for=lambda _: 0.1, geo_constraints={}, exclusion_np={},
         sahi_slice_w=128, sahi_slice_h=128, sahi_overlap=0.3, sahi_nms_threshold=0.3,
         inference_roi=[100, 50, 250, 150], on_detections=recorded.extend)
@@ -112,7 +112,7 @@ def test_cache_replay_reuses_boxes_without_inference_and_can_change_filters(tmp_
     tracker = SimpleNamespace(update_detections=Mock(return_value=[(0, 0, 20, 20, 1, "car")]))
     output = detect_and_track(np.zeros((100, 100, 3), np.uint8), model=model,
         sahi_model=None, sahi_predict_fn=None, sort_tracker=tracker, use_sahi=False,
-        tracker_backend="bytetrack", tracker_yaml="bytetrack.yaml", effective_conf=0.25,
+        effective_conf=0.25,
         imgsz=640, conf_for=lambda _: 0.25, geo_constraints={}, exclusion_np={},
         sahi_slice_w=128, sahi_slice_h=128, sahi_overlap=0.2, sahi_nms_threshold=0.3,
         raw_detections=reader.read(1))

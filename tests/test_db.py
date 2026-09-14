@@ -156,3 +156,30 @@ def test_save_run_stores_routes_as_json(tmp_db):
     run = db.get_run(rid)
     parsed = json.loads(run["routes_json"])
     assert parsed == rm
+
+
+@needs_libsql
+def test_save_run_persists_counting_events(tmp_db):
+    events = [{"event_id": 1, "track_id": 4, "frame": 12, "route": "A → B", "class": "car"}]
+    rid = db.save_run(video_path="v.mp4", config_path="c.json", frames=12, duration=1.0,
+                      vehicles=1, routes_matrix={"A → B": 1}, counting_events=events)
+    assert db.get_run(rid)["counting_events"] == events
+    empty = db.save_run(video_path="v.mp4", config_path="c.json", frames=1, duration=0.1,
+                        vehicles=0, routes_matrix={})
+    assert db.get_run(empty)["counting_events"] == []
+
+
+@needs_libsql
+def test_existing_db_without_events_column_is_migrated(tmp_db):
+    import libsql_experimental as libsql
+    conn = libsql.connect(tmp_db)
+    conn.execute("CREATE TABLE runs (id INTEGER PRIMARY KEY AUTOINCREMENT, config_id INTEGER, "
+                 "frames INTEGER, duration REAL, vehicles INTEGER, routes_json TEXT, created_at TEXT NOT NULL)")
+    conn.execute("CREATE TABLE od_entries (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id INTEGER, "
+                 "origin TEXT, destination TEXT, count INTEGER, vehicle_class TEXT)")
+    conn.commit()
+    events = [{"event_id": 1, "frame": 3, "route": "L ↓", "class": "bus"}]
+    rid = db.save_run(video_path="v.mp4", config_path="c.json", frames=3, duration=0.1,
+                      vehicles=1, routes_matrix={"L ↓": 1}, counting_events=events)
+    assert rid is not None
+    assert db.get_run(rid)["counting_events"] == events

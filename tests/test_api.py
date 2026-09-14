@@ -171,3 +171,16 @@ def test_run_detail_returns_data_when_found(client, monkeypatch):
     data = r.json()
     assert data["vehicles"] == 42
     assert data["od_matrix"]["A"]["B"] == 20
+
+
+@needs_fastapi
+def test_stats_exposes_counting_events(client):
+    class Dummy:
+        routes_matrix = {"A → B": 25}
+        total_vehicles_ever = 25
+        counting_events = [{"event_id": i, "frame": i} for i in range(1, 26)]
+
+    api.set_current_engine(Dummy(), {"start_time": 0.0})
+    data = client.get("/api/stats").json()
+    assert data["events_count"] == 25
+    assert [event["event_id"] for event in data["recent_events"]] == list(range(6, 26))

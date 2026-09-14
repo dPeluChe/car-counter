@@ -2,7 +2,6 @@
 
 import cv2
 import numpy as np
-from carcounter.constants import VEHICLE_CLASSES, resolve_vehicle_classes
 from carcounter.geometry import bbox_iou, passes_geometry_filter, in_exclusion_zone
 
 
@@ -61,70 +60,6 @@ def passes_sample_constraints(bbox, constraints):
     if constraints is None:
         return True
     return passes_geometry_filter(bbox[0], bbox[1], bbox[2], bbox[3], constraints)
-
-
-def predict_roi_boxes(roi_frame, conf, scale, model, sahi_model=None,
-                      use_sahi=False, force_imgsz=None):
-    """Ejecuta deteccion YOLO o SAHI sobre un ROI reescalado."""
-    scaled_w = max(1, int(roi_frame.shape[1] * scale))
-    scaled_h = max(1, int(roi_frame.shape[0] * scale))
-    scaled_frame = cv2.resize(roi_frame, (scaled_w, scaled_h),
-                              interpolation=cv2.INTER_CUBIC)
-    detections = []
-
-    if use_sahi:
-        if sahi_model is None:
-            return [], "sahi_unavailable"
-        from sahi.predict import get_sliced_prediction
-        sahi_model.confidence_threshold = conf
-        result = get_sliced_prediction(
-            scaled_frame, sahi_model,
-            slice_height=min(512, scaled_h),
-            slice_width=min(512, scaled_w),
-            overlap_height_ratio=0.2,
-            overlap_width_ratio=0.2,
-            postprocess_type="NMS",
-            postprocess_match_threshold=0.5,
-            postprocess_match_metric="IOS",
-            verbose=0,
-        )
-        for pred in result.object_prediction_list:
-            cls_name = pred.category.name
-            if cls_name not in VEHICLE_CLASSES or float(pred.score.value) < conf:
-                continue
-            bbox = pred.bbox
-            detections.append({
-                "bbox": (
-                    int(bbox.minx / scale), int(bbox.miny / scale),
-                    int(bbox.maxx / scale), int(bbox.maxy / scale),
-                ),
-                "cls_name": cls_name,
-                "conf": float(pred.score.value),
-            })
-        return detections, "sahi"
-
-    vehicle_ids, class_names = resolve_vehicle_classes(model)
-    results = model(
-        scaled_frame, conf=conf, verbose=False,
-        classes=vehicle_ids,
-        imgsz=force_imgsz or max(640, max(scaled_w, scaled_h)),
-    )
-    for r in results:
-        for box in r.boxes:
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            cls_id = int(box.cls[0])
-            cls_name = class_names[cls_id]
-            if cls_name not in VEHICLE_CLASSES:
-                continue
-            detections.append({
-                "bbox": (
-                    int(x1 / scale), int(y1 / scale),
-                    int(x2 / scale), int(y2 / scale),
-                ),
-                "cls_name": cls_name,
-                "conf": float(box.conf[0]),
-            })
-    return detections, "yolo-upscaled"
 
 
 def draw_detection_overlay(frame_orig, detections, constraints=None,
