@@ -16,7 +16,7 @@
 | En paralelo con pruebas humanas | TODO-033 | Configurador utilizable y parámetros persistentes |
 | Después de exactitud | TODO-023 / TODO-024 | Rendimiento y formatos con beneficio medido |
 | Operación opcional | TODO-034 | Cron activado y verificado desde entorno permitido |
-| Antes de usar RF-DETR o el wizard | TODO-035 / TODO-036 | Clases correctas y entradas alineadas con la CLI |
+| Antes de usar el wizard | TODO-036 | Entradas alineadas con la CLI y sin rutas heredadas |
 
 No hay porcentaje aprobado de precisión todavía. El revisor define con el responsable de la presentación el alcance, las clases y los umbrales antes de seleccionar parámetros.
 
@@ -130,13 +130,6 @@ No hay porcentaje aprobado de precisión todavía. El revisor define con el resp
 - [ ] Comparar FP/FN y eventos antes/después sobre el mismo tramo humano, incluyendo estabilidad de los puntos físicos de entrada/salida.
 
 **Prueba manual:** PRUEBA-07. **Cierre:** mejora medida de las rutas afectadas y rechazo verificable cuando no se puede mantener el encuadre. El control de 5 px es experimental y está desactivado por defecto.
-
-## TODO-035: Clases equivocadas con RF-DETR `added: 2026-09-14`
-
-**Prioridad:** P0 si se usa RF-DETR. **Evidencia:** `carcounter/rfdetr_detector.py` indexa `COCO_NAMES` (base 0) con los ids de `rfdetr` (base 1: 3=car, 4=motorcycle, 6=bus, 8=truck). Los autos salen con otra clase y buses/camiones se descartan. Contradice "clases desde los pesos" para ese backend.
-
-- [ ] Resolver nombres con `rfdetr.util.coco_classes.COCO_CLASSES` o los nombres del modelo cargado.
-- [ ] Prueba con ids reales de `rfdetr` para car, bus, truck y motorcycle.
 
 ## TODO-036: Trabajo heredado sin terminar de conectar `added: 2026-09-14`
 
