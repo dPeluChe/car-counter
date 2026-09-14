@@ -55,8 +55,22 @@ Medido con el monitor ORB/RANSAC contra el frame de las 3:00, cada 15 s, sobre l
 | 3:00 a 4:00 (tramo oficial) | 0.1 a 9 px (6.1 px a las 3:14, 9 px a las 3:59) | Aceptable si las zonas tienen margen; no cuenta como estabilizado |
 | 9:44 al final | 5 a 13 px | El dron vuelve a moverse |
 
+### Metadatos del video
+
+Revisado con `exiftool -ee` y `ffprobe` el 2026-09-14:
+
+| Archivo | Origen | Telemetría del dron |
+|---|---|---|
+| `glorieta_normal.mp4` | Exportado con Adobe Media Encoder 2022; una sola toma, sin cortes de escena (ffmpeg, umbral 0.25) | No: la exportación la eliminó |
+| `glorieta_normal_2.MP4` | Re-codificado con ffmpeg (`Lavf56`) | No |
+| `patria_acueducto.mp4` | Edición en Premiere Pro con 7 clips DJI (`DJI_0496` a `DJI_0498`, `DJI_20241126…`), 854×480 | No |
+| `glorieta_caballos.MOV` | Original DJI, cámara FC220 | Solo un registro fijo: GPS, 249.7 m sobre el nivel del mar, cámara a −89.3° (vertical) |
+
+Ningún video disponible trae altura, posición o gimbal por frame, así que el movimiento del dron no se puede leer de los metadatos. Hoy solo se detecta por imagen (monitor ORB/RANSAC). Los archivos originales `DJI_*.MP4`, con su `.SRT` si el registro de subtítulos estaba activo, sí traen telemetría por frame; conviene pedirlos para los próximos vuelos (TODO-029). Aun con telemetría, el ajuste de zonas se valida por imagen: la altura y el gimbal explican la escala y el giro, pero no el desplazamiento exacto sobre el suelo.
+
 Consecuencias:
 
+- **Geometría para todo el video.** Las zonas y exclusiones se dibujan una vez sobre un frame de referencia y deben servir para todo el video. Hay dos formas de lograrlo: segmentar el video en tramos estables, cada uno con su referencia, o transformar la geometría frame a frame con la alineación estimada. Ambas están en TODO-029.
 - Las zonas del tramo oficial deben dejar margen de al menos 10 px respecto a los bordes de calle. Para usar otros minutos hay que rehacer zonas o corregir la geometría (TODO-029).
 - La ROI del perfil actual (`[680,350,960,750]`) cubre solo el lado oeste del anillo. El conteo origen/destino necesita ROI y zonas que cubran todos los accesos de la glorieta (TODO-031).
 
