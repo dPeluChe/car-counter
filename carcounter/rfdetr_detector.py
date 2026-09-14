@@ -1,7 +1,7 @@
 """RF-DETR detector wrapper compatible con el pipeline de carcounter.
 
-RF-DETR (Roboflow) usa DINOv2 transformer backbone y supera a YOLO11
-en precision COCO (+9.5 AP50 en modelo Medium).
+RF-DETR (Roboflow) usa un backbone transformer DINOv2. Su exactitud en este
+material no está medida localmente.
 
 Requiere: pip install rfdetr
 """
@@ -9,7 +9,7 @@ Requiere: pip install rfdetr
 import numpy as np
 import cv2
 
-from carcounter.constants import COCO_NAMES, VEHICLE_CLASSES
+from carcounter.constants import VEHICLE_CLASSES
 
 _RFDETR_AVAILABLE = False
 try:
@@ -60,6 +60,16 @@ def load_rfdetr_model(variant="base", weights=None, device="cpu"):
     return model
 
 
+def rfdetr_class_names(model):
+    """Mapa id -> nombre para los class_id que devuelve model.predict()."""
+    # Checkpoint COCO: ids crudos de categoría (base 1, con huecos). Checkpoint propio: índices base 0.
+    custom = getattr(getattr(model, "model", None), "class_names", None)
+    if custom is not None:
+        return {i: str(name).strip().lower() for i, name in enumerate(custom)}
+    from rfdetr.util.coco_classes import COCO_CLASSES
+    return {int(i): str(name).strip().lower() for i, name in COCO_CLASSES.items()}
+
+
 def rfdetr_detect(model, frame_bgr, conf_threshold=0.1):
     """Ejecuta deteccion RF-DETR sobre un frame BGR de OpenCV.
 
@@ -71,7 +81,7 @@ def rfdetr_detect(model, frame_bgr, conf_threshold=0.1):
     Returns:
         (detections, det_classes) donde:
         - detections: np.array (N,5) [x1,y1,x2,y2,conf]
-        - det_classes: list[str] nombres de clase COCO
+        - det_classes: list[str] nombres de clase del checkpoint
     """
     # RF-DETR necesita PIL Image (RGB)
     frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
@@ -84,7 +94,8 @@ def rfdetr_detect(model, frame_bgr, conf_threshold=0.1):
 
     # Vectorized vehicle filter
     cls_ids = sv_dets.class_id
-    cls_names = [COCO_NAMES[c] if c < len(COCO_NAMES) else "" for c in cls_ids]
+    names = rfdetr_class_names(model)
+    cls_names = [names.get(int(c), "") for c in cls_ids]
     keep = [i for i, n in enumerate(cls_names) if n in VEHICLE_CLASSES]
 
     if not keep:
