@@ -54,6 +54,10 @@ def load_runtime_config(args) -> dict:
     with open(args.config, "r") as f:
         config = json.load(f)
 
+    return resolve_runtime_config(config, args)
+
+
+def resolve_runtime_config(config, args):
     settings = config.get("settings", {})
     sahi_cfg = config.get("sahi", {})
     sc = settings.get("sample_constraints") or {}
@@ -116,9 +120,6 @@ def load_detector(args, cfg, device):
                 device=device,
             )
             log.info("Detector: RF-DETR %s", args.rfdetr_variant)
-            if args.tracker in ("bytetrack", "botsort"):
-                log.warning("RF-DETR no soporta %s nativo — usando SORT", args.tracker)
-                args.tracker = "sort"
 
     if backend == "yolo":
         from ultralytics import YOLO
@@ -129,7 +130,7 @@ def load_detector(args, cfg, device):
 
 def load_sahi(args, cfg, detector_backend, device):
     """Retorna (sahi_model, sahi_predict_fn, use_sahi)."""
-    if args.no_sahi:
+    if args.no_sahi or not cfg["sahi_cfg"].get("enabled", True):
         return None, None, False
     if detector_backend == "rfdetr":
         log.warning("SAHI + RF-DETR no soportado aun — fallback a modo rapido")
@@ -139,7 +140,7 @@ def load_sahi(args, cfg, detector_backend, device):
         from sahi.predict import get_sliced_prediction
         sahi_model = AutoDetectionModel.from_pretrained(
             model_type="yolov8", model_path=cfg["model_path"],
-            confidence_threshold=cfg["effective_conf"], device=device,
+            confidence_threshold=cfg["effective_conf"], device=device, image_size=cfg["imgsz"],
         )
         return sahi_model, get_sliced_prediction, True
     except ImportError:
@@ -161,7 +162,10 @@ def setup_tracker(args, cfg, use_sahi, vid_fps):
 
     sort_tracker = None
     tcfg = cfg["tracker_cfg"]
-    if backend == "ocsort":
+    if backend in {"bytetrack", "botsort"}:
+        from carcounter.tracking import UltralyticsTracker
+        sort_tracker = UltralyticsTracker(backend, tcfg, vid_fps)
+    elif backend == "ocsort":
         from carcounter.ocsort_wrapper import OCSortWrapper
         sort_tracker = OCSortWrapper(
             max_age=tcfg.get("max_age", 40),
@@ -171,7 +175,7 @@ def setup_tracker(args, cfg, use_sahi, vid_fps):
             frame_rate=vid_fps,
         )
         log.info("Tracker: OC-SORT (direction_consistency=0.2)")
-    elif use_sahi or backend == "sort":
+    elif backend == "sort":
         try:
             from carcounter.sort import Sort
             sort_tracker = Sort(
@@ -179,8 +183,8 @@ def setup_tracker(args, cfg, use_sahi, vid_fps):
                 min_hits=tcfg.get("min_hits", 3),
                 iou_threshold=tcfg.get("iou_threshold", 0.2),
             )
-        except ImportError:
-            pass
+        except ImportError as e:
+            raise RuntimeError("SORT no disponible; instala las dependencias de tracking") from e
 
     return backend, sort_tracker
 
@@ -256,6 +260,9 @@ def process_frame(frame, *, frame_count, counter, cfg, args, detect_state,
         detect_state["consecutive_errors"] = 0
     except Exception as e:
         detect_state["consecutive_errors"] += 1
+        detect_state["errors"] = detect_state.get("errors", 0) + 1
+        if detect_state["fn_kwargs"].get("on_detections") is not None or detect_state["fn_kwargs"].get("raw_detections") is not None:
+            raise RuntimeError("Error en flujo de detecciones grabadas") from e
         log.error("Error en deteccion frame %d: %s", frame_count, e)
         if detect_state["consecutive_errors"] >= MAX_CONSECUTIVE_ERRORS:
             log.critical("Demasiados errores consecutivos (%d). Abortando.",
@@ -265,6 +272,7 @@ def process_frame(frame, *, frame_count, counter, cfg, args, detect_state,
     profiler.end("detection")
 
     profiler.start("counting")
+    counter.set_frame(frame_count)
     for (x1, y1, x2, y2, trk_id, cls_name) in tracked_boxes:
         cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
         counter.update(trk_id, cx, cy, cls_name, cfg["counting_mode"],
@@ -273,6 +281,13 @@ def process_frame(frame, *, frame_count, counter, cfg, args, detect_state,
         counter.purge_stale()
     profiler.end("counting")
 
+    render_frame = not (args.headless and args.no_save and not args.serve)
+    if not render_frame:
+        elapsed = time.time() - t0
+        fps_samples.append(elapsed)
+        fps_avg = len(fps_samples) / sum(fps_samples) if sum(fps_samples) > 0 else 0.0
+        return tracked_boxes, fps_avg
+
     profiler.start("visualization")
     if heatmap:
         centroids = [((x1 + x2) // 2, (y1 + y2) // 2)
@@ -280,9 +295,7 @@ def process_frame(frame, *, frame_count, counter, cfg, args, detect_state,
         heatmap.update(centroids)
         heatmap.draw(frame)
 
-    elapsed = time.time() - t0
-    fps_samples.append(1.0 / elapsed if elapsed > 0 else 0)
-    fps_avg = float(np.mean(fps_samples))
+    fps_avg = len(fps_samples) / sum(fps_samples) if sum(fps_samples) > 0 else 0.0
     zone_names = list(zones_np.keys())
 
     try:
@@ -309,6 +322,9 @@ def process_frame(frame, *, frame_count, counter, cfg, args, detect_state,
     except Exception as e:
         log.warning("Error en visualizacion frame %d: %s", frame_count, e)
     profiler.end("visualization")
+
+    fps_samples.append(time.time() - t0)
+    fps_avg = len(fps_samples) / sum(fps_samples) if sum(fps_samples) > 0 else 0.0
 
     return tracked_boxes, fps_avg
 
@@ -339,6 +355,8 @@ def export_results(args, cfg, counter, *, frame_count, total_frames, duration,
             total_frames=total_frames, duration=duration, total_time=total_time,
             avg_fps=avg_fps, total_vehicles=counter.total_vehicles_ever,
             routes_matrix=rm, zone_names=zone_names,
+            run_metadata=cfg.get("run_metadata"),
+            counting_events=counter.counting_events,
         )
 
     if args.output_csv:

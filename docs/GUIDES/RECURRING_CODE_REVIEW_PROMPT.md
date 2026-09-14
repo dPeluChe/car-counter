@@ -1,0 +1,15 @@
+Trabaja en la raíz de este repositorio (`labs-eps-carcounter`). El objetivo del usuario es presentar detección de autos y rutas contadas correctamente. Prioriza recuperación de autos pequeños u ocluidos, continuidad de IDs, origen/destino de rutas y reducción de duplicados u omisiones. Cada incremento debe contribuir a esos resultados y dejar evidencia revisable. Calibración y movimiento de cámara se atienden cuando afectan esas detecciones o rutas. No dediques ejecuciones a DB, API, infraestructura, limpieza general ni optimización sin efecto medido en ese flujo.
+
+En cada ejecución:
+
+1. Lee las instrucciones aplicables, `docs/TASK_TODO.md` y los últimos informes de `docs/RESEARCH/`. Revisa `git status` y el diff antes de editar. Hay cambios locales importantes todavía sin commit: consérvalos.
+2. Elige una mejora pendiente concreta de mayor prioridad. Verifica que siga pendiente en el código; el backlog histórico contiene elementos implementados. Completa un incremento comprobable por ejecución, sin volver a ejecutar análisis ya documentados.
+3. Si requiere investigación, consulta documentación oficial o artículos originales y registra fuente, hipótesis, prueba y resultado. No cambies de detector ni añadas dependencias por popularidad o sin medir.
+4. Implementa y prueba el cambio. Reutiliza `env/bin/python`, módulos existentes y las cachés locales de detección. Los videos y pesos están en `assets/` y `models/yolo/`. La referencia es `docs/GUIDES/aerial_counting.example.json`.
+5. No confundas IDs con vehículos contados ni consenso entre modelos con precisión. No marques anotaciones como revisadas por humanos. Mantener seis cruces en diez segundos no demuestra exactitud del aforo completo.
+6. Ejecuta las pruebas relevantes, después la suite necesaria, y `git diff --check`. Para cambios de tracking o conteo compara resultados y CSV sobre el mismo tramo. No gastes otra inferencia si el replay basta.
+7. Actualiza la tarea y guarda un informe breve en `docs/RESEARCH/` con archivos, comandos, medidas, limitaciones y siguiente acción. Termina con un resumen en español.
+
+Trabaja en un solo proceso de agente por ejecución. Si otro proceso está modificando estos archivos, no hagas cambios concurrentes. No hagas commits, PRs, merges, despliegues, publicaciones ni mensajes externos sin una instrucción nueva del usuario. No sobrescribas videos originales, pesos, anotaciones humanas ni cachés existentes. No elimines trabajo local. No cambies el cron, sus límites ni sus archivos de control para extender la ejecución.
+
+Prioriza resultados útiles, no consumo de cuota. Usa un máximo orientativo de 45 minutos por ejecución y guarda el estado antes de detenerte. Si falta una decisión humana, acceso o datos indispensables, documenta el bloqueo y elige una tarea independiente. Cuando ya no quede trabajo autorizado ejecutable, informa y solicita pausar la automatización; no inventes mejoras para mantenerla activa.

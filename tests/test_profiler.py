@@ -68,3 +68,22 @@ def test_profiler_start_clears_previous_start_time():
     avgs = p.get_averages()
     # Debe reflejar solo el segundo start, no la suma
     assert avgs["detection"] < 0.015
+
+
+def test_benchmark_uses_latest_cumulative_average_and_frame_count(tmp_path):
+    from carcounter.export import export_benchmark
+    export_benchmark(
+        str(tmp_path), video_path="test.mp4", config_path="config.json",
+        use_sahi=False, total_time=120.0, avg_fps=1.0, routes_matrix={},
+        benchmark_data=[
+            {"frame": 60, "elapsed": 60, "fps": 1, "detections": 1,
+             "tracks": 1, "routes": 0, "stages": {"detection": 0.5}},
+            {"frame": 120, "elapsed": 120, "fps": 1, "detections": 1,
+             "tracks": 1, "routes": 0, "stages": {"detection": 0.9}},
+        ],
+    )
+    report = (tmp_path / "benchmark_results.txt").read_text()
+    detection = next(line for line in report.splitlines() if line.strip().startswith("detection"))
+    assert "900.00 ms" in detection
+    assert "90.0%" in detection
+    assert "tracking" not in report

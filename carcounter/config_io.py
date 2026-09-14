@@ -58,12 +58,8 @@ def build_config(*, counting_mode, exclusion_zones, zones, counting_lines, direc
             "imgsz": imgsz,
             "sample_constraints": sample_constraints,
             "sample_count": sample_count,
-            **({"conf_per_class": {
-                    "car": round(conf_per_class["car"], 2),
-                    "motorbike": round(conf_per_class["motorbike"], 2),
-                    "bus": round(conf_per_class["bus"], 2),
-                    "truck": round(conf_per_class["truck"], 2),
-                }} if conf_per_class_modified else {}),
+            **({"conf_per_class": {name: round(value, 2) for name, value in conf_per_class.items()}}
+               if conf_per_class_modified else {}),
         },
         "sahi": {
             "slice_width": slice_w,
@@ -79,6 +75,14 @@ def build_config(*, counting_mode, exclusion_zones, zones, counting_lines, direc
         "video_path": video_path,
         "model_path": model_path,
     }
+
+    if loaded_config:
+        tolerances = {line["name"]: line.get("tolerance", 15) for line in loaded_config.get("lines", [])}
+        for line in config["lines"]:
+            line["tolerance"] = tolerances.get(line["name"], 15)
+        previous_classes = loaded_config.get("settings", {}).get("conf_per_class", {})
+        if conf_per_class_modified:
+            config["settings"]["conf_per_class"] = {**previous_classes, **config["settings"]["conf_per_class"]}
 
     # Preservar campos extra del JSON original
     if loaded_config:

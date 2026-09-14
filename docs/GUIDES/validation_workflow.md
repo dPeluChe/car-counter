@@ -1,124 +1,69 @@
-# Validation Workflow — Medir precision real del pipeline
+# Validación de detección contra cajas humanas
 
-Esta guia describe el proceso end-to-end para medir que tan bien detecta
-nuestro pipeline vs ground truth humano, usando LabelMe + SAM3 como herramienta
-de anotacion.
+Este procedimiento mide detección por imagen con el perfil real. No mide continuidad de IDs ni rutas: para eso usa [ROUTE_EVENT_REVIEW.md](ROUTE_EVENT_REVIEW.md). Los requisitos del dataset y su procedencia están en TODO-028 de [TASK_TODO.md](../TASK_TODO.md).
 
-**Objetivo:** pasar de "parece que funciona" a "sabemos que funciona al X%".
+## Preparar una muestra separada
 
----
-
-## Requisitos previos
-
-- Modelo YOLO descargado en `models/yolo/yolov11l.pt` (o el que uses)
-- Video de prueba en `assets/` (ej. `glorieta_fast.MP4`)
-- [LabelMe v6.1+](https://labelme.io) instalado (herramienta externa, no dep de Python)
-
----
-
-## Paso 1 — Extraer frames candidatos con dedup
+Desde `labs-eps-carcounter`, crea un directorio nuevo. Mantener imágenes y JSON juntos permite que `imagePath` encuentre el archivo por su nombre:
 
 ```bash
-python scripts/extract_validation_frames.py \
-    --video assets/glorieta_fast.MP4 \
-    --output-dir data/validation/frames \
-    --n-candidates 200 \
-    --hash-threshold 5
+mkdir -p data/validation
+CARCOUNTER_DATASET_DIR=$(mktemp -d "$PWD/data/validation/manual.XXXXXX")
+env/bin/python scripts/extract_validation_frames.py \
+  --video assets/glorieta_test1min.mp4 \
+  --output-dir "$CARCOUNTER_DATASET_DIR" \
+  --n-candidates 200 --hash-threshold 5
 ```
 
-**Que hace:** Saca ~200 frames equidistantes del video. Aplica perceptual
-hashing (DCT 64-bit) y descarta frames casi identicos. Resultado: ~50-80
-frames realmente diferentes.
+El extractor recorre el video completo y deduplica imágenes. No garantiza obtener 50/80/200 imágenes útiles ni muestrea únicamente los primeros 300 frames. Revisa variedad de escenas; el número de candidatos es aproximado. Repetirlo en la misma carpeta puede sobrescribir JPG: usa una carpeta nueva.
 
-**Salida:** `data/validation/frames/frame_XXXX.jpg`
+**Límite actual:** `frame_0000.jpg` identifica el orden de exportación, no el frame original. El script no guarda un manifiesto con tiempo/hash/índice de origen. Registra video y comando de extracción; no derives referencias temporales de rutas a partir del nombre. Para evidencia temporal usa el video original y registra explícitamente su frame. La incorporación del manifiesto está pendiente.
 
----
-
-## Paso 2 — Pre-etiquetar con YOLO teacher
+## Preetiquetas opcionales
 
 ```bash
-python scripts/pre_label_frames.py \
-    --frames-dir data/validation/frames \
-    --output-dir data/validation/annotations \
-    --model models/yolo/yolov11l.pt \
-    --conf 0.25
+env/bin/python scripts/pre_label_frames.py \
+  --frames-dir "$CARCOUNTER_DATASET_DIR" \
+  --output-dir "$CARCOUNTER_DATASET_DIR" \
+  --model models/yolo/yolov8l-visdrone.pt --conf 0.10 --imgsz 640
 ```
 
-**Que hace:** Corre YOLO sobre cada frame y genera anotaciones LabelMe JSON
-iniciales. El humano solo tiene que **corregir errores**, no anotar desde cero.
+El script propone cajas en la imagen completa, no aplica la ROI ni todos los filtros del perfil de producción. Es asistencia para anotar, no un benchmark del perfil. Conserva JSON existentes y genera nuevos archivos con `flags.reviewed=false`.
 
-**Salida:** `data/validation/annotations/frame_XXXX.json`
+La confianza baja puede añadir muchas cajas falsas. Corrige también los autos que el modelo omitió; no basta borrar algunas cajas. No se garantiza ahorro de tiempo ni precisión por usar preetiquetas.
 
----
+## Revisión en el editor
 
-## Paso 3 — Corregir anotaciones con LabelMe + SAM3
+Abre imágenes y JSON en LabelMe o un editor compatible. La interfaz y las funciones opcionales de asistencia deben comprobarse en tu escritorio; no se asume una versión o automatización específica.
 
-1. Abrir LabelMe
-2. File -> Open Dir -> seleccionar `data/validation/frames/`
-3. LabelMe cargara automaticamente los `.json` de `data/validation/annotations/`
-   si estan al lado de los frames, o configurar "Change output dir" si los
-   tienes separados
-4. Para cada frame:
-   - Eliminar detecciones falsas (FP del teacher)
-   - Agregar vehiculos que el teacher no detecto (FN) usando SAM3 AI-Box mode
-     ("arrastra un box, obtiene multiples shapes") para escenas densas
-   - Ajustar boxes mal posicionados
-5. Guardar (Ctrl+S)
+- Usa **rectángulos** con clase y dos esquinas. El parser actual solo acepta `shape_type=rectangle`; ignora polígonos y máscaras. No marques una imagen como revisada si sus vehículos quedaron únicamente en esos formatos.
+- Corrige posición, clase, omisiones y duplicaciones; registra también imágenes sin vehículos del alcance.
+- Mantén `imagePath` apuntando al JPG/PNG correspondiente. No agregues resultados de evaluación ni otros JSON ajenos a la carpeta de anotaciones.
+- Usa clases acordadas del modelo; no interpretes IDs de VisDrone como IDs COCO. Los alias `motor`, `motorbike` y `motorcycle` se normalizan a `motorcycle` al evaluar.
+- Marca el booleano `flags.reviewed=true` solo tras revisión humana completa de esa imagen. Si el editor no expone ese flag, edita el JSON después de revisar; no uses una conversión masiva de todos los archivos.
 
-**Tip:** Con SAM3 + AI-Box, anotar 50 frames de una glorieta toma ~30-45 min
-en vez de 3-4 horas con bboxes manuales.
+Separa imágenes utilizadas para ajustar parámetros de las que se reservarán para aceptar la mejora. La deduplicación por imagen no garantiza por sí sola independencia entre tramos.
 
----
-
-## Paso 4 — Evaluar el pipeline
+## Evaluar el perfil real
 
 ```bash
-python scripts/evaluate_pipeline.py \
-    --frames-dir data/validation/frames \
-    --annotations-dir data/validation/annotations \
-    --model models/yolo/yolov11l.pt \
-    --iou-threshold 0.5
+mkdir -p "$CARCOUNTER_DATASET_DIR/evaluation"
+env/bin/python scripts/evaluate_pipeline.py \
+  --config docs/GUIDES/aerial_counting.example.json \
+  --frames-dir "$CARCOUNTER_DATASET_DIR" \
+  --annotations-dir "$CARCOUNTER_DATASET_DIR" \
+  --iou-threshold 0.5 --device cpu \
+  --output-json "$CARCOUNTER_DATASET_DIR/evaluation/report.json"
 ```
 
-**Salida esperada:**
+Usa una ruta nueva para cada reporte. Si evalúas otra copia de perfil, cambia `--config` y registra la ruta. El script actual evalúa YOLO y SAHI con su perfil; no tiene un argumento para evaluación RF-DETR. No declares evaluado ese backend mediante este comando.
 
-```
-Resultados globales (IoU threshold=0.5)
-  Precision:          0.9234
-  Recall:             0.8712
-  F1:                 0.8965
-  Counting accuracy:  0.9150
-  TP / FP / FN:       234 / 19 / 35
-  Predicciones / GT:  253 / 269
+El evaluador exige referencias revisadas, imágenes presentes y nombres no duplicados. Evalúa vehículos cuyo centro pertenece a la ROI y no cae en exclusiones. No elimina de la referencia los vehículos reales que un filtro geométrico equivocadamente descarta.
 
-Por clase:
-  clase               P        R       F1   pred     gt
-  car             0.950   0.920   0.935    200    210
-  motorcycle      0.700   0.600   0.645     20     25
-  truck           0.875   0.750   0.808      8     10
-```
+## Interpretar resultados
 
----
+Informa TP/FP/FN y precisión/recall/F1 por clase, además de localización sin clase y error de cantidad por imagen. Una clase incorrecta genera un falso positivo y un falso negativo en la evaluación por clase, aunque la caja localice bien el auto. Los errores de cantidad se suman por imagen para evitar compensaciones entre frames.
 
-## Interpretacion
+No hay un porcentaje humano de referencia aprobado todavía. No se incluyen aquí salidas numéricas ficticias. Acordar umbrales por clase y contexto antes de escoger parámetros; un buen total global puede ocultar omisiones de autos pequeños o errores en una ruta concreta.
 
-| Counting accuracy | Que hacer |
-|-------------------|-----------|
-| > 95% | Pipeline excelente, no hay nada que optimizar en detection |
-| 85-95% | Aceptable para la mayoria de casos, revisar por-clase si alguna es peor |
-| 70-85% | Considerar ajustar `conf_threshold` o usar modelo mas grande (yolov11x) |
-| < 70% | Fine-tuning con dataset custom seria rentable |
-
-Si `recall` es bajo pero `precision` alta -> se pierden vehiculos
-(bajar `conf_threshold` o usar SAHI con tiles mas pequeños).
-
-Si `precision` es bajo pero `recall` alto -> demasiados FP
-(subir `conf_threshold` o agregar zonas de exclusion).
-
----
-
-## Referencias
-
-- Perceptual hashing: https://github.com/simoncirstoiu/alice
-- LabelMe v6.1: https://labelme.io/blog/labelme-v6.1
-- SAM3 AI-Box: https://labelme.io/blog/labelme-v6.1
+Una imagen con `reviewed=true` solo acredita la declaración del revisor, no prueba que haya sido revisada de forma correcta. Conserva responsable, fecha, alcance y anotaciones para poder auditar el resultado.

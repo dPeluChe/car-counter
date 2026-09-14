@@ -109,9 +109,20 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, CalibTestsMixin,
         self.content.pack(fill="both", expand=True)
 
         # Sidebar
-        self.sidebar = tk.Frame(self.content, bg="#181825", width=300)
-        self.sidebar.pack(side="left", fill="y")
-        self.sidebar.pack_propagate(False)
+        sidebar_wrap = tk.Frame(self.content, bg="#181825", width=320)
+        sidebar_wrap.pack(side="left", fill="y")
+        sidebar_wrap.pack_propagate(False)
+        self._sidebar_canvas = tk.Canvas(sidebar_wrap, bg="#181825", highlightthickness=0)
+        scrollbar = tk.Scrollbar(sidebar_wrap, orient="vertical", command=self._sidebar_canvas.yview)
+        scrollbar.pack(side="right", fill="y")
+        self._sidebar_canvas.pack(side="left", fill="both", expand=True)
+        self._sidebar_canvas.configure(yscrollcommand=scrollbar.set)
+        self.sidebar = tk.Frame(self._sidebar_canvas, bg="#181825")
+        sidebar_window = self._sidebar_canvas.create_window((0, 0), window=self.sidebar, anchor="nw")
+        self.sidebar.bind("<Configure>", lambda event: self._sidebar_canvas.configure(
+            scrollregion=self._sidebar_canvas.bbox("all")))
+        self._sidebar_canvas.bind("<Configure>", lambda event: self._sidebar_canvas.itemconfigure(
+            sidebar_window, width=event.width))
 
         # Canvas
         canvas_wrap = tk.Frame(self.content, bg="#1E1E2E")
@@ -219,6 +230,7 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, CalibTestsMixin,
             self._release_nav_cap()
             self.video_path = path
             self._load_frame()
+            self._clear_vehicle_samples()
             self._reset_calib()
 
     # ──────────────────────────────────────────────
@@ -231,8 +243,11 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, CalibTestsMixin,
     def _on_model_selected(self, name, path):
         """Callback cuando se selecciona un modelo en el dialogo."""
         if path:
+            model = YOLO(path)
             self._model_path = path
-            self.model = YOLO(path)
+            self.model = model
+            self.sahi_model = None
+            self.calib_test_passed = self.calib_confirmed = False
             self.status_var.set(f"Modelo cambiado a {name}")
 
     # ──────────────────────────────────────────────
@@ -245,6 +260,15 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, CalibTestsMixin,
             messagebox.showerror("Error cargando config", str(e))
             return
 
+        cfg_model = cfg.get("model_path")
+        if cfg_model and cfg_model != self._model_path:
+            try:
+                self._on_model_selected(os.path.basename(cfg_model), cfg_model)
+            except Exception as error:
+                messagebox.showerror("Modelo de configuración", str(error))
+                return
+        self.sahi_enabled.set(cfg.get("sahi", {}).get("enabled", True))
+        self.vehicle_samples = cfg.get("settings", {}).get("vehicle_samples", [])
         excl = parse_exclusion_zones(cfg)
         if excl:
             self.exclusion_zones = excl
@@ -258,6 +282,7 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, CalibTestsMixin,
         cfg_video = cfg.get("video_path", "")
         if cfg_video and cfg_video != self.video_path \
                 and os.path.isfile(cfg_video) and self.video_path == DEFAULT_VIDEO:
+            self._release_nav_cap()
             self.video_path = cfg_video
             self._load_frame()
 
@@ -297,6 +322,8 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, CalibTestsMixin,
         _set(self.max_age, p["max_age"])
         _set(self.min_hits, p["min_hits"])
         _set(self.iou_thresh, p["iou_threshold"])
+        for key in ("track_low_thresh", "track_high_thresh", "new_track_thresh", "track_buffer", "fuse_score"):
+            _set(getattr(self, key), cfg.get("tracker", {}).get(key))
         if p["min_area"] is not None:
             self.lbl_min_area.config(text=f"{self.min_area.get()} px²")
         if p["max_area"] is not None:
@@ -304,9 +331,10 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, CalibTestsMixin,
         cp = p["conf_per_class"]
         if cp:
             _set(self.conf_car, cp.get("car"))
-            _set(self.conf_motorbike, cp.get("motorbike"))
+            _set(self.conf_motorbike, cp.get("motorbike", cp.get("motor", cp.get("motorcycle"))))
             _set(self.conf_bus, cp.get("bus"))
             _set(self.conf_truck, cp.get("truck"))
+            _set(self.conf_van, cp.get("van"))
             self._conf_per_class_modified = True
 
         n = len(self.zones)
@@ -356,6 +384,7 @@ class SetupApp(CanvasMixin, ExclusionMixin, CalibrationMixin, CalibTestsMixin,
             panel.pack_forget()
         panels = [self.panel_step0, self.panel_step1, self.panel_step2, self.panel_step3]
         panels[idx].pack(fill="both", expand=True)
+        self._sidebar_canvas.yview_moveto(0)
 
         if idx == 0:
             self.canvas.config(cursor="crosshair")

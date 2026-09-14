@@ -21,12 +21,12 @@ class CalibrationMixin:
                   "1. Haz clic y arrastra sobre un\nauto para definir su tamaño.\n"
                   "2. Presiona [Probar YOLO].\n"
                   "3. Ajusta confianza si es necesario.\n"
-                  "4. Confirma cuando se detecte\n   ese auto correctamente.\n\n"
+                  "4. Guarda y prueba muestras de\n   varios frames y tamaños.\n\n"
                   "Zoom: rueda del mouse\n"
                   "Mover vista: clic der o ESPACIO + arrastrar", color="#A6ADC8")
         self._lbl(self.panel_step1,
                   "Tip aéreo: selecciona un solo auto con un recuadro ajustado.\n"
-                  "El test reescala ese recorte para encontrar autos pequeños.",
+                  "La prueba usa la misma resolución y ROI que el conteo.",
                   color="#89B4FA")
 
         tk.Frame(self.panel_step1, bg="#313244", height=1).pack(fill="x", pady=8)
@@ -65,7 +65,7 @@ class CalibrationMixin:
         tk.Frame(self.panel_step1, bg="#313244", height=1).pack(fill="x", pady=4)
         self._lbl(self.panel_step1, "Confianza por clase (opcional):", color="#A6ADC8")
         for _n, _v in [("car", self.conf_car), ("moto", self.conf_motorbike),
-                       ("bus", self.conf_bus), ("truck", self.conf_truck)]:
+                       ("bus", self.conf_bus), ("truck", self.conf_truck), ("van", self.conf_van)]:
             _r = tk.Frame(self.panel_step1, bg="#181825")
             _r.pack(fill="x")
             tk.Label(_r, text=f"  {_n}:", bg="#181825", fg="#A6ADC8",
@@ -102,6 +102,8 @@ class CalibrationMixin:
 
         tk.Frame(self.panel_step1, bg="#313244", height=1).pack(fill="x", pady=8)
 
+        tk.Checkbutton(self.panel_step1, text="Usar SAHI", variable=self.sahi_enabled,
+                       bg="#181825", fg="#CDD6F4", selectcolor="#313244").pack(fill="x")
         self.btn_yolo_test = tk.Button(self.panel_step1, text="👁  Probar YOLO",
                                        command=self._run_calib_test,
                                        bg="#89B4FA", fg="#11111B", font=("Arial", 10, "bold"),
@@ -120,6 +122,14 @@ class CalibrationMixin:
                                         relief="flat", pady=6)
         self.btn_add_sample.pack(fill="x", pady=2)
 
+        tk.Button(self.panel_step1, text="Probar muestras guardadas",
+                  command=self._test_saved_samples, bg="#313244", fg="#CDD6F4",
+                  relief="flat", pady=4).pack(fill="x", pady=2)
+
+        tk.Button(self.panel_step1, text="Aplicar filtros de las muestras",
+                  command=self._apply_sample_constraints, bg="#313244", fg="#CDD6F4",
+                  relief="flat", pady=4).pack(fill="x", pady=2)
+
         self.btn_clear_samples = tk.Button(self.panel_step1, text="🧹 Limpiar muestras",
                                            command=self._clear_vehicle_samples,
                                            bg="#313244", fg="#CDD6F4", relief="flat", pady=4)
@@ -131,7 +141,8 @@ class CalibrationMixin:
         self.btn_calib_reset.pack(fill="x", pady=2)
 
         self.lbl_calib_status = tk.Label(self.panel_step1, text="⚠  Pendiente de confirmar",
-                                          bg="#181825", fg="#F38BA8", font=("Arial", 9))
+                                          bg="#181825", fg="#F38BA8", font=("Arial", 9),
+                                          wraplength=280, justify="left")
         self.lbl_calib_status.pack(pady=4)
 
         self.btn_calib_ok = tk.Button(self.panel_step1, text="✅  Confirmar y continuar →",
@@ -143,15 +154,18 @@ class CalibrationMixin:
     # ── UI helpers ───────────────────────────────
     def _on_per_class_conf_modified(self):
         self._conf_per_class_modified = True
+        self.calib_test_passed = self.calib_confirmed = False
 
     def _update_conf_label(self, *_):
         self.lbl_conf_val.config(text=f"Valor: {self.conf_threshold.get():.2f}")
+        self.calib_test_passed = self.calib_confirmed = False
         if not self._conf_per_class_modified:
             val = self.conf_threshold.get()
-            for v in (self.conf_car, self.conf_motorbike, self.conf_bus, self.conf_truck):
+            for v in (self.conf_car, self.conf_motorbike, self.conf_bus, self.conf_truck, self.conf_van):
                 v.set(val)
 
     def _update_imgsz_label(self, *_):
+        self.calib_test_passed = self.calib_confirmed = False
         self.lbl_imgsz_val.config(text=f"Valor: {self.infer_imgsz.get()} px")
 
     def _update_samples_label(self):
@@ -165,10 +179,7 @@ class CalibrationMixin:
 
     # ── Calibración lógica ───────────────────────
     def _sample_constraints(self):
-        return compute_sample_constraints(
-            self.vehicle_samples,
-            self._loaded_sample_constraints,
-        )
+        return self._loaded_sample_constraints
 
     def _passes_sample_constraints(self, bbox):
         return passes_sample_constraints(bbox, self._sample_constraints())
@@ -191,32 +202,51 @@ class CalibrationMixin:
         y1 = min(self.calib_rect_start[1], self.calib_rect_end[1])
         x2 = max(self.calib_rect_start[0], self.calib_rect_end[0])
         y2 = max(self.calib_rect_start[1], self.calib_rect_end[1])
+        if x2 <= x1 or y2 <= y1:
+            self.status_var.set("La muestra debe tener ancho y alto positivos.")
+            return
+        if any(tuple(sample["bbox"]) == (x1, y1, x2, y2) and sample.get("frame") == self.current_frame_idx
+               for sample in self.vehicle_samples):
+            self.status_var.set("Esa muestra ya está guardada en este frame.")
+            return
         width = max(1, x2 - x1)
         height = max(1, y2 - y1)
         area = width * height
         aspect = width / float(height)
         self.vehicle_samples.append({
             "bbox": (x1, y1, x2, y2),
+            "frame": self.current_frame_idx,
             "width": width, "height": height,
             "area": area, "aspect": aspect,
         })
-        self._apply_sample_constraints()
+        self.calib_confirmed = False
         self._update_samples_label()
         self.lbl_calib_status.config(
             text=f"✅ Muestra agregada ({len(self.vehicle_samples)})", fg="#A6E3A1")
         self.status_var.set(
-            "Muestra agregada. Marca 5 autos y 1-2 vehículos grandes para afinar filtros.")
+            "Muestra guardada. Incluye autos y vehículos grandes en varios frames; aplicar filtros es opcional.")
         self._redraw()
 
     def _clear_vehicle_samples(self):
         self.vehicle_samples = []
+        self._loaded_sample_constraints = None
+        self.min_area.set(0)
+        self.max_area.set(999999)
+        self.lbl_min_area.config(text="0 px²")
+        self.lbl_max_area.config(text="999999 px²")
+        self.calib_confirmed = False
         self._update_samples_label()
         self.lbl_calib_status.config(text="⚠  Muestras limpiadas", fg="#F9E2AF")
         self.status_var.set("Muestras limpiadas")
         self._redraw()
 
     def _apply_sample_constraints(self):
-        constraints = self._sample_constraints()
+        if len(self.vehicle_samples) < 5:
+            self.status_var.set("Marca al menos 5 vehículos de tamaños distintos antes de aplicar filtros.")
+            return
+        constraints = compute_sample_constraints(self.vehicle_samples)
+        self._loaded_sample_constraints = constraints
+        self.calib_test_passed = self.calib_confirmed = False
         if constraints is None:
             return
         self.min_area.set(constraints["min_area"])
@@ -231,6 +261,8 @@ class CalibrationMixin:
 
     def _ensure_sahi_model(self, conf):
         if self.sahi_model is not None:
+            self.sahi_model.confidence_threshold = conf
+            self.sahi_model.image_size = self.infer_imgsz.get()
             return self.sahi_model
         try:
             from sahi import AutoDetectionModel
@@ -241,6 +273,7 @@ class CalibrationMixin:
             model_path=self._model_path,
             confidence_threshold=conf,
             device="cpu",
+            image_size=self.infer_imgsz.get(),
         )
         return self.sahi_model
 
@@ -277,6 +310,7 @@ class CalibrationMixin:
                 "¿Continuar sin filtro de área? (recomendado para tomas aéreas "
                 "de autos muy pequeños; el pipeline detectará por confianza)."):
                 return
+            self._loaded_sample_constraints = None
             self.min_area.set(0)
             self.max_area.set(999999)
             self.lbl_min_area.config(text="0 px²")
@@ -305,16 +339,6 @@ class CalibrationMixin:
         ix, iy = self._screen_to_img(event.x, event.y)
         self.calib_rect_end = (ix, iy)
         self.calib_drawing = False
-        if self.calib_rect_start and self.calib_rect_end:
-            x1 = min(self.calib_rect_start[0], self.calib_rect_end[0])
-            y1 = min(self.calib_rect_start[1], self.calib_rect_end[1])
-            x2 = max(self.calib_rect_start[0], self.calib_rect_end[0])
-            y2 = max(self.calib_rect_start[1], self.calib_rect_end[1])
-            area = max(0, (x2 - x1) * (y2 - y1))
-            self.min_area.set(int(area * 0.5))
-            self.max_area.set(int(area * 4.0))
-            self.lbl_min_area.config(text=f"{self.min_area.get()} px²")
-            self.lbl_max_area.config(text=f"{self.max_area.get()} px²")
         self.calib_test_passed = False
         self.calib_confirmed = False
         self.lbl_calib_status.config(text="⚠  Pendiente de confirmar", fg="#F38BA8")

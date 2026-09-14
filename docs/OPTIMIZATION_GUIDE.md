@@ -1,181 +1,47 @@
-# Guia de Optimizacion para Deteccion de Vehiculos
+# Optimización basada en errores medidos
 
-## Flujo actual
+Usa el [protocolo manual](GUIDES/MANUAL_VALIDATION.md) y registra resultados antes de modificar el perfil. El backlog detalla el trabajo de detección, tracking y rendimiento; esta guía describe cómo comparar variantes sin cambiar el problema evaluado.
 
-Todos los parametros se configuran con el configurador interactivo y se guardan en el JSON:
+## Perfil y parámetros efectivos
 
-```bash
-python setup.py --video assets/mi_video.mp4
-python main.py --config config/config.json --video assets/mi_video.mp4
-```
+El caso de referencia es [aerial_counting.example.json](GUIDES/aerial_counting.example.json), no una recomendación universal. Usa VisDrone, ROI de 280×400 píxeles, `imgsz=640`, confianza 0.10 y SAHI desactivado. Los flags `--tracker`, `--imgsz`, `--model`, `--video` y `--no-sahi` pueden modificar la ejecución; registra comando y metadatos además del JSON.
 
-Ya no se usan flags CLI para confianza, tracker, etc. — todo va en el JSON config.
+| Parámetro | Efecto a probar | Riesgo de una comparación incorrecta |
+|---|---|---|
+| `settings.conf_threshold`, `conf_per_class` | Filtrado por confianza antes del tracker | Subir el piso elimina cajas débiles que ByteTrack podría recuperar |
+| `settings.imgsz` | Resolución entregada al detector | Más resolución no garantiza mejor exactitud; cambia costo y firma de caché |
+| `settings.inference_roi` | Recorte de inferencia en coordenadas originales | Una ROI que no cubre el trayecto puede impedir rutas completas |
+| `settings.sample_constraints`, `min_area`, `max_area` | Filtros geométricos | Un filtro que elimina buses/autos reales puede reducir cajas y empeorar recall |
+| `exclusion_zones` | Descarte por centro de detección | No ocultar vehículos válidos para mejorar métricas |
+| `sahi.enabled`, tamaño/solapamiento de tiles | Inferencia por recortes y fusión global | Probar bordes y autos próximos; no contar cajas duplicadas como recuperación |
+| `sahi.nms_threshold` | Supresión global tras SAHI | Una supresión excesiva puede fusionar autos diferentes |
+| `settings.min_origin_frames`, `min_dest_frames` | Confirmación de zonas | Subirlos puede omitir autos que pasan rápido; corregir primero geometría |
+| `settings.min_crossing_frames` | Confirmación del cambio de lado | Cambia cuándo se registra el evento; considerar margen temporal |
 
----
+Los filtros de muestras se aplican con una acción explícita y al menos cinco muestras. Ejecutar la vista global o marcar un solo auto no los activa. Las muestras parciales sirven para comprobar recuperación de esos vehículos; no miden recall de toda la escena.
 
-## Parametros clave y como ajustarlos
+## Asociación de tracks
 
-### `conf_threshold` (default: 0.10)
+ByteTrack y BoT-SORT reciben una sola actualización global por frame, también con SAHI. No se fuerza SORT por activar tiles. El wrapper actual no entrega características de apariencia y rechaza `with_reid=true`; no presentar BoT-SORT como ReID disponible.
 
-Umbral global de confianza para YOLO.
+Los parámetros nativos son `track_low_thresh`, `track_high_thresh`, `new_track_thresh`, `track_buffer`, `match_thresh` y `fuse_score`. `max_age`, `min_hits` e `iou_threshold` corresponden a SORT/OC-SORT, no sustituyen a los anteriores. La [guía de calibración](GUIDES/DETECTION_CALIBRATION_REPLAY.md) explica el caso observado de asociación débil en la versión instalada.
 
-- **Bajar** (0.05-0.10): mas recall, detecta vehiculos pequenos pero mas falsos positivos
-- **Subir** (0.20-0.35): menos falsos positivos, puede perder autos pequenos
+Compara cambios de ID, duplicaciones y eventos perdidos contra el mismo video y referencia humana. Un tracker con menos IDs o más cruces no es automáticamente mejor. La compensación de cámara dentro de BoT-SORT no corrige las zonas/líneas fijas.
 
-Para glorietas aereas: empezar en 0.10 y subir solo si hay demasiado ruido.
+## Orden de un experimento
 
-### `conf_per_class`
+1. Conserva perfil y salida de referencia; selecciona un fallo confirmado por revisión humana.
+2. Cambia un factor y explica qué resultado esperas: recuperar un auto, eliminar una caja falsa o conservar un ID.
+3. Usa replay cuando solo cambias tracking, geometría o filtros compatibles. Cambiar pesos, ROI, resolución, SAHI o bajar el piso grabado exige inferencia nueva.
+4. Compara TP/FP/FN, precisión/recall/F1 por clase y eventos por ruta sobre el mismo alcance. Incluye casos de fondo, bordes y oclusión.
+5. Conserva el cambio solo con evidencia y revisa un tramo reservado que no se utilizó para ajustar parámetros.
 
-Umbrales individuales por clase. Se configuran con los sliders del Paso 1.
+Los resultados locales existentes y sus límites están en [VERIFIED_STATE.md](GUIDES/VERIFIED_STATE.md). La prueba SAHI de 12 frames verifica integración, no exactitud del aforo completo. El replay evita ejecutar el detector y no demuestra una aceleración de inferencia.
 
-Util cuando una clase tiene mas falsos positivos que otra:
+## Rendimiento y formatos
 
-- `car`: generalmente el mas confiable, puede quedar bajo (0.10)
-- `motorbike`: suele tener mas falsos positivos en aereas, subir a 0.20-0.30
-- `bus` / `truck`: depende del video
+Para medir el perfil real usa `main.py --benchmark` con los mismos argumentos de la corrida, rutas de salida nuevas y dispositivo registrado. La etapa `detection` incluye tracking. El script standalone `scripts/benchmark_pipeline.py` usa parámetros propios, zonas vacías y operaciones aproximadas de dibujo/escritura; no utilizarlo para atribuir tiempos de producción a cada etapa real.
 
-### `imgsz` (default: 1600)
+`scripts/export_model.py` admite `--model` y `--imgsz` y exporta ONNX. No admite `--half` ni `--format`. La disponibilidad de un archivo ONNX no acredita paridad de clases/cajas ni más FPS. Debe compararse con `.pt` y el mismo perfil antes de adoptarse. No hay benchmark local de TensorRT.
 
-Resolucion de inferencia YOLO. Mayor = mejor deteccion de objetos pequenos pero mas lento.
-
-- Vista aerea alta (drone >50m): 1600-2560
-- Vista aerea media (20-50m): 1280-1600
-- Vista a nivel de calle: 640-1280
-
-### `exclusion_zones`
-
-Poligonos donde no se cuentan vehiculos. Se configuran en el Paso 0 del configurador.
-
-Usar para:
-
-- estacionamientos con vehiculos fijos
-- areas laterales donde YOLO detecta techos o arboles como vehiculos
-- zonas fuera del flujo de transito
-
-### `sample_constraints`
-
-Filtros geometricos derivados de las muestras de vehiculos del Paso 1.
-
-Rango automatico: el configurador toma el min/max de ancho, alto y aspect ratio de todas las muestras, con un margen del 30%.
-
-Mas muestras = filtro mas representativo. Marcar al menos 5 vehiculos de distintos tamanos.
-
-### `slice_width` / `slice_height` (SAHI)
-
-Tamano de los tiles para SAHI (Slicing Aided Hyper Inference).
-
-- Tiles chicos (256): mejor para autos muy pequenos, mas tiles, mas lento
-- Tiles grandes (512): mas rapido, menos granularidad
-
-### `overlap_ratio` (SAHI)
-
-Solapamiento entre tiles SAHI. Mayor overlap = menos chances de cortar un vehiculo en el borde.
-
-- 0.2: balance general
-- 0.3: si hay vehiculos justo en los bordes de tiles
-
-### `nms_threshold` (SAHI)
-
-NMS post-SAHI para eliminar detecciones duplicadas entre tiles solapados.
-
-- 0.3: valor por defecto, buen balance
-- 0.2: mas agresivo, elimina mas duplicados
-- 0.5: mas permisivo, menos supresion
-
-### `min_origin_frames` / `min_dest_frames`
-
-Frames consecutivos que un vehiculo debe permanecer en una zona para confirmar entrada/salida.
-
-- 3 (default): buen balance anti-bounce
-- 5+: para zonas muy grandes donde el vehiculo pasa lento
-- 1-2: si las zonas son pequenas y el vehiculo pasa rapido
-
----
-
-## Tracker
-
-Opciones via CLI flag `--tracker`:
-
-| Tracker | Ventajas | Cuando usar |
-|---------|----------|-------------|
-| `bytetrack` (default) | Estable, nativo de Ultralytics | General, recomendado |
-| `botsort` | Mejor re-ID | Cuando hay muchas oclusiones |
-| `sort` | Legacy, no requiere `lap` | Fallback si `lap` no instala |
-
-Con SAHI activo, siempre se usa SORT legacy (SAHI no es compatible con `model.track()`).
-
----
-
-## Modelos YOLO
-
-| Modelo | Tamano | Velocidad | Precision | Recomendacion |
-|--------|--------|-----------|-----------|---------------|
-| **yolov11l** | ~85MB | ~280ms | Muy Alta | Mejor para objetos pequenos |
-| **yolov11m** | ~50MB | ~200ms | Media-Alta | Balance velocidad/precision |
-| yolov8l | ~80MB | ~300ms | Alta | Buena opcion general |
-| yolov8m | ~50MB | ~220ms | Media | Alternativa rapida |
-
-Recomendacion: `yolov11l` para glorietas aereas.
-
----
-
-## Proceso de calibracion recomendado
-
-### 1. Zonas de exclusion (Paso 0)
-
-Si hay vehiculos estacionados visibles en el frame, dibuja poligonos sobre ellos. Esto evita tracks innecesarios y ahorra recursos de tracking.
-
-### 2. Vista Global + muestras (Paso 1)
-
-1. Presiona `Vista Global` con conf bajo (0.10) para ver todo lo que detecta
-2. Marca 5+ vehiculos representativos como muestras
-3. Presiona `Vista Global` otra vez — los filtros geometricos ya eliminan objetos grandes
-4. Si una clase tiene falsos positivos, sube su slider individual
-5. Valida con `Probar YOLO` sobre un auto puntual
-
-### 3. Zonas de transito (Paso 2)
-
-1. Dibuja zonas que cubran cada boca calle
-2. Usa el preview de video para validar
-3. Activa YOLO en el preview para ver detecciones en vivo
-4. Las zonas de exclusion se muestran como referencia
-
-### 4. SAHI (Paso 3)
-
-1. Revisa la cuadricula de tiles sobre el frame
-2. Ajusta `nms_threshold` si hay duplicados
-3. Guarda la configuracion
-
----
-
-## Problemas comunes y soluciones
-
-### Vehiculos estacionados generan tracks
-
-Solucion: definir zonas de exclusion en el Paso 0 del configurador.
-
-### Autos pequenos no se detectan
-
-- Subir `imgsz` a 1600-2560
-- Bajar `conf_threshold` a 0.05-0.10
-- Ajustar tiles SAHI a 256x256
-
-### Demasiados falsos positivos
-
-- Marcar mas muestras de vehiculos para ajustar filtros geometricos
-- Subir `conf_threshold` o el slider de la clase problematica
-- Agregar zonas de exclusion sobre areas problematicas
-
-### Detecciones duplicadas con SAHI
-
-- Bajar `nms_threshold` a 0.2-0.25
-
-### IDs de tracking cambian constantemente
-
-- Usar `bytetrack` (default) en vez de `sort`
-- Los parametros del tracker (max_age, min_hits, iou_threshold) se ajustan en el Paso 3
-
-### Rutas contadas incorrectamente
-
-- Verificar que las zonas no sean demasiado grandes (invadiendo el anillo)
-- Subir `min_origin_frames` / `min_dest_frames` si hay conteos falsos por vehiculos que rozan la zona
+Las mejoras de rendimiento se aceptan con exactitud conservada, no a cambio de omisiones invisibles. Los criterios concretos se registran en [TASK_TODO.md](TASK_TODO.md).

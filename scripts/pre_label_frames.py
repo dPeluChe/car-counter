@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import cv2
 
 from carcounter.paths import paths
-from carcounter.constants import COCO_NAMES, VEHICLE_CLASSES, VEHICLE_CLASS_IDS
+from carcounter.detector import YOLODetector
 from carcounter.validation import detections_to_labelme
 
 
@@ -35,6 +35,7 @@ def pre_label(frames_dir, output_dir, model_path, conf_threshold=0.25, imgsz=128
 
     from ultralytics import YOLO
     model = YOLO(str(model_path))
+    detector = YOLODetector(model, imgsz=imgsz)
 
     frame_files = sorted(frames_dir.glob("*.jpg")) + sorted(frames_dir.glob("*.png"))
     if not frame_files:
@@ -45,27 +46,21 @@ def pre_label(frames_dir, output_dir, model_path, conf_threshold=0.25, imgsz=128
     total_detections = 0
 
     for frame_path in frame_files:
+        out_path = output_dir / f"{frame_path.stem}.json"
+        if out_path.exists():
+            print(f"  conservado {out_path.name} (anotaciones existentes)")
+            continue
         frame = cv2.imread(str(frame_path))
         if frame is None:
             print(f"  skip {frame_path.name} (no se pudo leer)")
             continue
         h, w = frame.shape[:2]
 
-        results = model(frame, conf=conf_threshold, imgsz=imgsz,
-                        classes=VEHICLE_CLASS_IDS, verbose=False)
-
-        dets = []
-        for r in results:
-            for box in r.boxes:
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                cls_id = int(box.cls[0])
-                cls_name = COCO_NAMES[cls_id] if cls_id < len(COCO_NAMES) else ""
-                if cls_name in VEHICLE_CLASSES:
-                    dets.append((x1, y1, x2, y2, cls_name))
+        dets = [(*det["bbox"], det["cls_name"]) for det in detector.infer(frame, conf_threshold)]
 
         labelme_data = detections_to_labelme(dets, frame_path.name, h, w)
-        out_path = output_dir / f"{frame_path.stem}.json"
-        with open(out_path, "w", encoding="utf-8") as f:
+        labelme_data["flags"]["reviewed"] = False
+        with open(out_path, "x", encoding="utf-8") as f:
             json.dump(labelme_data, f, indent=2)
 
         total_detections += len(dets)

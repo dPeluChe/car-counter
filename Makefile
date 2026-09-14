@@ -11,7 +11,7 @@ TRUTH   ?= data/validation/route_truth.json
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install setup run run-full test benchmark \
+.PHONY: help install setup run run-full run-aerial test benchmark \
         validate-routes val-extract val-prelabel val-evaluate clean
 
 help: ## Muestra esta ayuda
@@ -32,6 +32,11 @@ run-full: ## Corre el pipeline sobre el video completo
 	$(PYTHON) main.py --config $(CONFIG) --video $(VIDEO) \
 		--output-json $(OUTDIR)/results.json --output-od-csv $(OUTDIR)/od_matrix.csv
 
+run-aerial: ## Demo de aforo en video normal con VisDrone y recorte (300 frames)
+	$(PYTHON) main.py --config docs/GUIDES/aerial_counting.example.json --no-sahi \
+		--headless --max-frames 300 --output $(OUTDIR)/aerial_demo.mp4 \
+		--output-json $(OUTDIR)/aerial_demo.json --output-tracks-csv $(OUTDIR)/aerial_demo_tracks.csv
+
 test: ## Corre la suite de tests
 	$(PYTHON) -m pytest tests/ -v
 
@@ -50,7 +55,7 @@ val-prelabel: ## Paso 2: pre-etiqueta frames con YOLO teacher
 	$(PYTHON) scripts/pre_label_frames.py --model $(MODEL)
 
 val-evaluate: ## Paso 4: evalua deteccion vs ground truth LabelMe
-	$(PYTHON) scripts/evaluate_pipeline.py --model $(MODEL)
+	$(PYTHON) scripts/evaluate_pipeline.py --config $(CONFIG)
 
 clean: ## Borra salidas generadas (output/ y results)
 	rm -rf $(OUTDIR)/*.mp4 $(OUTDIR)/*.json $(OUTDIR)/*.csv $(OUTDIR)/benchmarks

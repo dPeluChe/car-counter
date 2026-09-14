@@ -55,6 +55,7 @@ def init_state(app, *, video_path: str, model_path: str, output_config: str):
     app.conf_motorbike = tk.DoubleVar(value=0.10)
     app.conf_bus = tk.DoubleVar(value=0.10)
     app.conf_truck = tk.DoubleVar(value=0.10)
+    app.conf_van = tk.DoubleVar(value=0.10)
     app._conf_per_class_modified = False
 
     # Zonas de exclusion
@@ -95,6 +96,7 @@ def init_state(app, *, video_path: str, model_path: str, output_config: str):
     app._preview_show_detections = False
 
     # SAHI / tracker
+    app.sahi_enabled = tk.BooleanVar(value=False)
     app.slice_w = tk.IntVar(value=512)
     app.slice_h = tk.IntVar(value=512)
     app.overlap = tk.DoubleVar(value=0.2)
@@ -102,6 +104,11 @@ def init_state(app, *, video_path: str, model_path: str, output_config: str):
     app.max_age = tk.IntVar(value=40)
     app.min_hits = tk.IntVar(value=3)
     app.iou_thresh = tk.DoubleVar(value=0.2)
+    app.track_low_thresh = tk.DoubleVar(value=0.1)
+    app.track_high_thresh = tk.DoubleVar(value=0.25)
+    app.new_track_thresh = tk.DoubleVar(value=0.25)
+    app.track_buffer = tk.IntVar(value=30)
+    app.fuse_score = tk.BooleanVar(value=False)
     app._tile_grid_visible = True
 
     # Config cargada (para merge al guardar)
