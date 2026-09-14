@@ -46,7 +46,7 @@ La demo aérea necesita los archivos locales `assets/glorieta_test1min.mp4` y `m
 | `lines` | `"lines": [{"name": "L1", "points": [...]}]` | Cruces por línea y sentido |
 | `directions` | `"directions": {"Norte": [[100,200],[100,0]]}` | Clasificación por vector de movimiento |
 
-`settings.inference_roi` limita la inferencia a `[x1, y1, x2, y2]` del video original; zonas, líneas y salidas siguen en coordenadas completas. Cada conteo se exporta en `counting_events` con frame, ID, clase y ruta.
+`settings.inference_roi` limita la inferencia a `[x1, y1, x2, y2]` del video original; zonas, líneas y salidas siguen en coordenadas completas. Cada conteo se exporta en `counting_events` con frame, ID, clase, grupo EPS (`ligeros`, `pesados`, `dos_ruedas`) y ruta; `routes_by_group` resume cada ruta por grupo ([alcance del aforo](docs/GUIDES/COUNTING_SCOPE.md)).
 
 ## Arquitectura
 

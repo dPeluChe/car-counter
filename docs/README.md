@@ -19,6 +19,7 @@ Estado real de lo comprobado: [GUIDES/VERIFIED_STATE.md](GUIDES/VERIFIED_STATE.m
 
 | Necesidad | Documento |
 |---|---|
+| Qué se cuenta, grupos, tramo y criterio de aceptación | [COUNTING_SCOPE.md](GUIDES/COUNTING_SCOPE.md) |
 | Ejecutar las 8 pruebas manuales | [MANUAL_VALIDATION.md](GUIDES/MANUAL_VALIDATION.md) |
 | Calibrar, ajustar tracker, replay, cámara, rendimiento | [DETECTION_TUNING.md](GUIDES/DETECTION_TUNING.md) |
 | Medir cajas contra anotaciones LabelMe | [DETECTION_VALIDATION.md](GUIDES/DETECTION_VALIDATION.md) |

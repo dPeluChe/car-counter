@@ -18,7 +18,7 @@
 | Operación opcional | TODO-034 | Cron activado y verificado desde entorno permitido |
 | Opcional | TODO-036 | Replay y control de cámara desde el wizard |
 
-No hay porcentaje aprobado de precisión todavía. El revisor define con el responsable de la presentación el alcance, las clases y los umbrales antes de seleccionar parámetros.
+Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNTING_SCOPE.md](GUIDES/COUNTING_SCOPE.md). La aceptación se confirma con la primera referencia humana.
 
 ## TODO-028: Referencias humanas de detección y rutas
 
@@ -32,8 +32,10 @@ No hay porcentaje aprobado de precisión todavía. El revisor define con el resp
 - [ ] Separar tramos usados para ajustar parámetros de los usados para aceptar el cambio; evitar usar imágenes casi iguales como validación independiente.
 - [ ] Corregir todas las cajas/clases del alcance en LabelMe u otro editor compatible; añadir también autos omitidos. Registrar revisor, fecha y alcance antes de marcar `flags.reviewed=true`.
 - [ ] Contar eventos humanos independientemente del overlay: frame, ruta/sentido, clase y casos incompletos; no copiar eventos predichos a la referencia.
-- [ ] Acordar clases incluidas en el aforo (por ejemplo autos, buses, motos y vans), tratamiento de ambiguos y márgenes al inicio/final.
-- [ ] Acordar por escrito los umbrales de aceptación de precisión, recall y F1 por clase/ruta y una tolerancia temporal justificada por FPS y confirmación.
+- [ ] Confirmar el tramo oficial: 3:00 a 4:00 de `glorieta_normal.mp4` (propuesto, igual a `glorieta_test1min.mp4`) o 1:00 a 2:00 (requiere nuevas zonas y caché).
+- [ ] Acordar márgenes al inicio/final del tramo y el trato de vehículos que ya están dentro del encuadre.
+- [ ] Contar eventos humanos con grupos EPS en dos pasadas o por dos personas y reconciliar diferencias antes de `reviewed=true`.
+- [ ] Confirmar o ajustar con esa referencia la [propuesta de aceptación](GUIDES/COUNTING_SCOPE.md#criterio-de-aceptación-propuesta) y fijar la tolerancia temporal según FPS y confirmación.
 - [ ] Guardar ejecución de evaluación real con perfiles y reportes; no usar porcentajes de ejemplo como resultado.
 
 **Archivos relevantes:** `scripts/extract_validation_frames.py`, `scripts/pre_label_frames.py`, `scripts/evaluate_pipeline.py`, `carcounter/validation.py`, `scripts/validate_routes.py`. **Entregable:** imágenes, anotaciones revisadas, manifiesto, referencia de eventos y reporte. `data/` y `output/` están ignorados por Git; acordar copia de respaldo del dataset sin subir videos ni datos por defecto.
@@ -44,7 +46,7 @@ No hay porcentaje aprobado de precisión todavía. El revisor define con el resp
 
 **Prioridad:** P0. **Depende de:** TODO-028. **Estado:** detector compartido implementado; mejora de precisión real sin acreditar.
 
-**Especificación:** separar falsos positivos del fondo, autos omitidos, cajas duplicadas y clase errónea. Revisar autos pequeños/ocluídos, vehículos estacionados y bordes de ROI. El modelo de referencia es VisDrone y no debe interpretarse con IDs de clase COCO. Las clases incluidas en aforo se acuerdan antes de excluir buses, vans o motos.
+**Especificación:** separar falsos positivos del fondo, autos omitidos, cajas duplicadas y clase errónea. Revisar autos pequeños/ocluídos, vehículos estacionados y bordes de ROI. El modelo de referencia es VisDrone y no debe interpretarse con IDs de clase COCO. Medir en especial los cruces entre grupos EPS: combi detectada como `van`, pickup como `truck`, remolques y patines sin clase ([COUNTING_SCOPE.md](GUIDES/COUNTING_SCOPE.md#donde-el-modelo-y-el-criterio-eps-no-coinciden)).
 
 **Archivos relevantes:** `carcounter/detection.py`, `carcounter/detector.py`, `carcounter/constants.py`, `carcounter/calibration.py`, `scripts/evaluate_pipeline.py`, `tests/test_detection.py`, `tests/test_pipeline_profile.py`.
 
@@ -114,6 +116,7 @@ No hay porcentaje aprobado de precisión todavía. El revisor define con el resp
 - [ ] Añadir validación de geometría que identifique zonas inalcanzables por la región de detección y destinos prematuros, con diagnóstico comprensible.
 - [ ] Reproducir A→B, paso junto a una salida sin tomarla y trayectoria incompleta con reglas documentadas.
 - [ ] Comparar eventos y matriz origen/destino contra revisión humana del mismo video y tramo.
+- [ ] Exportar la matriz origen/destino por grupo EPS también en CSV (hoy está en `routes_by_group` del JSON).
 - [ ] Entregar video, JSON con eventos, CSV de tracks/OD y reporte de rutas revisadas, sin presentar IDs como autos.
 
 **Pruebas manuales:** PRUEBA-04 y PRUEBA-06. **Cierre:** rutas del alcance revisadas, incidentes clasificados y umbrales acordados alcanzados; no basta conservar los cruces de una sola línea.
