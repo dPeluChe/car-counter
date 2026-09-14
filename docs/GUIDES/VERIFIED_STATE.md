@@ -7,7 +7,7 @@ Revisión: 2026-09-14. Fuentes: código local, suite de pruebas y artefactos ind
 | Área | Implementación existente | Evidencia y límite |
 |---|---|---|
 | Detección | YOLO, SAHI y RF-DETR entregan cajas globales al tracker; clases resueltas desde el modelo | Pruebas de integración; ejecución real con YOLO VisDrone. No hay comparación humana que demuestre un detector ganador |
-| Calibración | Perfil compartido, muestras por frame, correspondencia IoU y filtros explícitos desde cinco muestras | Funciones probadas. La interfaz Tk no se pudo abrir en esta sesión |
+| Calibración | Perfil compartido, muestras por frame, correspondencia IoU y filtros explícitos desde cinco muestras | Funciones probadas. GUI Tk sin validar en escritorio (no abrió en el entorno del agente) |
 | Tracking | ByteTrack, BoT-SORT, SORT y wrapper opcional OC-SORT | ByteTrack y BoT-SORT se ejecutaron con la misma caché. El wrapper rechaza `with_reid=true`; BoT-SORT aquí no implica ReID de apariencia |
 | Conteo | Zonas, líneas finitas con confirmación y direcciones | Pruebas sintéticas y replay de una línea. Zonas A→B todavía sin demostración humana del aforo completo |
 | Clase de vehículo | Mayoría por track hasta el primer conteo, conservada después | Pruebas de ruido de clase. Cambiaron 44 clases de tracks en el replay; no se han revisado como correcciones humanas |
@@ -35,7 +35,7 @@ Perfil: [aerial_counting.example.json](aerial_counting.example.json).
 | Línea | Anillo oeste, `(750,550)` a `(865,550)`, dos observaciones de confirmación |
 | Resultado del sistema | Seis cruces: cinco autos y un bus. No es referencia humana |
 
-La caché `output/aerial_low_conf.sqlite` contiene 300 frames. No sirve para ejecutar el minuto completo ni para cambiar ROI, resolución, modelo o SAHI. La firma incluye parámetros adicionales; el programa valida compatibilidad. Puede aumentarse el piso de confianza, pero no recuperar cajas debajo del piso grabado.
+La caché `output/aerial_low_conf.sqlite` cubre esos 300 frames; sus límites de reutilización están en [DETECTION_TUNING.md](DETECTION_TUNING.md#grabar-una-vez-y-repetir-sin-inferencia).
 
 ## Artefactos existentes
 
@@ -54,4 +54,4 @@ Los máximos estimados de deriva fueron 7.8113 px en el normal y 85.2845 px en e
 
 La última ejecución de `env/bin/python -m pytest -q` aprobó 316 pruebas y omitió 15 por dependencias opcionales. Las omisiones no equivalen a pruebas aprobadas de DB/API.
 
-No hay porcentaje de precisión humana confirmado, nueva calibración de todas las entradas/salidas, estabilización automática, entrenamiento de pesos, benchmark de ONNX/TensorRT ni despliegue verificado. El backlog describe sus criterios; no deben presentarse como capacidades ya probadas.
+No hay porcentaje de precisión humana confirmado, nueva calibración de todas las entradas/salidas, estabilización automática, entrenamiento de pesos, benchmark de ONNX/TensorRT ni despliegue verificado. Sus criterios están en el backlog.

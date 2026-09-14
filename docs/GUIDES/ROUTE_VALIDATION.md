@@ -43,26 +43,16 @@ Los 15 frames son un valor inicial: ajústalo al FPS, a la separación entre aut
 
 ## Resumen complementario: totales por ruta
 
-Formato agregado `{ "ruta": conteo }` sin hash, tramo ni campo de revisión: verifícalos al registrar la prueba. Plantilla en [route_truth.example.json](route_truth.example.json). El separador puede ser `->` o `→`. Los nombres deben coincidir con las zonas dibujadas.
-
-```bash
-make setup             # zonas -> config/config.json
-make run               # clip corto -> output/results.json
-make validate-routes   # usa TRUTH=data/validation/route_truth.json
-```
-
-`make setup/run` usan por defecto `glorieta_fast.MP4` y `config/config.json`, no el video de la demo aérea: ajusta `VIDEO` y `CONFIG` antes de mezclar referencias.
-
-Por ruta reporta `pred`, `real`, `err` y `acc`, y marca **rutas fantasma** (contadas sin ocurrir) y **faltantes**. La accuracy ponderada es `max(0, 1 - suma(|pred-real|) / max(total_real, 1))`: penaliza rutas intercambiadas aunque el total coincida.
+Formato `{ "ruta": conteo }` ([plantilla](route_truth.example.json)), separador `->` o `→`, con los nombres de zona del perfil y conteos enteros no negativos. No lleva hash, tramo ni revisión: regístralos aparte.
 
 ```bash
 env/bin/python scripts/validate_routes.py \
-  --results output/results.json \
+  --results "$CARCOUNTER_REVIEW_DIR/routes.json" \
   --truth data/validation/route_truth.json \
-  --min-accuracy 0.95 --output output/validation_report.json
+  --min-accuracy 0.95 --output "$CARCOUNTER_REVIEW_DIR/route_totals.json"
 ```
 
-Termina con código 1 si no alcanza el umbral o la referencia no tiene autos. El 95% es un ejemplo: el criterio real se acuerda con EPS. Conteos enteros no negativos.
+Atajo: `make validate-routes RESULTS=... TRUTH=... ARGS="--min-accuracy 0.95"`. Por ruta reporta `pred`, `real`, `err` y `acc`, y marca **rutas fantasma** (contadas sin ocurrir) y **faltantes**. Accuracy ponderada: `max(0, 1 - suma(|pred-real|) / max(total_real, 1))`. Termina con código 1 si no alcanza el umbral o la referencia no tiene autos. El 95% es un ejemplo: el criterio real se acuerda con EPS.
 
 ## Interpretar errores
 
@@ -72,4 +62,4 @@ Termina con código 1 si no alcanza el umbral o la referencia no tiene autos. El
 
 ## Evidencia de aceptación
 
-Guarda perfil, comando, video/hash, intervalo, referencia humana y reporte. Un total correcto puede ocultar una omisión compensada por un doble conteo; por eso el método principal son los eventos.
+Guarda perfil, comando, video/hash, intervalo, referencia humana y reporte.

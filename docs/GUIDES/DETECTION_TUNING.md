@@ -2,7 +2,7 @@
 
 Cómo calibrar el perfil, comparar variantes y repetir pruebas sin volver a correr inferencia. Lo que ya está comprobado, y sus límites, vive en [VERIFIED_STATE.md](VERIFIED_STATE.md).
 
-Perfil de referencia: [aerial_counting.example.json](aerial_counting.example.json). Es un caso de prueba, no una recomendación universal. Los flags `--tracker`, `--imgsz`, `--model`, `--video` y `--no-sahi` sobreescriben el perfil: registra el comando además del JSON.
+Perfil de referencia: [aerial_counting.example.json](aerial_counting.example.json), un caso de prueba y no una recomendación universal. Los flags `--tracker`, `--imgsz`, `--model`, `--video` y `--no-sahi` sobreescriben el perfil.
 
 ## Calibrar en el configurador
 
@@ -19,24 +19,22 @@ Vista global, prueba del recuadro, muestras y preview usan el mismo detector, cl
 
 ## Parámetros
 
-| Parámetro | Referencia | Efecto | Riesgo al compararlo |
-|---|---:|---|---|
-| `settings.conf_threshold` | 0.10 | Piso de confianza antes del tracker | Subirlo elimina cajas débiles que ByteTrack podría recuperar |
-| `settings.conf_per_class` | | Umbral por clase, también previo al tracker | Por encima de `track_low_thresh` elimina detecciones de recuperación |
-| `settings.imgsz` | 640 | Resolución entregada al detector | Más resolución no garantiza exactitud; cambia costo y firma de caché |
-| `settings.inference_roi` | `[680,350,960,750]` | Recorte en coordenadas del video original | Si no cubre el trayecto, no hay rutas completas |
-| `settings.sample_constraints`, `min_area`, `max_area` | | Filtros geométricos | Pueden quitar buses o autos reales y bajar recall |
-| `exclusion_zones` | | Descarte por centro de la caja | No ocultar vehículos válidos para mejorar métricas |
-| `sahi.enabled`, tiles y solapamiento | false | Inferencia por recortes con fusión global | Revisar bordes y autos próximos; un duplicado no es recuperación |
-| `sahi.nms_threshold` | | Supresión global tras SAHI | Excesiva fusiona autos distintos |
-| `settings.min_origin_frames`, `min_dest_frames` | | Confirmación de zonas | Subirlos pierde autos rápidos; corregir primero la geometría |
-| `settings.min_crossing_frames` | | Confirmación del cambio de lado | Mueve el frame del evento |
-| `tracker.track_low_thresh` | 0.10 | Límite inferior de la asociación secundaria | |
-| `tracker.track_high_thresh` | 0.25 | Detecciones de la primera asociación | |
-| `tracker.new_track_thresh` | 0.25 | Confianza mínima para crear un ID | |
-| `tracker.track_buffer` | 30 | Retención de tracks perdidos, escalada por FPS respecto a 30 | |
-| `tracker.match_thresh` | 0.80 | Límite del costo de asociación | |
-| `tracker.fuse_score` | false | Asociación sin multiplicar IoU por confianza | Ver abajo |
+Los valores están en el perfil de referencia.
+
+| Parámetro | Efecto | Riesgo al compararlo |
+|---|---|---|
+| `settings.conf_threshold` | Piso de confianza antes del tracker | Subirlo elimina cajas débiles que ByteTrack podría recuperar |
+| `settings.conf_per_class` | Umbral por clase, también previo al tracker | Por encima de `track_low_thresh` elimina detecciones de recuperación |
+| `settings.imgsz` | Resolución entregada al detector | Más resolución no garantiza exactitud; cambia costo y firma de caché |
+| `settings.inference_roi` | Recorte en coordenadas del video original | Si no cubre el trayecto, no hay rutas completas |
+| `settings.sample_constraints`, `min_area`, `max_area` | Filtros geométricos | Pueden quitar buses o autos reales y bajar recall |
+| `exclusion_zones` | Descarte por centro de la caja | No ocultar vehículos válidos para mejorar métricas |
+| `sahi.enabled`, tiles y solapamiento | Inferencia por recortes con fusión global | Revisar bordes y autos próximos; un duplicado no es recuperación |
+| `sahi.nms_threshold` | Supresión global tras SAHI | Excesiva fusiona autos distintos |
+| `settings.min_origin_frames`, `min_dest_frames` | Confirmación de zonas | Subirlos pierde autos rápidos; corregir primero la geometría |
+| `settings.min_crossing_frames` | Confirmación del cambio de lado | Mueve el frame del evento |
+
+`tracker.*`: `track_low_thresh` (asociación secundaria), `track_high_thresh` (primera asociación), `new_track_thresh` (crear ID), `track_buffer` (retención, escalada por FPS respecto a 30), `match_thresh` (costo de asociación) y `fuse_score` (ver Tracking).
 
 ## Tracking
 
@@ -90,7 +88,7 @@ El control es opcional, cuesta CPU y **no estabiliza ni corrige geometría**. Lo
 
 1. Conserva perfil y salida de referencia; elige un fallo confirmado por revisión humana.
 2. Cambia un solo factor y anota qué esperas: recuperar un auto, quitar una caja falsa o conservar un ID.
-3. Usa replay si solo cambias tracking, geometría o filtros compatibles. Pesos, ROI, resolución, SAHI o bajar el piso exigen inferencia nueva.
+3. Usa replay si solo cambias tracking, geometría o filtros compatibles.
 4. Compara TP/FP/FN, precisión/recall/F1 por clase y eventos por ruta sobre el mismo alcance, incluyendo fondo, bordes y oclusión.
 5. Conserva el cambio solo con evidencia y confírmalo en un tramo reservado que no se usó para ajustar.
 
@@ -98,6 +96,4 @@ Para medir contra anotaciones: [DETECTION_VALIDATION.md](DETECTION_VALIDATION.md
 
 ## Rendimiento y formatos
 
-Mide el perfil real con `main.py --benchmark` y los mismos argumentos de la corrida; la etapa `detection` incluye tracking. `scripts/benchmark_pipeline.py` usa parámetros propios, zonas vacías y dibujo/escritura aproximados: no sirve para atribuir tiempos de producción.
-
-`scripts/export_model.py` solo admite `--model` e `--imgsz` y exporta ONNX. Un `.onnx` no acredita paridad de clases/cajas ni más FPS: compáralo con el `.pt` y el mismo perfil. No hay benchmark local de TensorRT. Una mejora de rendimiento se acepta solo con exactitud conservada; criterios en TODO-023/024 de [TASK_TODO.md](../TASK_TODO.md).
+Mide el perfil real con `main.py --benchmark` y los mismos argumentos de la corrida; la etapa `detection` incluye tracking. Límites de `scripts/benchmark_pipeline.py` y del export ONNX, y criterios de aceptación: TODO-023/024 en [TASK_TODO.md](../TASK_TODO.md).

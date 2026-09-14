@@ -17,7 +17,7 @@ env/bin/python scripts/extract_validation_frames.py \
 
 El extractor recorre el video completo y deduplica imágenes. No garantiza obtener 50/80/200 imágenes útiles ni muestrea únicamente los primeros 300 frames. Revisa variedad de escenas; el número de candidatos es aproximado. Repetirlo en la misma carpeta puede sobrescribir JPG: usa una carpeta nueva.
 
-**Límite actual:** `frame_0000.jpg` identifica el orden de exportación, no el frame original. El script no guarda un manifiesto con tiempo/hash/índice de origen. Registra video y comando de extracción; no derives referencias temporales de rutas a partir del nombre. Para evidencia temporal usa el video original y registra explícitamente su frame. La incorporación del manifiesto está pendiente.
+**Límite actual:** `frame_0000.jpg` identifica el orden de exportación, no el frame original. El script no guarda un manifiesto con tiempo/hash/índice de origen. Registra video y comando de extracción; no derives referencias temporales de rutas a partir del nombre. Para evidencia temporal usa el video original y registra explícitamente su frame. El manifiesto está pendiente en TODO-028.
 
 ## Preetiquetas opcionales
 

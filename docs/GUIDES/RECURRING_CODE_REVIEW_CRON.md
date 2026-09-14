@@ -1,6 +1,6 @@
 # Mejoras de detección y rutas cada cinco horas
 
-El instalador está preparado, pero el cron no está activado. Este entorno rechazó incluso `crontab -l`. La consulta real de cuota tampoco pudo arrancar: Codex necesita escribir su estado en `~/.codex`, fuera de los permisos de esta sesión. No se modificó el crontab ni se inició otro agente.
+Estado de instalación y pendientes: TODO-034 en [TASK_TODO.md](../TASK_TODO.md). La activación requiere una terminal con permiso sobre `crontab` y `~/.codex`.
 
 ## Activar desde la terminal del usuario
 
@@ -36,5 +36,3 @@ env/bin/python scripts/recurring_review.py uninstall
 ```
 
 `pause` afecta futuras ejecuciones; no interrumpe una ya iniciada. `uninstall` retira únicamente el bloque de este proyecto. Los informes, errores y estado quedan en `output/recurring-review/`. `status` muestra el estado local; `crontab -l` permite comprobar la instalación del sistema.
-
-Se probaron las decisiones de cuota, reserva, disco, exclusión mutua, intervalos entre días, conservación de otras tareas y lanzamiento simulado. La activación y una ejecución real del agente siguen pendientes de realizar desde una terminal con permisos.

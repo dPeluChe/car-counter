@@ -19,7 +19,8 @@ Opcionales según la función: `rfdetr` (detector RF-DETR), `trackers` (OC-SORT)
 make help              # todos los atajos
 make setup             # configurador Tk: exclusiones, calibración, zonas/líneas -> config/config.json
 make run               # pipeline en clip corto -> output/results.json
-make run-aerial        # demo aérea: VisDrone + ROI, una línea, 300 frames
+make run-aerial        # demo aérea: VisDrone + ROI, una línea, 300 frames (inferencia)
+make replay-aerial     # misma demo desde la caché local, sin inferencia
 make validate-routes   # conteo por ruta contra referencia humana
 make test
 ```
@@ -33,7 +34,7 @@ python main.py --help                                                # todos los
 python -m carcounter                                                 # wizard: modelo, video, lanzamiento
 ```
 
-Flags frecuentes: `--tracker bytetrack|botsort|sort|ocsort`, `--detector yolo|rfdetr`, `--headless --no-save`, `--max-frames N`, `--output-json/--output-tracks-csv/--output-od-csv`, `--record-detections/--replay-detections` (repetir sin inferencia), `--camera-max-drift-px N` (detiene si la cámara se mueve), `--benchmark`, `--serve`.
+Repetir pruebas sin inferencia, ajustar tracker y vigilar la cámara: [DETECTION_TUNING.md](docs/GUIDES/DETECTION_TUNING.md).
 
 La demo aérea necesita los archivos locales `assets/glorieta_test1min.mp4` y `models/yolo/yolov8l-visdrone.pt`, y usa [aerial_counting.example.json](docs/GUIDES/aerial_counting.example.json).
 
@@ -85,7 +86,7 @@ tests/                   pytest
 env/bin/python -m pytest -q
 ```
 
-Referencia al 2026-09-14: 316 aprobados, 15 omitidos por dependencias opcionales (DB/API). No miden exactitud humana del conteo.
+Último resultado registrado en [VERIFIED_STATE.md](docs/GUIDES/VERIFIED_STATE.md#validación-automática-y-límites). Los tests no miden exactitud humana del conteo.
 
 ## Documentación
 

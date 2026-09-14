@@ -15,7 +15,7 @@ printf '%s\n' "$CARCOUNTER_REVIEW_DIR"
 
 Usa la variable en la misma terminal. En otra máquina comprueba que existan entorno Python, video y pesos. No uses `make clean` durante la validación: borra `output/`.
 
-Registra revisor, fecha, video/tramo, perfil, modelo y comando de cada corrida. `run.video_sha256`, `run.source_fps` y `run.config_snapshot` del resultado ayudan, pero no documentan todos los overrides de CLI.
+Registra revisor, fecha, video/tramo, perfil, modelo y comando de cada corrida. `run.video_sha256`, `run.source_fps` y `run.config_snapshot` del resultado ayudan a identificarla.
 
 ## PRUEBA-01: reproducir la referencia
 
@@ -30,7 +30,7 @@ env/bin/python main.py --config "$CARCOUNTER_REVIEW_DIR/profile.json" \
   --output-tracks-csv "$CARCOUNTER_REVIEW_DIR/replay_tracks.csv"
 ```
 
-Esperado con los mismos archivos y versión: seis eventos, IDs 24/60/19/67/47/146, frames 79/81/131/186/285/291, un bus y cinco autos. Si cambia, conserva ambas salidas y revisa antes de ajustar. Prueba reproducibilidad, no exactitud. Si falta la caché, grábala con `--record-detections` en una ruta nueva ([DETECTION_TUNING.md](DETECTION_TUNING.md#grabar-una-vez-y-repetir-sin-inferencia)).
+Esperado con los mismos archivos y versión: seis eventos, IDs 24/60/19/67/47/146, frames 79/81/131/186/285/291, un bus y cinco autos ([fuente](../RESEARCH/DETECTION_ROUTES_2026_09_14.md)). Si cambia, conserva ambas salidas y revisa antes de ajustar. Prueba reproducibilidad, no exactitud. Si falta la caché, grábala con `--record-detections` en una ruta nueva ([DETECTION_TUNING.md](DETECTION_TUNING.md#grabar-una-vez-y-repetir-sin-inferencia)).
 
 ## PRUEBA-02: detectar autos, no fondo
 
@@ -56,20 +56,13 @@ Llena la referencia de eventos y evalúa con [ROUTE_VALIDATION.md](ROUTE_VALIDAT
 env/bin/python setup.py --config "$CARCOUNTER_REVIEW_DIR/profile.json"
 ```
 
-La GUI Tk no se ha podido abrir en las sesiones de agente: esta prueba es en escritorio.
-
-- [ ] Carga video y modelo del perfil; todos los controles son alcanzables y la barra lateral se desplaza.
-- [ ] Muestras de varios frames y **Probar muestras guardadas** funcionan.
-- [ ] Con menos de cinco muestras no se aplica filtro; dibujar o correr la vista global no cambia filtros; **Limpiar muestras** retira los cargados.
-- [ ] Guardar, cerrar y reabrir conserva modelo, ROI, confianza, muestras, clases, SAHI y tracker.
-
-El control de deriva de cámara se configura por JSON/CLI; no hay control visual para él.
+Prueba de escritorio. Criterios en TODO-033 de [TASK_TODO.md](../TASK_TODO.md); comportamiento esperado de muestras y filtros en [DETECTION_TUNING.md](DETECTION_TUNING.md#calibrar-en-el-configurador). El control de deriva de cámara se configura por JSON/CLI, no en la GUI.
 
 ## PRUEBA-06: rutas completas origen/destino
 
 En otra copia del perfil, con `counting_mode=zones`, dibuja al menos dos zonas siguiendo [ROUNDABOUT_GUIDE.md](ROUNDABOUT_GUIDE.md). Revisa un auto que complete A→B, uno que salga por una tercera zona y uno que pase junto a una salida sin tomarla. Registra incompletos por borde de video o pérdida de ID.
 
-Cambiar ROI, modelo, resolución o SAHI exige inferencia nueva. Para el minuto completo usa `--max-frames 1799`; la caché de 300 frames no lo cubre. La referencia humana de una línea no valida rutas A→B.
+Para el minuto completo (`--max-frames 1799`) graba una caché nueva una sola vez y prueba las variantes de zonas con replay ([detalle](DETECTION_TUNING.md#grabar-una-vez-y-repetir-sin-inferencia)). La referencia humana de una línea no valida rutas A→B.
 
 ## PRUEBA-07: movimiento de cámara
 
@@ -77,12 +70,8 @@ Corre la auditoría de [DETECTION_TUNING.md](DETECTION_TUNING.md#movimiento-de-c
 
 ## PRUEBA-08: evidencia y cierre
 
-Una fila por incidencia:
+Una fila por incidencia con: video/tramo, frame, ID previo/nuevo, observado (omisión, duplicado, clase, ruta o cámara), esperado, evidencia y estado (sin revisar, confirmado, resuelto o no reproducible).
 
-| Video/tramo | Frame | ID previo/nuevo | Observado | Esperado | Evidencia | Estado |
-|---|---|---|---|---|---|---|
-| | | | Omisión, duplicado, clase, ruta o cámara | Hecho humano | Captura o referencia | Sin revisar / confirmado / resuelto / no reproducible |
-
-Conserva originales, perfil de cada variante, comando, salidas, anotaciones y reporte. El evaluador de eventos usa frames desde 1: `frame = round(segundos * FPS) + 1`, verificando el redondeo. Los `frame_0000.jpg` del extractor son números de exportación, no frames del video.
+Conserva originales, perfil de cada variante, comando, salidas, anotaciones y reporte. Conversión entre frames y tiempo: [ROUTE_VALIDATION.md](ROUTE_VALIDATION.md#qué-exporta-el-conteo).
 
 Una mejora se cierra con reproducción del fallo, comparación antes/después con el mismo alcance y sin regresión. Los umbrales de precisión, recall y F1 por ruta/clase se acuerdan antes de elegir ganador. La aprobación dice qué tramo, región, clases y rutas revisó quién.

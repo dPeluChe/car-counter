@@ -6,7 +6,7 @@ Estado real de lo comprobado: [GUIDES/VERIFIED_STATE.md](GUIDES/VERIFIED_STATE.m
 
 > Derivada de [`.doctos.yml`](../.doctos.yml). Edita ese archivo, no esta tabla.
 
-| Carpeta | Contenido |
+| Ruta | Contenido |
 |---|---|
 | `TASK_TODO.md` | Única lista de pendientes, con criterios de cierre |
 | `GUIDES/` | Procedimientos vigentes |
@@ -19,7 +19,6 @@ Estado real de lo comprobado: [GUIDES/VERIFIED_STATE.md](GUIDES/VERIFIED_STATE.m
 
 | Necesidad | Documento |
 |---|---|
-| Saber qué está probado | [VERIFIED_STATE.md](GUIDES/VERIFIED_STATE.md) |
 | Ejecutar las 8 pruebas manuales | [MANUAL_VALIDATION.md](GUIDES/MANUAL_VALIDATION.md) |
 | Calibrar, ajustar tracker, replay, cámara, rendimiento | [DETECTION_TUNING.md](GUIDES/DETECTION_TUNING.md) |
 | Medir cajas contra anotaciones LabelMe | [DETECTION_VALIDATION.md](GUIDES/DETECTION_VALIDATION.md) |
@@ -31,10 +30,7 @@ Perfiles de ejemplo usados por código y guías: `GUIDES/aerial_counting.example
 
 ## Informes
 
-- [COUNTING_AUDIT_2026_09_06.md](RESEARCH/COUNTING_AUDIT_2026_09_06.md): bugs de conteo encontrados y corregidos, primera demo aérea.
-- [DETECTION_IMPROVEMENTS_2026_09_07.md](RESEARCH/DETECTION_IMPROVEMENTS_2026_09_07.md): detector compartido, replay, `fuse_score`, cámara.
-- [DETECTION_ROUTES_2026_09_14.md](RESEARCH/DETECTION_ROUTES_2026_09_14.md): eventos por ruta y consenso de clase.
-- [SUPERVISION_EVAL.md](RESEARCH/SUPERVISION_EVAL.md): evaluación de la librería supervision (abril 2026, sin benchmark ejecutado).
+Informes fechados en [RESEARCH/](RESEARCH/), nombrados `<TEMA>_<YYYY_MM_DD>.md`. Solo se crean con mediciones nuevas; cada guía o tarea enlaza el que la respalda.
 
 ## Reglas
 
