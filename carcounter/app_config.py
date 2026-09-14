@@ -51,6 +51,13 @@ class SettingsConfig:
             errors.append(f"min_area no puede ser negativo, got {self.min_area}")
         if self.max_area < self.min_area:
             errors.append(f"max_area ({self.max_area}) < min_area ({self.min_area})")
+        roi = self.inference_roi
+        if roi is not None and (len(roi) != 4 or any(type(v) is not int for v in roi)
+                                or not 0 <= roi[0] < roi[2] or not 0 <= roi[1] < roi[3]):
+            errors.append(f"inference_roi requiere [x1, y1, x2, y2] enteros con area positiva, got {roi}")
+        drift = self.camera_max_drift_px
+        if drift is not None and (type(drift) not in (int, float) or drift <= 0):
+            errors.append(f"camera_max_drift_px debe ser un numero positivo, got {drift}")
         return errors
 
 

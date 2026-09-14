@@ -26,7 +26,7 @@ class LaunchStepMixin:
 
         self._render_summary_card(f, model_name, model_info, video)
         self._render_config_card(f)
-        self._render_tracker_card(f, model_info)
+        self._render_tracker_card(f)
         self._render_action_buttons(f)
 
     def _render_summary_card(self, parent, model_name, model_info, video):
@@ -65,20 +65,19 @@ class LaunchStepMixin:
         btn(cfg_row, "Cargar otra", font=("Arial", 9),
             command=self._pick_config_file).pack(side="right")
 
-    def _render_tracker_card(self, parent, model_info):
+    def _render_tracker_card(self, parent):
         tracker_card = tk.Frame(parent, bg=BG_CARD, padx=16, pady=10)
         tracker_card.pack(fill="x", pady=(8, 0))
         tk.Label(tracker_card, text="Tracker:", bg=BG_CARD, fg=FG_DIM,
                  font=("Arial", 10)).pack(side="left")
 
+        # Todos reciben cajas de cualquier detector (YOLO, SAHI o RF-DETR); no se fuerza SORT
         tracker_opts = [
             ("bytetrack", "ByteTrack"),
+            ("botsort", "BoT-SORT"),
             ("sort", "SORT"),
             ("ocsort", "OC-SORT"),
         ]
-        # RF-DETR no soporta ByteTrack nativo → default SORT
-        if model_info.get("family") == "rfdetr":
-            self._selected_tracker.set("sort")
 
         for val, label in tracker_opts:
             tk.Radiobutton(
@@ -89,7 +88,7 @@ class LaunchStepMixin:
             ).pack(side="left", padx=4)
 
         tk.Label(tracker_card,
-                 text="(ByteTrack: rapido | OC-SORT: mejor con oclusiones)",
+                 text="(mismas opciones que --tracker en main.py)",
                  bg=BG_CARD, fg=FG_DIM, font=("Arial", 8)).pack(side="right")
 
     def _render_action_buttons(self, parent):

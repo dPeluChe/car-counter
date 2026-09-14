@@ -119,6 +119,18 @@ def in_exclusion_zone(cx, cy, exclusion_np):
     return False
 
 
+# ── Inference ROI ────────────────────────────
+
+def validate_inference_roi(roi, width, height):
+    """Valida [x1, y1, x2, y2] enteros dentro de width x height y retorna la tupla."""
+    if len(roi) != 4 or any(type(v) is not int for v in roi):
+        raise ValueError("inference_roi requiere [x1, y1, x2, y2] enteros")
+    x1, y1, x2, y2 = roi
+    if not (0 <= x1 < x2 <= width and 0 <= y1 < y2 <= height):
+        raise ValueError("inference_roi debe estar dentro del video y tener area positiva")
+    return x1, y1, x2, y2
+
+
 # ── Line crossing ────────────────────────────
 
 def point_to_line_side(px, py, x1, y1, x2, y2):

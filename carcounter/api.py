@@ -52,12 +52,15 @@ def _get_app():
                 counter = _current_counter
                 meta = dict(_current_run_meta)
 
+            events = list(getattr(counter, "counting_events", []))
             stats = {
                 "frame_count": meta.get("frame_count", 0),
                 "total_frames": meta.get("total_frames", 0),
                 "fps_avg": round(meta.get("fps_avg", 0.0), 2),
                 "routes_matrix": dict(counter.routes_matrix),
                 "total_vehicles": counter.total_vehicles_ever,
+                "events_count": len(events),
+                "recent_events": events[-20:],
                 "elapsed_time": round(time.time() - meta["start_time"], 1) if "start_time" in meta else 0,
             }
             return stats
