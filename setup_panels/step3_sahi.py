@@ -16,10 +16,14 @@ class SAHIMixin:
         self._lbl(self.panel_step3,
                   "SAHI divide el frame en tiles para\n"
                   "detectar autos pequeños/lejanos.\n"
-                  "Tiles más pequeños = más precisión\nbut más lento.",
+                  "Compara errores y tiempo antes\nde elegir el tamaño de tile.",
                   color="#A6ADC8")
 
         tk.Frame(self.panel_step3, bg="#313244", height=1).pack(fill="x", pady=6)
+
+        tk.Checkbutton(self.panel_step3, text="Usar SAHI en detección y calibración",
+                       variable=self.sahi_enabled, bg="#181825", fg="#CDD6F4",
+                       selectcolor="#313244").pack(fill="x")
 
         params = [
             ("Ancho de tile (px):", self.slice_w, 128, 1024, 128),
@@ -51,6 +55,22 @@ class SAHIMixin:
         self.lbl_tiles.pack(pady=4)
 
         tk.Frame(self.panel_step3, bg="#313244", height=1).pack(fill="x", pady=6)
+        self._lbl(self.panel_step3, "BYTETRACK / BOT-SORT", bold=True, color="#CDD6F4")
+        self._lbl(self.panel_step3, "Confianza baja: recuperar un ID. Alta: asociar cajas. Nueva: crear un ID.")
+        for label, variable in (("Confianza baja", self.track_low_thresh),
+                                ("Confianza alta", self.track_high_thresh),
+                                ("Nuevo ID", self.new_track_thresh)):
+            self._lbl(self.panel_step3, label)
+            tk.Scale(self.panel_step3, from_=0.0, to=1.0, resolution=0.05,
+                     variable=variable, orient="horizontal", bg="#181825", fg="#CDD6F4",
+                     troughcolor="#313244", highlightthickness=0).pack(fill="x")
+        self._lbl(self.panel_step3, "Retención de IDs (frames a 30 FPS)")
+        tk.Scale(self.panel_step3, from_=1, to=150, variable=self.track_buffer,
+                 orient="horizontal", bg="#181825", fg="#CDD6F4", troughcolor="#313244",
+                 highlightthickness=0).pack(fill="x")
+        tk.Checkbutton(self.panel_step3, text="Combinar confianza e IoU (fuse_score)",
+                       variable=self.fuse_score, bg="#181825", fg="#CDD6F4",
+                       selectcolor="#313244").pack(fill="x")
         self._lbl(self.panel_step3, "PARÁMETROS SORT FALLBACK", bold=True, color="#CDD6F4")
 
         tracker_params = [
@@ -102,16 +122,9 @@ class SAHIMixin:
             self.lbl_tiles.config(text="Tiles por frame: —")
         self._redraw()
 
-    def _save_config(self):
-        mode = self.counting_mode.get()
-        # Reutilizar validacion del paso 2
-        ok, msg = self._validate_zones()
-        if not ok:
-            messagebox.showwarning("Guardar", msg)
-            return
-
+    def _build_current_config(self):
         config = build_config(
-            counting_mode=mode,
+            counting_mode=self.counting_mode.get(),
             exclusion_zones=self.exclusion_zones,
             zones=self.zones,
             counting_lines=self.counting_lines,
@@ -127,6 +140,9 @@ class SAHIMixin:
                 "motorbike": self.conf_motorbike.get(),
                 "bus": self.conf_bus.get(),
                 "truck": self.conf_truck.get(),
+                "van": self.conf_van.get(),
+                "motor": self.conf_motorbike.get(),
+                "motorcycle": self.conf_motorbike.get(),
             },
             conf_per_class_modified=self._conf_per_class_modified,
             slice_w=self.slice_w.get(),
@@ -141,7 +157,29 @@ class SAHIMixin:
             loaded_config=self._loaded_config,
         )
 
+        config["sahi"]["enabled"] = self.sahi_enabled.get()
+        config["tracker"].update({key: getattr(self, key).get() for key in (
+            "track_low_thresh", "track_high_thresh", "new_track_thresh", "track_buffer", "fuse_score")})
+        config["settings"]["vehicle_samples"] = list(self.vehicle_samples)
+        return config
+
+    def _save_config(self):
+        mode = self.counting_mode.get()
+        # Reutilizar validacion del paso 2
+        ok, msg = self._validate_zones()
+        if not ok:
+            messagebox.showwarning("Guardar", msg)
+            return
+
+        config = self._build_current_config()
+
         try:
+            from carcounter.app_config import TrackerConfig
+            errors = TrackerConfig(**{key: value for key, value in config["tracker"].items()
+                                      if key in TrackerConfig.__dataclass_fields__}).validate()
+            if errors:
+                messagebox.showwarning("Parámetros de tracking", "\n".join(errors))
+                return
             save_config(self._output_config, config)
             # Limpiar autosave checkpoint despues de guardar exitosamente
             if hasattr(self, "_autosave"):

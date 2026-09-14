@@ -31,14 +31,12 @@ PREVIEW_VEH_NAMES = {2: "car", 3: "moto", 5: "bus", 7: "truck"}
 
 
 def resolve_vehicle_classes(model):
-    """Deriva (ids, names) de vehiculo desde el modelo cargado.
-
-    Hace el pipeline agnostico al esquema de clases: COCO (car=2, truck=7...)
-    o VisDrone (car=3, van=4, truck=5, bus=8, motor=9). Cae a COCO si el
-    modelo no expone .names.
-    """
     names = getattr(model, "names", None)
-    if not names:
+    if names is None:
         return VEHICLE_CLASS_IDS, COCO_NAMES
-    ids = [i for i, n in names.items() if str(n).lower() in VEHICLE_CLASSES]
-    return (ids or VEHICLE_CLASS_IDS), names
+    items = names.items() if isinstance(names, dict) else enumerate(names)
+    names = {int(i): str(name).strip().lower() for i, name in items}
+    ids = [i for i, name in names.items() if name in VEHICLE_CLASSES]
+    if not ids:
+        raise ValueError("El modelo no contiene clases de vehículos reconocidas")
+    return ids, names

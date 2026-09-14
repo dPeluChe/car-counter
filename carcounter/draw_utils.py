@@ -7,6 +7,7 @@ y figuras en drawing.py y calibration.py.
 import cv2
 import math
 import numpy as np
+import unicodedata
 
 
 class TextStyler:
@@ -15,19 +16,28 @@ class TextStyler:
     FONT = cv2.FONT_HERSHEY_SIMPLEX
 
     @staticmethod
+    def ascii_text(text):
+        for source, target in {"→": "->", "←": "<-", "↑": "^", "↓": "v"}.items():
+            text = text.replace(source, target)
+        return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+
+    @staticmethod
     def draw(frame, text, pos, color, scale=0.45, thickness=1):
         """Dibuja texto con anti-aliasing en la posicion dada."""
+        text = TextStyler.ascii_text(text)
         cv2.putText(frame, text, pos, TextStyler.FONT, scale, color, thickness, cv2.LINE_AA)
 
     @staticmethod
     def label(frame, text, x, y, color, scale=0.42, thickness=1, above=True):
         """Dibuja una etiqueta arriba o abajo de una coordenada."""
+        text = TextStyler.ascii_text(text)
         offset_y = max(12, y - 5) if above else y + 15
         cv2.putText(frame, text, (x, offset_y), TextStyler.FONT, scale, color, thickness, cv2.LINE_AA)
 
     @staticmethod
     def centered(frame, text, cx, cy, color, scale=0.65, thickness=2):
         """Dibuja texto centrado horizontalmente en (cx, cy)."""
+        text = TextStyler.ascii_text(text)
         (tw, th), _ = cv2.getTextSize(text, TextStyler.FONT, scale, thickness)
         cv2.putText(frame, text, (cx - tw // 2, cy + th // 2),
                     TextStyler.FONT, scale, color, thickness, cv2.LINE_AA)

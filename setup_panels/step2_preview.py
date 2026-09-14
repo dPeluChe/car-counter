@@ -12,7 +12,7 @@ Metodos:
 import cv2
 import numpy as np
 
-from carcounter.constants import PREVIEW_VEH_NAMES, ZONE_COLORS_RGB
+from carcounter.constants import ZONE_COLORS_RGB
 
 
 class PreviewMixin:
@@ -53,7 +53,7 @@ class PreviewMixin:
     def _zone_preview_tick(self):
         if not self._preview_playing or self._preview_cap is None:
             return
-        SKIP = 15 if self._preview_show_detections else 5
+        SKIP = 1
         for _ in range(SKIP - 1):
             self._preview_cap.grab()
         ret, frame = self._preview_cap.read()
@@ -82,20 +82,12 @@ class PreviewMixin:
 
     def _draw_detections_on_preview(self, base_rgb, frame_bgr):
         """Corre YOLO sobre el frame y dibuja detecciones en el preview RGB."""
-        results = self.model(
-            frame_bgr, conf=self.conf_threshold.get(), verbose=False,
-            classes=[2, 3, 5, 7], imgsz=self.infer_imgsz.get(),
-        )
-        for r in results:
-            for box in r.boxes:
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-                if self._is_in_exclusion(cx, cy):
-                    continue
-                lbl = f"{PREVIEW_VEH_NAMES.get(int(box.cls[0]), '?')} {float(box.conf[0]):.2f}"
-                cv2.rectangle(base_rgb, (x1, y1), (x2, y2), (255, 200, 50), 2)
-                cv2.putText(base_rgb, lbl, (x1, max(12, y1 - 4)),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 200, 50), 1, cv2.LINE_AA)
+        for det in self._predict_current_profile(frame_bgr):
+            x1, y1, x2, y2 = det["bbox"]
+            label = f"{det['cls_name']} {det['conf']:.2f}"
+            cv2.rectangle(base_rgb, (x1, y1), (x2, y2), (255, 200, 50), 2)
+            cv2.putText(base_rgb, label, (x1, max(12, y1 - 4)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 200, 50), 1, cv2.LINE_AA)
 
     def _overlay_zones_on_preview(self, base_rgb):
         """Mezcla un overlay semitransparente de zonas sobre el frame RGB."""

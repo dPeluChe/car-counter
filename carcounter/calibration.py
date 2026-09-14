@@ -2,7 +2,7 @@
 
 import cv2
 import numpy as np
-from carcounter.constants import COCO_NAMES, VEHICLE_CLASSES, VEHICLE_CLASS_IDS
+from carcounter.constants import VEHICLE_CLASSES, resolve_vehicle_classes
 from carcounter.geometry import bbox_iou, passes_geometry_filter, in_exclusion_zone
 
 
@@ -76,6 +76,7 @@ def predict_roi_boxes(roi_frame, conf, scale, model, sahi_model=None,
         if sahi_model is None:
             return [], "sahi_unavailable"
         from sahi.predict import get_sliced_prediction
+        sahi_model.confidence_threshold = conf
         result = get_sliced_prediction(
             scaled_frame, sahi_model,
             slice_height=min(512, scaled_h),
@@ -89,7 +90,7 @@ def predict_roi_boxes(roi_frame, conf, scale, model, sahi_model=None,
         )
         for pred in result.object_prediction_list:
             cls_name = pred.category.name
-            if cls_name not in VEHICLE_CLASSES:
+            if cls_name not in VEHICLE_CLASSES or float(pred.score.value) < conf:
                 continue
             bbox = pred.bbox
             detections.append({
@@ -102,16 +103,17 @@ def predict_roi_boxes(roi_frame, conf, scale, model, sahi_model=None,
             })
         return detections, "sahi"
 
+    vehicle_ids, class_names = resolve_vehicle_classes(model)
     results = model(
         scaled_frame, conf=conf, verbose=False,
-        classes=VEHICLE_CLASS_IDS,
+        classes=vehicle_ids,
         imgsz=force_imgsz or max(640, max(scaled_w, scaled_h)),
     )
     for r in results:
         for box in r.boxes:
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             cls_id = int(box.cls[0])
-            cls_name = COCO_NAMES[cls_id] if cls_id < len(COCO_NAMES) else "?"
+            cls_name = class_names[cls_id]
             if cls_name not in VEHICLE_CLASSES:
                 continue
             detections.append({
@@ -144,12 +146,14 @@ def draw_detection_overlay(frame_orig, detections, constraints=None,
         area = max(0, (x2 - x1) * (y2 - y1))
         color = (90, 130, 255)
         thickness = 2
-        if not passes_sample_constraints((x1, y1, x2, y2), constraints):
+        accepted = (passes_sample_constraints((x1, y1, x2, y2), constraints)
+                    and not in_exclusion_zone((x1 + x2) / 2, (y1 + y2) / 2, excl_np))
+        if not accepted:
             color = (70, 70, 180)
             thickness = 1
-        if highlight_box:
+        if highlight_box and accepted:
             overlap_iou = bbox_iou((x1, y1, x2, y2), highlight_box)
-            if overlap_iou >= 0.10:
+            if overlap_iou >= 0.50:
                 color = (0, 255, 80)
                 thickness = 3
         cv2.rectangle(display, (x1, y1), (x2, y2), color, thickness)

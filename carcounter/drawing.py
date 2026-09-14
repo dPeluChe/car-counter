@@ -23,7 +23,8 @@ def draw_lines(frame, counting_lines):
         mx = (pt1[0] + pt2[0]) // 2
         my = (pt1[1] + pt2[1]) // 2
         TextStyler.draw(frame, line["name"], (mx + 5, my - 10), color, scale=0.6, thickness=2)
-        TextStyler.draw(frame, "up/dn", (mx + 5, my + 20), color, scale=0.5)
+        label = "up/dn" if abs(pt2[0] - pt1[0]) >= abs(pt2[1] - pt1[1]) else "lt/rt"
+        TextStyler.draw(frame, label, (mx + 5, my + 20), color, scale=0.5)
 
 
 def draw_direction_vectors(frame, directions_config):
@@ -106,9 +107,9 @@ def draw_scoreboard(frame, routes, n_active, total_ever, vid_w, zone_names):
     _draw_panel_bg(frame, x0, y0, panel_w, panel_h,
                    Draw.SCOREBOARD_BG, Draw.SCOREBOARD_ALPHA, Draw.SCOREBOARD_BORDER)
 
-    TextStyler.draw(frame, f"TOTAL: {total_ever}", (x0 + pad, y0 + 40),
+    TextStyler.draw(frame, f"CONTEO: {total_confirmed}", (x0 + pad, y0 + 40),
                     Draw.TEXT_COUNT, scale=1.05, thickness=2)
-    TextStyler.draw(frame, f"rutas: {total_confirmed}  activos: {n_active}",
+    TextStyler.draw(frame, f"IDs: {total_ever}  activos: {n_active}",
                     (x0 + pad, y0 + 60), Draw.TEXT_DIM, scale=0.48)
     cv2.line(frame, (x0 + pad, y0 + 68), (x0 + panel_w - pad, y0 + 68), (70, 70, 70), 1)
 

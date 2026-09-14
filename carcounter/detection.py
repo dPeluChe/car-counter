@@ -25,11 +25,41 @@ def detect_and_track(frame, *, model, sahi_model, sahi_predict_fn, sort_tracker,
                      geo_constraints, exclusion_np,
                      sahi_slice_w, sahi_slice_h, sahi_overlap, sahi_nms_threshold,
                      device="cpu", detector_backend="yolo", rfdetr_model=None,
-                     vehicle_class_ids=None, class_names=None):
+                     vehicle_class_ids=None, class_names=None, inference_roi=None,
+                     raw_detections=None, on_detections=None):
     """Ejecuta deteccion + tracking y retorna lista de (x1,y1,x2,y2,id,cls_name)."""
+
+    if sort_tracker is not None or raw_detections is not None or on_detections is not None:
+        raw = raw_detections if raw_detections is not None else detect_objects(
+            frame, model=model, sahi_model=sahi_model, sahi_predict_fn=sahi_predict_fn,
+            use_sahi=use_sahi, effective_conf=effective_conf, imgsz=imgsz,
+            sahi_slice_w=sahi_slice_w, sahi_slice_h=sahi_slice_h,
+            sahi_overlap=sahi_overlap, sahi_nms_threshold=sahi_nms_threshold,
+            device=device, detector_backend=detector_backend, rfdetr_model=rfdetr_model,
+            inference_roi=inference_roi,
+        )
+        if on_detections is not None:
+            on_detections(raw)
+        from carcounter.detector import filter_detections
+        detections, classes = filter_detections(raw, conf_for, geo_constraints, exclusion_np)
+        if hasattr(sort_tracker, "update_detections"):
+            return sort_tracker.update_detections(frame, detections, classes)
+        return _track_with_sort(sort_tracker, detections, classes)
 
     # Agnostico al esquema de clases: usa los ids/nombres del modelo cargado
     # (COCO o VisDrone). Cae a COCO si no se proveen.
+    offset_x = offset_y = 0
+    if inference_roi is not None:
+        if len(inference_roi) != 4 or any(type(v) is not int for v in inference_roi):
+            raise ValueError("inference_roi requiere [x1, y1, x2, y2] enteros")
+        offset_x, offset_y, right, bottom = inference_roi
+        height, width = frame.shape[:2]
+        if not (0 <= offset_x < right <= width and 0 <= offset_y < bottom <= height):
+            raise ValueError("inference_roi debe estar dentro del video y tener area positiva")
+        frame = frame[offset_y:bottom, offset_x:right]
+        exclusion_np = {name: pts - np.array([offset_x, offset_y], dtype=np.int32)
+                        for name, pts in exclusion_np.items()}
+
     if vehicle_class_ids is None:
         vehicle_class_ids = VEHICLE_CLASS_IDS
     if class_names is None:
@@ -129,17 +159,52 @@ def detect_and_track(frame, *, model, sahi_model, sahi_predict_fn, sort_tracker,
                     continue
                 tracked_boxes.append((x1, y1, x2, y2, tid, cls_name))
 
+    if inference_roi is not None:
+        tracked_boxes = [(x1 + offset_x, y1 + offset_y, x2 + offset_x, y2 + offset_y,
+                          tid, cls_name) for x1, y1, x2, y2, tid, cls_name in tracked_boxes]
     return tracked_boxes
 
 
 def _track_with_sort(sort_tracker, detections, det_classes):
-    """Aplica SORT tracker o genera IDs sinteticos como fallback."""
-    if sort_tracker is not None:
-        sort_out = sort_tracker.update(detections)
-        return attach_classes_to_tracks(sort_out, detections, det_classes)
-    tracked = []
-    for i, det in enumerate(detections):
-        x1, y1, x2, y2, _ = map(int, det)
-        cls = det_classes[i] if i < len(det_classes) else "car"
-        tracked.append((x1, y1, x2, y2, i + 1, cls))
-    return tracked
+    if sort_tracker is None:
+        raise RuntimeError("No hay tracker disponible; no se pueden asignar IDs persistentes")
+    sort_out = sort_tracker.update(detections)
+    return attach_classes_to_tracks(sort_out, detections, det_classes)
+
+
+def detect_objects(frame, *, model, effective_conf, imgsz, use_sahi=False,
+                   sahi_model=None, sahi_predict_fn=None, sahi_slice_w=512,
+                   sahi_slice_h=512, sahi_overlap=0.2, sahi_nms_threshold=0.3,
+                   device="cpu", detector_backend="yolo", rfdetr_model=None,
+                   inference_roi=None):
+    from carcounter.detector import YOLODetector, SAHIDetector, RFDETRDetector
+
+    offset_x = offset_y = 0
+    if inference_roi is not None:
+        if len(inference_roi) != 4 or any(type(v) is not int for v in inference_roi):
+            raise ValueError("inference_roi requiere [x1, y1, x2, y2] enteros")
+        offset_x, offset_y, right, bottom = inference_roi
+        height, width = frame.shape[:2]
+        if not (0 <= offset_x < right <= width and 0 <= offset_y < bottom <= height):
+            raise ValueError("inference_roi debe estar dentro del video y tener area positiva")
+        frame = frame[offset_y:bottom, offset_x:right]
+    if use_sahi:
+        if sahi_model is None or sahi_predict_fn is None:
+            raise RuntimeError("SAHI seleccionado pero no disponible")
+        sahi_model.image_size = imgsz
+        detector = SAHIDetector(sahi_model, sahi_predict_fn, sahi_slice_w,
+                               sahi_slice_h, sahi_overlap, sahi_nms_threshold)
+    elif detector_backend == "rfdetr":
+        detector = RFDETRDetector(rfdetr_model)
+    else:
+        detector = YOLODetector(model, imgsz, device)
+    raw = detector.infer(frame, effective_conf)
+    raw = [d for d in raw if d["cls_name"] in VEHICLE_CLASSES and d["conf"] >= effective_conf]
+    if use_sahi and sahi_nms_threshold > 0 and raw:
+        rows, classes = apply_nms([list(d["bbox"]) + [d["conf"]] for d in raw],
+                                  [d["cls_name"] for d in raw], sahi_nms_threshold)
+        raw = [dict(bbox=row[:4], conf=float(row[4]), cls_name=name)
+               for row, name in zip(rows, classes)]
+    return [dict(d, bbox=(int(d["bbox"][0]) + offset_x, int(d["bbox"][1]) + offset_y,
+                         int(d["bbox"][2]) + offset_x, int(d["bbox"][3]) + offset_y))
+            for d in raw]

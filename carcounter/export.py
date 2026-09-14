@@ -25,7 +25,7 @@ def print_summary(*, video_path, config_path, use_sahi, tracker_backend,
     log.info("  Tiempo total:      %s", format_time(total_time))
     log.info("  FPS promedio:      %.2f", avg_fps)
     log.info("Zonas configuradas: %s", ", ".join(zone_names) if zone_names else "N/A")
-    log.info("Vehiculos rastreados: %d", total_vehicles)
+    log.info("IDs de tracking: %d", total_vehicles)
     log.info("Rutas completadas:   %d", sum(routes_matrix.values()))
 
     if routes_matrix:
@@ -45,7 +45,8 @@ def print_summary(*, video_path, config_path, use_sahi, tracker_backend,
 
 def export_json(path, *, video_path, config_path, use_sahi, tracker_backend,
                 counting_mode, frame_count, total_frames, duration,
-                total_time, avg_fps, total_vehicles, routes_matrix, zone_names):
+                total_time, avg_fps, total_vehicles, routes_matrix, zone_names, run_metadata=None,
+                counting_events=None):
     """Guarda resultados en JSON."""
     data = {
         "video": video_path,
@@ -63,6 +64,10 @@ def export_json(path, *, video_path, config_path, use_sahi, tracker_backend,
         "routes": dict(sorted(routes_matrix.items(), key=lambda x: -x[1])),
         "zones": zone_names,
     }
+    if run_metadata is not None:
+        data["run"] = run_metadata
+    if counting_events is not None:
+        data["counting_events"] = counting_events
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     log.info("Resultados JSON: %s", path)
@@ -85,6 +90,7 @@ def export_tracks_csv(path, track_data):
     if not track_data:
         return
     fields = ["track_id", "class", "state", "origin", "direction",
+              "destination", "counted_frame", "first_seen_frame", "observed_frames",
               "first_x", "first_y", "last_x", "last_y", "trail_length", "last_seen_frame",
               "avg_width", "avg_height", "avg_area", "avg_aspect", "avg_elongation"]
     with open(path, "w", newline="", encoding="utf-8") as f:
@@ -123,15 +129,11 @@ def export_benchmark(benchmarks_dir, *, video_path, config_path, use_sahi,
     path = os.path.join(benchmarks_dir, "benchmark_results.txt")
     
     # Calcular promedios de stages
-    stage_sums = {stage: 0.0 for stage in ["detection", "tracking", "counting", "visualization", "writing"]}
-    count = len(benchmark_data)
-    for d in benchmark_data:
-        stages = d.get("stages", {})
-        for stage, val in stages.items():
-            if stage in stage_sums:
-                stage_sums[stage] += val
-    
-    stage_avgs = {stage: total / count if count > 0 else 0 for stage, total in stage_sums.items()}
+    latest = benchmark_data[-1] if benchmark_data else {}
+    stage_avgs = {stage: latest.get("stages", {}).get(stage, 0.0)
+                  for stage in ["detection", "counting", "visualization", "writing"]}
+    frames = latest.get("frame", 0)
+    seconds_per_frame = total_time / frames if frames else 0
     
     with open(path, "w", encoding="utf-8") as f:
         f.write("Car Counter Benchmark\n" + "=" * 50 + "\n")
@@ -142,7 +144,7 @@ def export_benchmark(benchmarks_dir, *, video_path, config_path, use_sahi,
         f.write("FPS por etapa (promedio por frame):\n")
         for stage, avg_sec in stage_avgs.items():
             fps_stage = 1.0 / avg_sec if avg_sec > 0 else 0
-            pct = (avg_sec / (total_time / count)) * 100 if count > 0 else 0
+            pct = avg_sec / seconds_per_frame * 100 if seconds_per_frame > 0 else 0
             f.write(f"  {stage:<15} {avg_sec*1000:>8.2f} ms  ({fps_stage:>6.1f} fps)  ({pct:>5.1f}%)\n")
         
         f.write(f"\nRutas:\n")

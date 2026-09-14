@@ -119,7 +119,7 @@ def labelme_to_detections(labelme_json: dict) -> list[tuple[int, int, int, int, 
     return out
 
 
-def load_labelme_annotations(annotations_dir: str | Path) -> dict[str, list[tuple]]:
+def load_labelme_annotations(annotations_dir: str | Path, require_reviewed=False) -> dict[str, list[tuple]]:
     """Carga anotaciones LabelMe de un directorio.
 
     Returns:
@@ -130,8 +130,12 @@ def load_labelme_annotations(annotations_dir: str | Path) -> dict[str, list[tupl
     for json_file in annotations_dir.glob("*.json"):
         with open(json_file, "r", encoding="utf-8") as f:
             data = json.load(f)
+        if require_reviewed and data.get("flags", {}).get("reviewed") is not True:
+            raise ValueError(f"Anotación sin revisión humana confirmada: {json_file.name}; marca flags.reviewed=true después de revisar")
         image_name = data.get("imagePath", json_file.stem)
         stem = Path(image_name).stem
+        if stem in out:
+            raise ValueError(f"Anotaciones duplicadas para el frame {stem}")
         out[stem] = labelme_to_detections(data)
     return out
 
@@ -160,12 +164,15 @@ def match_detections(
     predictions: list[tuple[int, int, int, int, str]],
     ground_truth: list[tuple[int, int, int, int, str]],
     iou_threshold: float = 0.5,
+    class_aware: bool = False,
 ) -> dict:
     """Matchea predicciones contra ground truth con greedy IoU.
 
     Returns:
         dict con tp, fp, fn, matches (lista de pares (pred_idx, gt_idx, iou)).
     """
+    if not 0 < iou_threshold <= 1:
+        raise ValueError("iou_threshold debe estar entre 0 y 1")
     matches = []
     matched_gt = set()
     matched_pred = set()
@@ -174,6 +181,8 @@ def match_detections(
     candidates = []
     for pi, pred in enumerate(predictions):
         for gi, gt in enumerate(ground_truth):
+            if class_aware and canonical_vehicle_label(pred[4]) != canonical_vehicle_label(gt[4]):
+                continue
             iou_val = iou(pred[:4], gt[:4])
             if iou_val >= iou_threshold:
                 candidates.append((iou_val, pi, gi))
@@ -210,3 +219,8 @@ def counting_accuracy(predicted_count: int, truth_count: int) -> float:
     if truth_count == 0:
         return 1.0 if predicted_count == 0 else 0.0
     return max(0.0, 1.0 - abs(predicted_count - truth_count) / truth_count)
+
+
+def canonical_vehicle_label(label):
+    label = label.strip().lower()
+    return "motorcycle" if label in {"motor", "motorbike", "motorcycle"} else label

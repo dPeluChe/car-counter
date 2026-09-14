@@ -195,14 +195,14 @@ class TestLinesMode:
         c.update(1, 100, 85, "car", "lines")
         assert len(c.routes_matrix) == 0
 
-    def test_no_crossing_too_far(self):
+    def test_crossing_between_frames(self):
         """Vehiculo cruza pero esta lejos de la linea (dist > tolerance)."""
         c = make_line_counter(tolerance=15)
         c.set_frame(1)
         c.update(1, 100, 50, "car", "lines")  # 50 px arriba
         c.set_frame(2)
         c.update(1, 100, 150, "car", "lines")  # 50 px abajo, dist=50 > tol=15
-        assert len(c.routes_matrix) == 0
+        assert c.routes_matrix == {"Linea 1 ↓": 1}
 
     def test_first_frame_no_crossing(self):
         """Primer frame de un track no genera cruce (no hay prev_cy)."""

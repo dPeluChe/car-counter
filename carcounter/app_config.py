@@ -37,6 +37,9 @@ class SettingsConfig:
     min_origin_frames: int = 3
     min_dest_frames: int = 3
     min_crossing_frames: int = 2
+    inference_roi: Optional[list[int]] = None
+    camera_max_drift_px: Optional[float] = None
+    vehicle_samples: list[dict] = field(default_factory=list)
 
     def validate(self) -> list[str]:
         errors = []
@@ -54,6 +57,7 @@ class SettingsConfig:
 @dataclass
 class SAHIConfig:
     """SAHI tiling parameters."""
+    enabled: bool = True
     slice_width: int = 512
     slice_height: int = 512
     overlap_ratio: float = 0.2
@@ -76,6 +80,14 @@ class TrackerConfig:
     max_age: int = 40
     min_hits: int = 3
     iou_threshold: float = 0.2
+    track_high_thresh: float = 0.25
+    track_low_thresh: float = 0.10
+    new_track_thresh: float = 0.25
+    track_buffer: int = 30
+    match_thresh: float = 0.8
+    fuse_score: bool = True
+    gmc_method: str = "sparseOptFlow"
+    with_reid: bool = False
 
     def validate(self) -> list[str]:
         errors = []
@@ -85,6 +97,12 @@ class TrackerConfig:
             errors.append(f"min_hits debe ser >= 1, got {self.min_hits}")
         if not 0.0 < self.iou_threshold <= 1.0:
             errors.append(f"iou_threshold debe estar entre 0 y 1, got {self.iou_threshold}")
+        if not 0 <= self.track_low_thresh < self.track_high_thresh <= self.new_track_thresh <= 1:
+            errors.append("Se requiere 0 <= track_low_thresh < track_high_thresh <= new_track_thresh <= 1")
+        if type(self.track_buffer) is not int or self.track_buffer < 1:
+            errors.append("track_buffer debe ser un entero positivo")
+        if not 0 <= self.match_thresh <= 1:
+            errors.append("match_thresh debe estar entre 0 y 1")
         return errors
 
 
@@ -155,10 +173,14 @@ class AppConfig:
             min_origin_frames=settings_d.get("min_origin_frames", 3),
             min_dest_frames=settings_d.get("min_dest_frames", 3),
             min_crossing_frames=settings_d.get("min_crossing_frames", 2),
+            inference_roi=settings_d.get("inference_roi"),
+            camera_max_drift_px=settings_d.get("camera_max_drift_px"),
+            vehicle_samples=settings_d.get("vehicle_samples", []),
         )
 
         sahi_d = d.get("sahi", {})
         sahi = SAHIConfig(
+            enabled=sahi_d.get("enabled", True),
             slice_width=sahi_d.get("slice_width", 512),
             slice_height=sahi_d.get("slice_height", 512),
             overlap_ratio=sahi_d.get("overlap_ratio", 0.2),
@@ -170,6 +192,9 @@ class AppConfig:
             max_age=tracker_d.get("max_age", 40),
             min_hits=tracker_d.get("min_hits", 3),
             iou_threshold=tracker_d.get("iou_threshold", 0.2),
+            **{key: tracker_d[key] for key in ("track_high_thresh", "track_low_thresh",
+                "new_track_thresh", "track_buffer", "match_thresh", "fuse_score",
+                "gmc_method", "with_reid") if key in tracker_d},
         )
 
         lines_raw = d.get("lines", [])
@@ -216,12 +241,22 @@ class AppConfig:
                 "imgsz": self.settings.imgsz,
                 "sample_constraints": sc,
                 "sample_count": self.settings.sample_count,
+                "vehicle_samples": list(self.settings.vehicle_samples),
+                "min_origin_frames": self.settings.min_origin_frames,
+                "min_dest_frames": self.settings.min_dest_frames,
+                "min_crossing_frames": self.settings.min_crossing_frames,
             },
             "sahi": asdict(self.sahi),
             "tracker": asdict(self.tracker),
             "video_path": self.video_path,
             "model_path": self.model_path,
         }
+
+        if self.settings.camera_max_drift_px is not None:
+            config["settings"]["camera_max_drift_px"] = self.settings.camera_max_drift_px
+
+        if self.settings.inference_roi is not None:
+            config["settings"]["inference_roi"] = list(self.settings.inference_roi)
 
         if self.settings.conf_per_class:
             config["settings"]["conf_per_class"] = {

@@ -7,7 +7,7 @@ e implementar infer().
 
 from abc import ABC, abstractmethod
 import numpy as np
-from carcounter.constants import COCO_NAMES, VEHICLE_CLASSES, VEHICLE_CLASS_IDS
+from carcounter.constants import VEHICLE_CLASSES, resolve_vehicle_classes
 from carcounter.geometry import apply_nms, passes_geometry_filter, in_exclusion_zone
 from carcounter.logging_config import get_logger
 
@@ -45,27 +45,8 @@ class Detector(ABC):
             (detections_np, det_classes): numpy array (N,5) y lista de nombres
         """
         raw = self.infer(frame, conf_threshold, **kwargs)
-        det_list = []
-        det_classes = []
-        for det in raw:
-            x1, y1, x2, y2 = det["bbox"]
-            cls_name = det["cls_name"]
-            conf_val = det["conf"]
+        return filter_detections(raw, conf_for, geo_constraints, exclusion_np)
 
-            if cls_name not in VEHICLE_CLASSES:
-                continue
-            if conf_val < conf_for(cls_name):
-                continue
-            if not passes_geometry_filter(x1, y1, x2, y2, geo_constraints):
-                continue
-            if in_exclusion_zone((x1 + x2) / 2, (y1 + y2) / 2, exclusion_np):
-                continue
-
-            det_list.append([x1, y1, x2, y2, conf_val])
-            det_classes.append(cls_name)
-
-        detections = np.array(det_list) if det_list else np.empty((0, 5))
-        return detections, det_classes
 
 
 class YOLODetector(Detector):
@@ -75,20 +56,21 @@ class YOLODetector(Detector):
         self.model = model
         self.imgsz = imgsz
         self.device = device
+        self.vehicle_ids, self.class_names = resolve_vehicle_classes(model)
 
     def infer(self, frame, conf_threshold, **kwargs):
         imgsz = kwargs.get("imgsz", self.imgsz)
         device = kwargs.get("device", self.device)
         results = self.model(
             frame, conf=conf_threshold, verbose=False,
-            classes=VEHICLE_CLASS_IDS, imgsz=imgsz, device=device,
+            classes=self.vehicle_ids, imgsz=imgsz, device=device,
         )
         detections = []
         for r in results:
             for box in r.boxes:
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
                 cls_id = int(box.cls[0])
-                cls_name = COCO_NAMES[cls_id] if cls_id < len(COCO_NAMES) else ""
+                cls_name = self.class_names[cls_id]
                 conf_val = float(box.conf[0])
                 detections.append({
                     "bbox": (x1, y1, x2, y2),
@@ -104,7 +86,7 @@ class YOLODetector(Detector):
         track_results = self.model.track(
             frame, conf=conf_threshold, imgsz=imgsz,
             tracker=tracker_yaml, persist=True, verbose=False,
-            classes=VEHICLE_CLASS_IDS, device=device,
+            classes=self.vehicle_ids, device=device,
         )
         tracked = []
         if track_results and track_results[0].boxes is not None:
@@ -114,7 +96,7 @@ class YOLODetector(Detector):
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
                 tid = int(box.id[0])
                 cls_id = int(box.cls[0])
-                cls_name = COCO_NAMES[cls_id] if cls_id < len(COCO_NAMES) else "car"
+                cls_name = self.class_names[cls_id]
                 conf_val = float(box.conf[0])
                 tracked.append({
                     "bbox": (x1, y1, x2, y2),
@@ -161,6 +143,7 @@ class SAHIDetector(Detector):
         self.nms_threshold = nms_threshold
 
     def infer(self, frame, conf_threshold, **kwargs):
+        self.sahi_model.confidence_threshold = conf_threshold
         result = self.sahi_predict_fn(
             frame, self.sahi_model,
             slice_height=self.slice_h, slice_width=self.slice_w,
@@ -175,7 +158,7 @@ class SAHIDetector(Detector):
                 "bbox": (int(bbox.minx), int(bbox.miny),
                          int(bbox.maxx), int(bbox.maxy)),
                 "cls_name": pred.category.name,
-                "conf": pred.score.value,
+                "conf": float(pred.score.value),
             })
         return detections
 
@@ -191,3 +174,27 @@ class SAHIDetector(Detector):
             det_list, det_classes = apply_nms(det_list, det_classes, self.nms_threshold)
             detections = np.array(det_list) if det_list else np.empty((0, 5))
         return detections, det_classes
+
+
+def filter_detections(raw, conf_for, geo_constraints, exclusion_np):
+    det_list = []
+    det_classes = []
+    for det in raw:
+        x1, y1, x2, y2 = det["bbox"]
+        cls_name = det["cls_name"]
+        conf_val = det["conf"]
+
+        if cls_name not in VEHICLE_CLASSES:
+            continue
+        if conf_val < conf_for(cls_name):
+            continue
+        if not passes_geometry_filter(x1, y1, x2, y2, geo_constraints):
+            continue
+        if in_exclusion_zone((x1 + x2) / 2, (y1 + y2) / 2, exclusion_np):
+            continue
+
+        det_list.append([x1, y1, x2, y2, conf_val])
+        det_classes.append(cls_name)
+
+    detections = np.array(det_list) if det_list else np.empty((0, 5))
+    return detections, det_classes

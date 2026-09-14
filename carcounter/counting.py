@@ -11,7 +11,7 @@ from collections import deque
 from carcounter.logging_config import get_logger
 from carcounter.geometry import (
     point_in_zone, point_in_zone_mask, build_zone_masks,
-    point_to_line_side, point_line_distance,
+    point_to_line_side,
     cosine_similarity_2d,
 )
 
@@ -47,8 +47,11 @@ class VehicleCounter:
 
         # State
         self.tracks_info = {}
+        self._archived_tracks = []
+        self._track_observations = {}
         self.trails = {}
         self.routes_matrix = {}
+        self.counting_events = []
         self.od_matrix = {}
         self.od_matrix_by_class = {}
         self.total_vehicles_ever = 0
@@ -72,6 +75,27 @@ class VehicleCounter:
 
     def update(self, trk_id, cx, cy, cls_name, mode, bbox=None):
         """Dispatch al modo correcto. bbox=(x1,y1,x2,y2) opcional para multi-anchor."""
+        info = self.tracks_info.get(trk_id)
+        if info and self.frame_count - info["last_seen_frame"] > 1:
+            self._crossing_history.pop(trk_id, None)
+            info["dest_frames"] = 0
+            if info["state"] == "origin" and info["zone_frames"] < self.min_origin_frames:
+                info.update(state="new", origin=None, zone_frames=0)
+        observation = self._track_observations.setdefault(trk_id, {
+            "first_pos": (cx, cy), "first_seen_frame": self.frame_count,
+            "observed_frames": 0,
+        })
+        observation["observed_frames"] += 1
+        if info and info["state"] == "done":
+            cls_name = info["class"]
+        else:
+            votes = observation.setdefault("class_votes", {})
+            votes[cls_name] = votes.get(cls_name, 0) + 1
+            previous_class = info["class"] if info else cls_name
+            best_class = max(votes, key=votes.get)
+            cls_name = best_class if votes[best_class] > votes.get(previous_class, 0) else previous_class
+            if info:
+                info["class"] = cls_name
         # Update trail
         if trk_id not in self.trails:
             self.trails[trk_id] = deque(maxlen=self.trail_length)
@@ -137,29 +161,47 @@ class VehicleCounter:
                     info["origin"] = None
             else:
                 if info["zone_frames"] >= self.min_origin_frames:
-                    # Transition to transit, then apply dest logic
                     info["state"] = "transit"
                     info["dest_zone"] = current_zone
                     info["dest_frames"] = 1
+                    if self.min_dest_frames <= 1:
+                        self._register_route(trk_id, origin, current_zone, info["class"])
+                else:
+                    info["origin"] = current_zone
+                    info["zone_frames"] = 1
             return
 
         if info["state"] == "transit":
             if current_zone and current_zone != info["origin"]:
                 if info.get("dest_zone") == current_zone:
                     info["dest_frames"] = info["dest_frames"] + 1
-                    if info["dest_frames"] >= self.min_dest_frames:
-                        self._register_route(trk_id, info["origin"], current_zone, info["class"])
                 else:
                     info["dest_zone"] = current_zone
                     info["dest_frames"] = 1
+                if info["dest_frames"] >= self.min_dest_frames:
+                    self._register_route(trk_id, info["origin"], current_zone, info["class"])
             else:
                 info["dest_zone"] = None
                 info["dest_frames"] = 0
 
+    def _record_count(self, trk_id, mode, route, cls_name, *, origin=None,
+                      destination=None, line=None, direction=None):
+        self.routes_matrix[route] = self.routes_matrix.get(route, 0) + 1
+        self.tracks_info[trk_id]["counted_frame"] = self.frame_count
+        position = self.trails.get(trk_id)
+        self.counting_events.append({
+            "event_id": len(self.counting_events) + 1, "track_id": int(trk_id),
+            "frame": int(self.frame_count), "mode": mode, "route": route,
+            "class": cls_name, "origin": origin, "destination": destination,
+            "line": line, "direction": direction,
+            "position": list(map(float, position[-1])) if position else None,
+        })
+
     def _register_route(self, trk_id, origin, destination, cls_name):
         route_key = f"{origin} \u2192 {destination}"
-        self.routes_matrix[route_key] = self.routes_matrix.get(route_key, 0) + 1
+        self._record_count(trk_id, "zones", route_key, cls_name, origin=origin, destination=destination)
         self.tracks_info[trk_id]["state"] = "done"
+        self.tracks_info[trk_id]["destination"] = destination
 
         # OD matrix nested
         if origin not in self.od_matrix:
@@ -180,7 +222,6 @@ class VehicleCounter:
 
     def _update_line_crossing(self, trk_id, cx, cy, cls_name, bbox=None):
         """Conteo por cruce de linea. Soporta multi-anchor y crossing threshold."""
-        prev_pos = self._id_prev_pos.get(trk_id)
         self._id_prev_pos[trk_id] = (cx, cy)
 
         if trk_id not in self.tracks_info:
@@ -195,9 +236,6 @@ class VehicleCounter:
         info = self.tracks_info[trk_id]
         info["last_seen_frame"] = self.frame_count
 
-        if prev_pos is None:
-            return
-
         # Compute anchor points (4 corners if bbox available, else just center)
         if bbox:
             x1, y1, x2, y2 = bbox
@@ -209,53 +247,62 @@ class VehicleCounter:
             line_name = line["name"]
             lx1, ly1 = line["pt1"]
             lx2, ly2 = line["pt2"]
-            tol = line["tolerance"]
-
-            dist = point_line_distance(cx, cy, lx1, ly1, lx2, ly2)
-            if dist > tol:
+            dx, dy = lx2 - lx1, ly2 - ly1
+            if dx == 0 and dy == 0:
                 continue
+
+            history = self._crossing_history.setdefault(trk_id, {}).setdefault(
+                line_name, {"side": 0, "position": None, "pending_frames": 0,
+                            "center_side": 0, "intersects": False})
+
+            center_value = point_to_line_side(cx, cy, lx1, ly1, lx2, ly2)
+            center_side = 1 if center_value > 0 else (-1 if center_value < 0 else 0)
+            if center_side and history["center_side"] * center_side < 0:
+                px, py = history["position"]
+                before = point_to_line_side(px, py, lx1, ly1, lx2, ly2)
+                fraction = before / (before - center_value)
+                ix, iy = px + fraction * (cx - px), py + fraction * (cy - py)
+                projection = ((ix - lx1) * dx + (iy - ly1) * dy) / (dx * dx + dy * dy)
+                history["intersects"] = 0 <= projection <= 1
+            if center_side:
+                history["center_side"] = center_side
+            history["position"] = (cx, cy)
 
             # Multi-anchor: check all anchors are on the same side
             sides_now = [point_to_line_side(ax, ay, lx1, ly1, lx2, ly2) for ax, ay in anchors_now]
             has_positive = any(s > 0 for s in sides_now)
             has_negative = any(s < 0 for s in sides_now)
             if has_positive and has_negative:
-                # Anchors straddle the line — skip (vehicle is ON the line)
+                history["pending_frames"] = 0
                 continue
 
             side_now = 1 if has_positive else (-1 if has_negative else 0)
-            side_prev = 1 if point_to_line_side(prev_pos[0], prev_pos[1], lx1, ly1, lx2, ly2) > 0 else -1
-
             if side_now == 0:
+                history["pending_frames"] = 0
+                continue
+            if history["side"] in (0, side_now):
+                history.update(side=side_now, position=(cx, cy), pending_frames=0,
+                               intersects=False)
                 continue
 
-            # Crossing threshold: track consecutive frames on same side
-            if trk_id not in self._crossing_history:
-                self._crossing_history[trk_id] = {}
-            trk_hist = self._crossing_history[trk_id]
-            if line_name not in trk_hist:
-                trk_hist[line_name] = deque(maxlen=self.min_crossing_frames + 1)
-            history = trk_hist[line_name]
-            history.append(side_now)
-
-            if len(history) < self.min_crossing_frames:
+            history["pending_frames"] += 1
+            if history["pending_frames"] < self.min_crossing_frames:
                 continue
-            if not all(s == side_now for s in history):
+            intersects = history["intersects"]
+            history.update(side=side_now, position=(cx, cy), pending_frames=0,
+                           intersects=False)
+            if not intersects:
                 continue
-
-            # Check if actually crossed (previous side was different)
-            if side_prev * side_now >= 0:
-                continue
-
-            # Determine direction using cross product (works for any line angle)
-            direction = "\u2193" if cy > prev_pos[1] else "\u2191"
+            if abs(dx) >= abs(dy):
+                direction = "↓" if side_now * dx > 0 else "↑"
+            else:
+                direction = "→" if side_now * dy < 0 else "←"
             crossing_key = f"{line_name} {direction}"
 
             if crossing_key not in info["lines_crossed"]:
                 info["lines_crossed"].add(crossing_key)
                 info["state"] = "done"
-                self.routes_matrix[crossing_key] = self.routes_matrix.get(crossing_key, 0) + 1
-                self._crossing_history.pop(trk_id, None)
+                self._record_count(trk_id, "lines", crossing_key, cls_name, line=line_name, direction=direction)
                 log.info("  ID=%4d  cruzo: %s  cls=%s  (total=%d)", trk_id, crossing_key, cls_name, self.routes_matrix[crossing_key])
 
     # ── Directions mode (cosine similarity) ───
@@ -305,7 +352,7 @@ class VehicleCounter:
         if best_dir and best_score > 0.5:
             info["state"] = "done"
             info["assigned_direction"] = best_dir
-            self.routes_matrix[best_dir] = self.routes_matrix.get(best_dir, 0) + 1
+            self._record_count(trk_id, "directions", best_dir, cls_name, direction=best_dir)
             log.info("  ID=%4d  direccion: %s  sim=%.2f  cls=%s  (total=%d)", trk_id, best_dir, best_score, cls_name, self.routes_matrix[best_dir])
 
     # ── Shape metrics ─────────────────────────
@@ -350,7 +397,9 @@ class VehicleCounter:
             if self.frame_count - tinfo.get("last_seen_frame", 0) > max_missing_frames
         ]
         for tid in stale_ids:
+            self._archived_tracks.append(self._track_data_row(tid, self.tracks_info[tid]))
             del self.tracks_info[tid]
+            self._track_observations.pop(tid, None)
             self._id_prev_pos.pop(tid, None)
             self.trails.pop(tid, None)
             self._crossing_history.pop(tid, None)
@@ -363,28 +412,35 @@ class VehicleCounter:
 
     def get_track_data(self):
         """Retorna datos per-track para CSV export."""
-        rows = []
-        for tid, info in self.tracks_info.items():
-            trail = list(self.trails.get(tid, []))
-            first_pos = trail[0] if trail else None
-            last_pos = trail[-1] if trail else None
-            shape = self._shape_metrics.get(tid, {})
-            rows.append({
-                "track_id": tid,
-                "class": info.get("class", ""),
-                "state": info.get("state", ""),
-                "origin": info.get("origin", ""),
-                "direction": info.get("assigned_direction", ""),
-                "first_x": first_pos[0] if first_pos else "",
-                "first_y": first_pos[1] if first_pos else "",
-                "last_x": last_pos[0] if last_pos else "",
-                "last_y": last_pos[1] if last_pos else "",
-                "trail_length": len(trail),
-                "last_seen_frame": info.get("last_seen_frame", ""),
-                "avg_width": round(shape.get("avg_width", 0), 1),
-                "avg_height": round(shape.get("avg_height", 0), 1),
-                "avg_area": round(shape.get("avg_area", 0), 1),
-                "avg_aspect": round(shape.get("avg_aspect", 0), 2),
-                "avg_elongation": round(shape.get("avg_elongation", 0), 2),
-            })
-        return rows
+        return self._archived_tracks + [
+            self._track_data_row(tid, info) for tid, info in self.tracks_info.items()
+        ]
+
+    def _track_data_row(self, tid, info):
+        trail = self.trails.get(tid, [])
+        observation = self._track_observations.get(tid, {})
+        first_pos = observation.get("first_pos")
+        last_pos = trail[-1] if trail else None
+        shape = self._shape_metrics.get(tid, {})
+        return {
+            "track_id": tid,
+            "class": info.get("class", ""),
+            "state": info.get("state", ""),
+            "origin": info.get("origin", ""),
+            "destination": info.get("destination", ""),
+            "counted_frame": info.get("counted_frame", ""),
+            "first_seen_frame": observation.get("first_seen_frame", ""),
+            "observed_frames": observation.get("observed_frames", 0),
+            "direction": info.get("assigned_direction", ""),
+            "first_x": first_pos[0] if first_pos else "",
+            "first_y": first_pos[1] if first_pos else "",
+            "last_x": last_pos[0] if last_pos else "",
+            "last_y": last_pos[1] if last_pos else "",
+            "trail_length": len(trail),
+            "last_seen_frame": info.get("last_seen_frame", ""),
+            "avg_width": round(shape.get("avg_width", 0), 1),
+            "avg_height": round(shape.get("avg_height", 0), 1),
+            "avg_area": round(shape.get("avg_area", 0), 1),
+            "avg_aspect": round(shape.get("avg_aspect", 0), 2),
+            "avg_elongation": round(shape.get("avg_elongation", 0), 2),
+        }
