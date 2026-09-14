@@ -16,7 +16,7 @@
 | En paralelo con pruebas humanas | TODO-033 | Configurador utilizable y parámetros persistentes |
 | Después de exactitud | TODO-023 / TODO-024 | Rendimiento y formatos con beneficio medido |
 | Operación opcional | TODO-034 | Cron activado y verificado desde entorno permitido |
-| Antes de usar el wizard | TODO-036 | Entradas alineadas con la CLI y sin rutas heredadas |
+| Opcional | TODO-036 | Replay y control de cámara desde el wizard |
 
 No hay porcentaje aprobado de precisión todavía. El revisor define con el responsable de la presentación el alcance, las clases y los umbrales antes de seleccionar parámetros.
 
@@ -131,17 +131,11 @@ No hay porcentaje aprobado de precisión todavía. El revisor define con el resp
 
 **Prueba manual:** PRUEBA-07. **Cierre:** mejora medida de las rutas afectadas y rechazo verificable cuando no se puede mantener el encuadre. El control de 5 px es experimental y está desactivado por defecto.
 
-## TODO-036: Trabajo heredado sin terminar de conectar `added: 2026-09-14`
+## TODO-036: Replay y control de cámara desde el wizard `added: 2026-09-14`
 
-**Prioridad:** P1. **Evidencia:** auditoría del 2026-09-14 sobre el PR #4; los cambios de septiembre llegaron a `main.py`/`runtime.py`, no al resto de entradas.
+**Prioridad:** P2. El resto del trabajo heredado se cerró (ver [2609](TASK_COMPLETED/2609.md)).
 
-- [ ] `carcounter/detection.py:detect_and_track`: el bloque posterior a la rama con tracker es inalcanzable desde `main.py` (`setup_tracker` siempre devuelve tracker) y conserva el comportamiento viejo (COCO por defecto, `model.track`). Eliminarlo o migrar `scripts/benchmark_pipeline.py`; unificar la validación de `inference_roi` (tres copias).
-- [ ] `setup_panels/step1_calibration.py:_predict_roi_boxes` y `carcounter/calibration.py:predict_roi_boxes` no tienen llamadas: eliminar.
-- [ ] `carcounter/engine.py` (`ProcessingEngine`) solo se usa en tests y no tiene caché, cámara, ROI ni eventos: decidir eliminar o actualizar.
-- [ ] Wizard `python -m carcounter` (`carcounter/app_steps/step_launch.py`): sin BoT-SORT, RF-DETR fuerza SORT por un motivo que ya no aplica, y no expone replay, control de cámara ni salidas JSON/CSV.
-- [ ] `carcounter/runtime.py:setup_tracker`: sin `lap`/`trackers` cae a SORT con solo un warning y la metadata registra el tracker pedido. Fallar o registrar el efectivo.
-- [ ] `main.py` no valida el perfil con `AppConfig.from_dict(cfg).validate()`; una ROI o deriva inválida falla tarde.
-- [ ] `counting_events` solo llega al JSON: `db.save_run` y `/api/stats` no los incluyen.
+- [ ] `python -m carcounter` no expone `--record-detections`/`--replay-detections` ni `--camera-max-drift-px` (este último sí se toma de `settings.camera_max_drift_px` del perfil) y solo muestra el código de salida de `main.py`, no el motivo del fallo.
 
 ## Fuera del foco de la presentación
 
@@ -172,9 +166,8 @@ No hay porcentaje aprobado de precisión todavía. El revisor define con el resp
 
 ### TODO-019: Persistencia local libSQL
 
-**Prioridad:** secundaria. **Estado:** código existente; backend real pendiente de verificar con dependencias instaladas.
+**Prioridad:** secundaria. **Estado:** pruebas con el backend real pasan (incluye eventos y migración); falta contrastar con un run real.
 
-- [ ] Ejecutar pruebas con `libsql-experimental` instalado y comprobar persistencia tras cerrar/reabrir.
 - [ ] Verificar valores guardados contra JSON/OD del mismo run, sin almacenar un proceso fallido como completado.
 
 **Cierre:** pruebas del backend real, datos consistentes y evidencia de lectura posterior. Embeddings y búsqueda de vehículos por similitud quedan como idea futura.
@@ -194,6 +187,8 @@ No hay porcentaje aprobado de precisión todavía. El revisor define con el resp
 
 - [ ] Ejecutar con `fastapi`, `uvicorn` y dependencias de prueba; verificar respuestas, errores y stream durante procesamiento real.
 - [ ] Comparar conteo/frames de la API con JSON del mismo run; comprobar historial solo cuando la DB esté disponible.
+
+Desde 2026-09-14 `tests/test_api.py` corre completo con `TestClient` (incluye `events_count` y `recent_events`); eso no prueba el servicio durante un procesamiento real.
 
 **Cierre:** evidencia con backend instalado. No publicar el servicio ni cambiar su exposición.
 
