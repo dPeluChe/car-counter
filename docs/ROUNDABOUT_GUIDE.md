@@ -1,150 +1,61 @@
-# Guia de uso: Conteo por zonas A→B
+# Configuración de rutas en una glorieta
 
-## Objetivo
+El motor implementa rutas entre zonas, pero la demo actual usa una sola línea y una ROI parcial. Consulta el [estado verificado](GUIDES/VERIFIED_STATE.md) y ejecuta PRUEBA-05/06 del [protocolo manual](GUIDES/MANUAL_VALIDATION.md) antes de presentar rutas completas.
 
-El flujo de conteo por zonas permite:
+## Definir el alcance antes de dibujar
 
-- calibrar deteccion sobre vista aerea
-- excluir zonas con vehiculos estacionados
-- definir zonas poligonales por calle
-- rastrear vehiculos con IDs (ByteTrack / BoT-SORT)
-- contar rutas A→B entre zonas
-- exportar resultados en JSON y CSV
+Identifica video, tramo y bocacalles que se revisarán. Acuerda las clases incluidas y el tratamiento de autos ya dentro del encuadre al inicio, salidas después del final, retornos y vueltas múltiples. Usa una copia del perfil y salidas nuevas.
 
-Los archivos principales son:
+La región de inferencia debe cubrir suficientes observaciones de origen, tránsito y destino. Dibujar una zona fuera de la ROI no amplía la detección. Si cambia la ROI, hace falta inferencia nueva; la caché de 300 frames del ejemplo no acredita otro encuadre ni el minuto completo.
 
-- `setup.py` — configurador interactivo (Tkinter)
-- `main.py` — contador de rutas
+## Configurador
 
-## Paso 0: Zonas de Exclusion (opcional)
-
-Al abrir el configurador, el primer paso permite definir poligonos sobre areas que no deben contar:
-
-- estacionamientos con vehiculos fijos
-- zonas con objetos que YOLO detecta como vehiculos (techos, etc.)
-
-Las detecciones cuyo centro caiga dentro de estas zonas se descartan en Vista Global, preview YOLO, y el conteo real.
-
-Se dibujan en rojo/naranja para diferenciarlas de las zonas de transito.
-
-## Paso 1: Configuracion
+Desde el repositorio, abre el configurador con la copia creada por el protocolo manual:
 
 ```bash
-source env/bin/activate
-python setup.py --video assets/mi_video.mp4
+env/bin/python setup.py --config "$CARCOUNTER_REVIEW_DIR/profile.json"
 ```
 
-Para cargar una configuracion previa:
+Ese argumento indica archivo de entrada y salida. Confirma visualmente el video y el modelo cargados antes de dibujar. No se ha comprobado la apertura de Tk en esta sesión; cualquier fallo debe registrarse con mensaje y entorno, no atribuirse al detector sin revisar.
+
+En calibración, prueba el perfil real sobre muestras de varios frames. La vista global muestra predicciones; sin anotaciones humanas completas no mide recall. Los filtros derivados de muestras requieren una acción explícita desde cinco muestras. Al cambiar de modelo revisa las clases disponibles y vuelve a comprobar las muestras.
+
+## Ubicar zonas de origen y destino
+
+Selecciona modo `zones` y al menos dos zonas de entrada/salida. Los puntos están en coordenadas del video original, también cuando se infiere un recorte. Evita que una zona de salida invada el anillo por donde circulan autos que no están saliendo.
+
+El comportamiento actual de `VehicleCounter` es:
+
+1. Confirmar una zona de origen durante `min_origin_frames` observaciones.
+2. Esperar tránsito o una zona diferente.
+3. Confirmar como destino la primera zona distinta al origen que cumpla `min_dest_frames`.
+4. Registrar una ruta y terminar el conteo de ese ID.
+
+Una zona mal colocada puede producir un destino prematuro. Subir la permanencia sin revisar la geometría también puede perder autos rápidos. No hay una política implementada de múltiples rutas completas por ID ni una garantía de recuperar el mismo vehículo después de cambiar de ID.
+
+Las exclusiones descartan detecciones por su centro. Un auto estacionado sigue siendo un vehículo detectable; excluirlo solo es válido si queda fuera del alcance acordado. No recortes estacionamientos que también cubren un acceso que debes contar.
+
+## Revisar, guardar y ejecutar
+
+Usa preview para comprobar correspondencia de zonas, movimiento y cajas. Guarda, cierra y reabre la copia para verificar persistencia. Si la cámara cambia de encuadre, revisa la geometría contra el frame de referencia; el monitor de deriva no estabiliza la imagen.
+
+Ejemplo para el video de referencia completo, después de guardar un perfil de zonas apropiado:
 
 ```bash
-python setup.py --video assets/mi_video.mp4 --config config/config.json
+env/bin/python main.py --config "$CARCOUNTER_REVIEW_DIR/profile.json" \
+  --headless --demo-mode --device cpu --max-frames 1799 \
+  --output "$CARCOUNTER_REVIEW_DIR/routes.mp4" \
+  --output-json "$CARCOUNTER_REVIEW_DIR/routes.json" \
+  --output-tracks-csv "$CARCOUNTER_REVIEW_DIR/routes_tracks.csv" \
+  --output-od-csv "$CARCOUNTER_REVIEW_DIR/routes_od.csv"
 ```
 
-### Que hace el configurador
+El comando ejecuta inferencia, no utiliza la caché parcial anterior. Revisa el log para confirmar video, modo y tracker efectivos. Si el JSON del perfil sigue en modo `lines`, la salida seguirá siendo aforo por línea.
 
-- permite cambiar de frame para elegir un momento util del video
-- tiene `Vista Global` para medir recall en toda la escena (con feedback de progreso)
-- usa `imgsz` alto para mejorar deteccion en vista aerea
-- permite agregar varias muestras de vehiculos
-- deriva filtros geometricos a partir de esas muestras
-- soporta umbrales de confianza por clase (car, moto, bus, truck)
-- filtra detecciones en zonas de exclusion automaticamente
-- valida localmente un auto especifico antes de pasar a zonas
+La matriz OD solo corresponde a `zones`. `directions` clasifica desplazamiento por vector y `lines` cuenta cruces por línea/sentido; ninguno equivale a rutas completas entre bocacalles.
 
-### Flujo recomendado de calibracion
+## Validación para presentar
 
-1. Si hay vehiculos estacionados, dibuja zonas de exclusion en el Paso 0
-2. Presiona `Vista Global`
-3. Ajusta `imgsz` si la escena sigue corta de recall
-4. Marca 5 autos y 1-2 camiones con `Agregar muestra vehiculo`
-5. Si una clase tiene muchos falsos positivos, ajusta su slider de confianza
-6. Vuelve a presionar `Vista Global`
-7. Repite hasta bajar falsos positivos grandes
-8. Marca un auto puntual y usa `Probar YOLO`
-9. Confirma y continua
+Sigue autos humanos completos y compara eventos, no solo el total de IDs. Conserva también omisiones, duplicaciones, destinos erróneos y casos incompletos. Usa [validación de eventos](GUIDES/ROUTE_EVENT_REVIEW.md) para ruta/clase/tiempo y [totales por ruta](GUIDES/route_validation.md) como resumen complementario.
 
-## Paso 2: Zonas
-
-Dibuja un poligono por cada boca calle relevante de la glorieta.
-
-Regla practica:
-
-- la zona debe cubrir el tramo donde ya sabes que el auto esta entrando o saliendo
-- evita zonas demasiado grandes que invadan el anillo interno
-
-### Preview de video
-
-El configurador permite reproducir el video con las zonas superpuestas:
-
-- `Play/Pausa` para ver el video en vivo
-- `YOLO` para activar detecciones sobre el video (mas lento pero valida las zonas)
-- las zonas de exclusion se muestran como referencia visual
-- clic en una zona para seleccionarla
-
-## Paso 3: SAHI
-
-El configurador tambien guarda parametros para deteccion por tiles.
-
-Valores utiles para vista aerea:
-
-- `slice_width`: 256 a 512
-- `slice_height`: 256 a 512
-- `overlap_ratio`: 0.2 a 0.3
-- `nms_threshold`: 0.3 (NMS post-SAHI para eliminar duplicados)
-
-## Ejecucion del conteo
-
-Con la config guardada:
-
-```bash
-python main.py --config config/config.json --video assets/mi_video.mp4
-```
-
-Modo rapido sin SAHI:
-
-```bash
-python main.py --config config/config.json --video assets/mi_video.mp4 --no-sahi
-```
-
-Modo demo con scoreboard grande:
-
-```bash
-python main.py --config config/config.json --video assets/mi_video.mp4 --demo-mode
-```
-
-Smoke test:
-
-```bash
-python main.py --config config/config.json --video assets/mi_video.mp4 --headless --max-frames 50 --no-save
-```
-
-## Lo que usa el conteo
-
-`main.py` respeta todo lo que el configurador guarda:
-
-- `conf_threshold` (global)
-- `conf_per_class` (por clase, si se configuro)
-- `imgsz`
-- `min_area` / `max_area`
-- `exclusion_zones` (se dibujan en rojo semi-transparente)
-- restricciones geometricas derivadas de muestras (ancho, alto, aspect ratio)
-- NMS post-SAHI configurable
-- `min_origin_frames` / `min_dest_frames` para anti-bounce
-
-## Resultados
-
-Al terminar, `main.py` genera:
-
-- `result.mp4`: video con visualizacion de tracking y rutas
-- `results.json`: resumen de rutas contadas, configuracion, metricas
-- CSV opcional con `--output-csv routes.csv`
-
-## Validacion manual
-
-Todavia requiere validacion manual sobre videos reales para ajustar:
-
-- recall vs falsos positivos
-- tamano de tiles SAHI
-- zonas de entrada/salida
-- zonas de exclusion para vehiculos estacionados
-- estabilidad del tracking en escenas con oclusion
+La presentación debe identificar las rutas revisadas, intervalo, clases, referencia humana y errores medidos. No usar porcentajes de exactitud que provengan de otra cámara, modelo o prueba sintética.
