@@ -34,7 +34,7 @@ def test_preview_uses_production_roi_model_and_filters():
     raw = detect_objects(frame, model=model, effective_conf=0.1, imgsz=640,
                          inference_roi=config["settings"]["inference_roi"])
     assert preview == raw == [dict(bbox=(110, 70, 130, 90), conf=0.8, cls_name="van")]
-    assert model.call_args.kwargs["classes"] == [3, 4, 5, 8, 9]
+    assert model.call_args.kwargs["classes"] == [3, 4, 5, 8, 9]  # names del mock: sin bicycle/tricycle
     assert model.call_args.args[0].shape == (100, 150, 3)
     app.exclusion_zones = {"excluded": [[105, 65], [135, 65], [135, 95], [105, 95]]}
     assert CalibTestsMixin._predict_current_profile(app, frame) == []

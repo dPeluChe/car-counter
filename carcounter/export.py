@@ -67,10 +67,21 @@ def export_json(path, *, video_path, config_path, use_sahi, tracker_backend,
     if run_metadata is not None:
         data["run"] = run_metadata
     if counting_events is not None:
+        data["routes_by_group"] = routes_by_group(counting_events)
         data["counting_events"] = counting_events
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     log.info("Resultados JSON: %s", path)
+
+
+def routes_by_group(counting_events):
+    """{ruta: {grupo: conteo}} a partir de los eventos; clases sin grupo van a 'sin_grupo'."""
+    grouped = {}
+    for event in counting_events:
+        counts = grouped.setdefault(event["route"], {})
+        group = event.get("group") or "sin_grupo"
+        counts[group] = counts.get(group, 0) + 1
+    return grouped
 
 
 def export_csv(path, routes_matrix):

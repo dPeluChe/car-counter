@@ -21,10 +21,22 @@ COCO_NAMES = [
     "teddy bear", "hair drier", "toothbrush",
 ]
 
-# Nombres de vehiculo en COCO ("motorbike") y en datasets aereos como
-# VisDrone ("motor", "van", "motorcycle"). Superset para que el filtro por
-# nombre funcione con cualquiera de los dos modelos.
-VEHICLE_CLASSES = {"car", "truck", "bus", "motorbike", "motorcycle", "motor", "van"}
+# Grupos acordados con EPS (docs/GUIDES/COUNTING_SCOPE.md). Nombres COCO ("motorbike")
+# y VisDrone ("motor", "van", "tricycle"); mototaxis (tricycle) cuentan como ligeros.
+CLASS_GROUPS = {
+    "ligeros": {"car", "van", "tricycle", "awning-tricycle"},
+    "pesados": {"bus", "truck"},
+    "dos_ruedas": {"motor", "motorbike", "motorcycle", "bicycle"},
+}
+VEHICLE_CLASSES = set().union(*CLASS_GROUPS.values())
+
+
+def class_group(name):
+    """Grupo EPS de una clase del modelo, o None si no se cuenta."""
+    name = str(name).strip().lower()
+    return next((group for group, members in CLASS_GROUPS.items() if name in members), None)
+
+
 VEHICLE_CLASS_IDS = [2, 3, 5, 7]  # car, motorbike, bus, truck (COCO por defecto)
 
 PREVIEW_VEH_NAMES = {2: "car", 3: "moto", 5: "bus", 7: "truck"}

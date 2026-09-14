@@ -9,6 +9,7 @@ lines y directions viven en carcounter/counting_modes.py.
 """
 
 from collections import deque
+from carcounter.constants import class_group
 from carcounter.logging_config import get_logger
 from carcounter.geometry import point_in_zone, point_in_zone_mask, build_zone_masks
 from carcounter.counting_modes import LinesDirectionsMixin
@@ -190,7 +191,8 @@ class VehicleCounter(LinesDirectionsMixin):
         self.counting_events.append({
             "event_id": len(self.counting_events) + 1, "track_id": int(trk_id),
             "frame": int(self.frame_count), "mode": mode, "route": route,
-            "class": cls_name, "origin": origin, "destination": destination,
+            "class": cls_name, "group": class_group(cls_name),
+            "origin": origin, "destination": destination,
             "line": line, "direction": direction,
             "position": list(map(float, position[-1])) if position else None,
         })

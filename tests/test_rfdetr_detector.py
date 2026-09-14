@@ -30,8 +30,8 @@ FRAME = np.zeros((32, 32, 3), dtype=np.uint8)
 def test_coco_checkpoint_uses_raw_category_ids():
     # COCO: 1 person, 2 bicycle, 3 car, 4 motorcycle, 6 bus, 8 truck
     detections, classes = rfdetr_detect(_model([3, 6, 8, 4, 2, 1]), FRAME)
-    assert classes == ["car", "bus", "truck", "motorcycle"]
-    assert len(detections) == 4
+    assert classes == ["car", "bus", "truck", "motorcycle", "bicycle"]
+    assert len(detections) == 5
 
 
 def test_custom_checkpoint_uses_zero_based_names():
