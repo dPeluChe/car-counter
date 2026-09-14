@@ -71,7 +71,7 @@ class ZonesMixin:
         self.btn_undo_point.pack(fill="x", pady=2)
         self.subpanel_zones.pack(fill="x")
 
-# ── Subpanel líneas ──
+        # ── Subpanel líneas ──
         self.subpanel_lines = tk.Frame(self.panel_step2, bg="#181825")
         self._lbl(self.subpanel_lines,
                   "Dibuja líneas de cruce. Cada\n"
@@ -309,74 +309,7 @@ class ZonesMixin:
 
     # Preview logic extraida a setup_panels/step2_preview.py (PreviewMixin)
 
-    def _validate_zones(self):
-        """Valida zonas/lineas antes de continuar. Retorna (ok, mensaje)."""
-        mode = self.counting_mode.get()
-
-        if mode == "zones":
-            if not self.zones:
-                return False, "No hay zonas definidas. Dibuja al menos 2 zonas."
-            if len(self.zones) < 2:
-                return False, "Necesitas al menos 2 zonas para detectar rutas A\u2192B."
-
-            # Verificar poligonos con menos de 3 puntos
-            for name, pts in self.zones.items():
-                if len(pts) < 3:
-                    return False, f"La zona '{name}' tiene solo {len(pts)} punto(s). Se necesitan al menos 3."
-
-            # Verificar nombres duplicados (no deberia pasar, pero defensivo)
-            names = list(self.zones.keys())
-            if len(names) != len(set(names)):
-                return False, "Hay nombres de zona duplicados. Cada zona debe tener un nombre unico."
-
-            # Verificar zonas con area minima (poligonos degenerados)
-            for name, pts in self.zones.items():
-                np_pts = np.array(pts, dtype=np.int32)
-                area = cv2.contourArea(np_pts)
-                if area < 100:
-                    return False, (
-                        f"La zona '{name}' tiene un area muy pequena ({int(area)} px\u00b2). "
-                        "Redibuja con puntos mas separados."
-                    )
-
-        elif mode == "lines":
-            if not self.counting_lines:
-                return False, "No hay lineas definidas. Dibuja al menos una linea de cruce."
-
-            for name, pts in self.counting_lines.items():
-                if len(pts) < 2:
-                    return False, f"La linea '{name}' no tiene 2 puntos definidos."
-                p1, p2 = pts[0], pts[1]
-                length = math.hypot(p2[0] - p1[0], p2[1] - p1[1])
-                if length < 10:
-                    return False, (
-                        f"La linea '{name}' es muy corta ({int(length)} px). "
-                        "Dibuja una linea mas larga."
-                    )
-
-        elif mode == "directions":
-            if not self.directions:
-                return False, "No hay direcciones definidas. Dibuja al menos un vector de direccion."
-            for name, pts in self.directions.items():
-                if len(pts) < 2:
-                    return False, f"La direccion '{name}' no tiene 2 puntos definidos."
-
-        return True, ""
-
-    def _confirm_zones(self):
-        ok, msg = self._validate_zones()
-        if not ok:
-            messagebox.showwarning("Validacion", msg)
-            return
-        mode = self.counting_mode.get()
-        if mode == "zones":
-            n = len(self.zones)
-        elif mode == "lines":
-            n = len(self.counting_lines)
-        else:
-            n = len(self.directions)
-        self.status_var.set(f"{n} elemento(s) confirmado(s) — pasando a Paso 3")
-        self.after(300, lambda: self._activate_step(3))
+    # Validacion y confirmacion extraidas a setup_panels/step2_validation.py (ZoneValidationMixin)
 
     # ── Eventos de clic (Paso 2) ─────────────────
     def _on_zones_press(self, event):
