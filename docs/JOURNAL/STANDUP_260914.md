@@ -10,7 +10,7 @@ Punto de partida: [KICKOFF_260914.md](KICKOFF_260914.md). Todo el trabajo de sep
 | #5 | Docs reorganizados (11 → 7 guías), `CLAUDE.md` + `AGENTS.md`, `.doctos.yml`, backlog archivado por mes, prompt del cron exige rama + PR |
 | #6 | Archivos de más de 400 líneas divididos en mixins sin cambio de comportamiento |
 | #7 | RF-DETR: nombres de clase corregidos (autos salían como moto, buses y camiones se descartaban) |
-| `fix/todo-036-inherited-wiring` | Rama heredada de detección, calibración muerta y `ProcessingEngine` eliminados; ROI validada en un solo lugar; perfil validado al arrancar; tracker efectivo en metadata; eventos en DB y API; wizard con BoT-SORT |
+| #8 | Rama heredada de detección, calibración muerta y `ProcessingEngine` eliminados; ROI validada en un solo lugar; perfil validado al arrancar; tracker efectivo en metadata; eventos en DB y API; wizard con BoT-SORT |
 
 ## Decisiones
 
