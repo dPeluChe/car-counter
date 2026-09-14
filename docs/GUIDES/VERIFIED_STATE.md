@@ -52,6 +52,6 @@ Los máximos estimados de deriva fueron 7.8113 px en el normal y 85.2845 px en e
 
 ## Validación automática y límites
 
-La última ejecución de `env/bin/python -m pytest -q` aprobó 316 pruebas y omitió 15 por dependencias opcionales. Las omisiones no equivalen a pruebas aprobadas de DB/API. El informe de [revisión documental](../RESEARCH/DOCUMENTATION_AUDIT_2026_09_14.md) contiene la verificación de comandos y enlaces de este ciclo.
+La última ejecución de `env/bin/python -m pytest -q` aprobó 316 pruebas y omitió 15 por dependencias opcionales. Las omisiones no equivalen a pruebas aprobadas de DB/API.
 
 No hay porcentaje de precisión humana confirmado, nueva calibración de todas las entradas/salidas, estabilización automática, entrenamiento de pesos, benchmark de ONNX/TensorRT ni despliegue verificado. El backlog describe sus criterios; no deben presentarse como capacidades ya probadas.

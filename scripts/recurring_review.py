@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_DIR = ROOT / "output" / "recurring-review"
-PROMPT = ROOT / "docs/GUIDES/RECURRING_CODE_REVIEW_PROMPT.md"
+PROMPT = ROOT / "scripts/recurring_review_prompt.md"
 BEGIN = "# BEGIN carcounter-recurring-review"
 END = "# END carcounter-recurring-review"
 INTERVAL = 5 * 3600

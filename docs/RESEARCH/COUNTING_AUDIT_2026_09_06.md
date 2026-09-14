@@ -123,7 +123,7 @@ zonas se conserva; solo se corrigio su ruta al modelo.
 3. Anotar los cruces o rutas de ese mismo tramo, con los mismos limites temporales.
    Separar autos, buses y otras clases segun el alcance acordado.
 4. Ejecutar el validador con el umbral acordado y revisar cada diferencia. La
-   [guia de validacion](../GUIDES/route_validation.md) incluye el comando.
+   [guia de validacion](../GUIDES/ROUTE_VALIDATION.md) incluye el comando.
 
 No se entreno un modelo nuevo ni se modificaron los pesos. No se hicieron commits,
 PRs ni despliegues. Las pruebas de CPU no establecen rendimiento en GPU.

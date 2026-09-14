@@ -1,6 +1,6 @@
 # Tareas pendientes: detección de autos y rutas
 
-Revisión documental y de código: 2026-09-14. Fuente única de pendientes. [Estado verificado](GUIDES/VERIFIED_STATE.md), [protocolo manual](GUIDES/MANUAL_VALIDATION.md) e [historial heredado](TASK_COMPLETED.md).
+Revisión documental y de código: 2026-09-14. Fuente única de pendientes. [Estado verificado](GUIDES/VERIFIED_STATE.md), [protocolo manual](GUIDES/MANUAL_VALIDATION.md) e [historial heredado](TASK_COMPLETED/LEGACY.md).
 
 **Foco autorizado:** detección de autos, continuidad de IDs y rutas para una presentación verificable. Este ciclo documenta; no cambia algoritmos ni instala servicios.
 
@@ -216,7 +216,7 @@ No se establece un porcentaje aprobado de precisión todavía. El revisor define
 
 **Prioridad:** investigación diferida. **Fecha de alta:** no registrada.
 
-- [x] Existe `docs/RESEARCH/supervision_eval.md`, fechado 2026-04-15.
+- [x] Existe `docs/RESEARCH/SUPERVISION_EVAL.md`, fechado 2026-04-15.
 - [x] El proyecto ya tiene máscaras de zonas, confirmación de cruces y dibujo de trayectorias.
 - [ ] Si se retoma una migración, contrastar la API que se vaya a instalar y medir contra el mismo perfil/video; el informe histórico no ejecutó benchmark ni prototipo.
 - [ ] Registrar decisión con evidencia de mantenimiento o comportamiento, sin tratar estimaciones de milisegundos como tiempos medidos.

@@ -22,7 +22,7 @@ El cron invoca un control ligero cada minuto. La consulta de cuota y el posible 
 - Consulta `account/rateLimits/read` mediante el [protocolo oficial de Codex](https://learn.chatgpt.com/docs/app-server). Usa la cuota de Codex disponible, no el horario supuesto de reinicio del plan.
 - Requiere más de 5% restante en todas las ventanas informadas y al menos 2 GiB libres. Si falla la consulta, omite el intento y vuelve a comprobar en el siguiente intervalo.
 - Ejecuta `codex exec` con sandbox `workspace-write`, aprobaciones `never` y el modelo configurado por el usuario. No compra créditos ni consume reinicios de cuota.
-- Inicia una sesión nueva que lee el [objetivo y restricciones](RECURRING_CODE_REVIEW_PROMPT.md). No reabre automáticamente este chat.
+- Inicia una sesión nueva que lee el [objetivo y restricciones](../../scripts/recurring_review_prompt.md). No reabre automáticamente este chat.
 - Un bloqueo de archivo impide solapar ejecuciones de este cron. No bloquea otras herramientas o agentes interactivos. Pausa el cron antes de trabajar simultáneamente sobre estos archivos.
 - Cada trabajo tiene un límite de 45 minutos. Si lo alcanza, termina el proceso y conserva los cambios locales para revisión. Una comprobación inicial no garantiza que la cuota alcance para toda la ejecución.
 

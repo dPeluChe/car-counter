@@ -1,6 +1,6 @@
 # Validación de detección contra cajas humanas
 
-Este procedimiento mide detección por imagen con el perfil real. No mide continuidad de IDs ni rutas: para eso usa [ROUTE_EVENT_REVIEW.md](ROUTE_EVENT_REVIEW.md). Los requisitos del dataset y su procedencia están en TODO-028 de [TASK_TODO.md](../TASK_TODO.md).
+Este procedimiento mide detección por imagen con el perfil real. No mide continuidad de IDs ni rutas: para eso usa [ROUTE_VALIDATION.md](ROUTE_VALIDATION.md). Los requisitos del dataset y su procedencia están en TODO-028 de [TASK_TODO.md](../TASK_TODO.md).
 
 ## Preparar una muestra separada
 
