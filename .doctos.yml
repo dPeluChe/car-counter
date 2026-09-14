@@ -1,0 +1,8 @@
+docs_root: docs
+naming: UPPERCASE_SNAKE
+folders:
+  GUIDES: procedimientos vigentes y perfiles de ejemplo .json
+  RESEARCH: informes fechados con mediciones, bugs encontrados y evaluaciones
+  JOURNAL: bitácora fechada KICKOFF_/STANDUP_, no se edita después
+  ARCHIVED: documentos sustituidos, cada uno con nota de archivo
+  TASK_COMPLETED: historial de tareas cerradas (pm-tasks)

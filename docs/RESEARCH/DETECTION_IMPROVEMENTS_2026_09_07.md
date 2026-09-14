@@ -60,4 +60,4 @@ No se pudo abrir la interfaz Tk en este entorno: incluso `tkinter.Tk()` en un pr
 
 No hay nuevas anotaciones humanas del video real. Mantener seis cruces no demuestra la exactitud de toda la glorieta. El perfil sigue siendo parcial; faltan geometría del aforo completo, corrección del movimiento de cámara y comparación contra conteo humano. No se activó estabilización geométrica ni se entrenaron pesos.
 
-La [guía de calibración y replay](../GUIDES/DETECTION_CALIBRATION_REPLAY.md) contiene los comandos y criterios. Los cambios están locales, sin commit, PR ni despliegue.
+La [guía de calibración y replay](../GUIDES/DETECTION_TUNING.md) contiene los comandos y criterios. Los cambios están locales, sin commit, PR ni despliegue.

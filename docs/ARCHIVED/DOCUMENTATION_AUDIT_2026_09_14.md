@@ -1,3 +1,9 @@
+> **ARCHIVED**: 2026-09-14
+> Registro de un ciclo de documentación ya aplicado. Sus correcciones están incorporadas en las guías y la reorganización posterior fusionó varias de ellas.
+> Referencia actual: [docs/README.md](../README.md), [VERIFIED_STATE.md](../GUIDES/VERIFIED_STATE.md)
+
+---
+
 # Revisión documental del flujo, 14 de septiembre de 2026
 
 Se contrastaron README, backlog y guías operativas contra la implementación y los artefactos locales. Este ciclo modifica documentación; los cambios de algoritmos existentes corresponden a ciclos anteriores.

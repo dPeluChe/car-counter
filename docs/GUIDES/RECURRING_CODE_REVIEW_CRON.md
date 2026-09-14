@@ -1,6 +1,6 @@
 # Mejoras de detección y rutas cada cinco horas
 
-El instalador está preparado, pero el cron no está activado. Este entorno rechazó incluso `crontab -l`. La consulta real de cuota tampoco pudo arrancar: Codex necesita escribir su estado en `~/.codex`, fuera de los permisos de esta sesión. No se modificó el crontab ni se inició otro agente.
+Estado de instalación y pendientes: TODO-034 en [TASK_TODO.md](../TASK_TODO.md). La activación requiere una terminal con permiso sobre `crontab` y `~/.codex`.
 
 ## Activar desde la terminal del usuario
 
@@ -22,7 +22,7 @@ El cron invoca un control ligero cada minuto. La consulta de cuota y el posible 
 - Consulta `account/rateLimits/read` mediante el [protocolo oficial de Codex](https://learn.chatgpt.com/docs/app-server). Usa la cuota de Codex disponible, no el horario supuesto de reinicio del plan.
 - Requiere más de 5% restante en todas las ventanas informadas y al menos 2 GiB libres. Si falla la consulta, omite el intento y vuelve a comprobar en el siguiente intervalo.
 - Ejecuta `codex exec` con sandbox `workspace-write`, aprobaciones `never` y el modelo configurado por el usuario. No compra créditos ni consume reinicios de cuota.
-- Inicia una sesión nueva que lee el [objetivo y restricciones](RECURRING_CODE_REVIEW_PROMPT.md). No reabre automáticamente este chat.
+- Inicia una sesión nueva que lee el [objetivo y restricciones](../../scripts/recurring_review_prompt.md). No reabre automáticamente este chat.
 - Un bloqueo de archivo impide solapar ejecuciones de este cron. No bloquea otras herramientas o agentes interactivos. Pausa el cron antes de trabajar simultáneamente sobre estos archivos.
 - Cada trabajo tiene un límite de 45 minutos. Si lo alcanza, termina el proceso y conserva los cambios locales para revisión. Una comprobación inicial no garantiza que la cuota alcance para toda la ejecución.
 
@@ -36,5 +36,3 @@ env/bin/python scripts/recurring_review.py uninstall
 ```
 
 `pause` afecta futuras ejecuciones; no interrumpe una ya iniciada. `uninstall` retira únicamente el bloque de este proyecto. Los informes, errores y estado quedan en `output/recurring-review/`. `status` muestra el estado local; `crontab -l` permite comprobar la instalación del sistema.
-
-Se probaron las decisiones de cuota, reserva, disco, exclusión mutua, intervalos entre días, conservación de otras tareas y lanzamiento simulado. La activación y una ejecución real del agente siguen pendientes de realizar desde una terminal con permisos.

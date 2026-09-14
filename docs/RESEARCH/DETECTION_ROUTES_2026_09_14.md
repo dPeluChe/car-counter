@@ -34,6 +34,6 @@ Artefactos locales:
 
 Pasaron 316 pruebas, con 15 omitidas por dependencias opcionales. Se comprobaron cruces y rutas sintéticos, rechazo de duplicados temporales, omisiones con totales iguales, clases equivocadas, procedencia de referencias, supervivencia de eventos y consenso independiente por vehículo. Pasaron compilación de Python y `git diff --check`.
 
-La demo sigue siendo parcial y cuenta una línea. No demuestra todavía rutas completas origen/destino ni exactitud de aforo. El movimiento de cámara continúa siendo un pendiente. La [guía de eventos](../GUIDES/ROUTE_EVENT_REVIEW.md) explica cómo obtener una comparación válida contra anotaciones humanas.
+La demo sigue siendo parcial y cuenta una línea. No demuestra todavía rutas completas origen/destino ni exactitud de aforo. El movimiento de cámara continúa siendo un pendiente. La [guía de eventos](../GUIDES/ROUTE_VALIDATION.md) explica cómo obtener una comparación válida contra anotaciones humanas.
 
 También se preparó un [cron local](../GUIDES/RECURRING_CODE_REVIEW_CRON.md) enfocado exclusivamente en este objetivo. Sus decisiones se probaron sin lanzar otro agente. No está instalado: el entorno bloquea `crontab` y el arranque del servicio local necesario para consultar cuota.

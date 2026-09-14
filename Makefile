@@ -8,10 +8,12 @@ MODEL   ?= models/yolo/yolov11l.pt
 FRAMES  ?= 1500
 OUTDIR  ?= output
 TRUTH   ?= data/validation/route_truth.json
+RESULTS ?= $(OUTDIR)/results.json
+ARGS    ?=
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install setup run run-full run-aerial test benchmark \
+.PHONY: help install setup run run-full run-aerial replay-aerial test benchmark \
         validate-routes val-extract val-prelabel val-evaluate clean
 
 help: ## Muestra esta ayuda
@@ -37,6 +39,11 @@ run-aerial: ## Demo de aforo en video normal con VisDrone y recorte (300 frames)
 		--headless --max-frames 300 --output $(OUTDIR)/aerial_demo.mp4 \
 		--output-json $(OUTDIR)/aerial_demo.json --output-tracks-csv $(OUTDIR)/aerial_demo_tracks.csv
 
+replay-aerial: ## Misma demo desde la cache aerial_low_conf.sqlite, sin inferencia ni video
+	$(PYTHON) main.py --config docs/GUIDES/aerial_counting.example.json --no-sahi \
+		--headless --no-save --max-frames 300 --replay-detections $(OUTDIR)/aerial_low_conf.sqlite \
+		--output-json $(OUTDIR)/aerial_replay.json --output-tracks-csv $(OUTDIR)/aerial_replay_tracks.csv
+
 test: ## Corre la suite de tests
 	$(PYTHON) -m pytest tests/ -v
 
@@ -44,8 +51,8 @@ benchmark: ## Mide ms/frame por etapa del pipeline
 	$(PYTHON) scripts/benchmark_pipeline.py --video $(VIDEO) --model $(MODEL)
 
 # --- Validacion end-to-end del conteo de rutas (origen -> destino) ---
-validate-routes: ## Compara results.json vs conteo humano (TRUTH) por ruta
-	$(PYTHON) scripts/validate_routes.py --results $(OUTDIR)/results.json --truth $(TRUTH)
+validate-routes: ## Compara RESULTS vs conteo humano (TRUTH) por ruta; ARGS extra
+	$(PYTHON) scripts/validate_routes.py --results $(RESULTS) --truth $(TRUTH) $(ARGS)
 
 # --- Validacion de deteccion por frame (flujo LabelMe) ---
 val-extract: ## Paso 1: extrae y dedupe frames del video

@@ -1,12 +1,12 @@
 # Configuración de rutas en una glorieta
 
-El motor implementa rutas entre zonas, pero la demo actual usa una sola línea y una ROI parcial. Consulta el [estado verificado](GUIDES/VERIFIED_STATE.md) y ejecuta PRUEBA-05/06 del [protocolo manual](GUIDES/MANUAL_VALIDATION.md) antes de presentar rutas completas.
+Cómo dibujar zonas origen/destino y qué hace el contador con ellas. Las rutas completas no están validadas todavía ([VERIFIED_STATE.md](VERIFIED_STATE.md)); ejecuta PRUEBA-05/06 del [protocolo manual](MANUAL_VALIDATION.md) antes de presentarlas.
 
 ## Definir el alcance antes de dibujar
 
 Identifica video, tramo y bocacalles que se revisarán. Acuerda las clases incluidas y el tratamiento de autos ya dentro del encuadre al inicio, salidas después del final, retornos y vueltas múltiples. Usa una copia del perfil y salidas nuevas.
 
-La región de inferencia debe cubrir suficientes observaciones de origen, tránsito y destino. Dibujar una zona fuera de la ROI no amplía la detección. Si cambia la ROI, hace falta inferencia nueva; la caché de 300 frames del ejemplo no acredita otro encuadre ni el minuto completo.
+La región de inferencia debe cubrir suficientes observaciones de origen, tránsito y destino. Dibujar una zona fuera de la ROI no amplía la detección. Si cambia la ROI hace falta otra caché ([detalle](DETECTION_TUNING.md#grabar-una-vez-y-repetir-sin-inferencia)).
 
 ## Configurador
 
@@ -16,9 +16,9 @@ Desde el repositorio, abre el configurador con la copia creada por el protocolo 
 env/bin/python setup.py --config "$CARCOUNTER_REVIEW_DIR/profile.json"
 ```
 
-Ese argumento indica archivo de entrada y salida. Confirma visualmente el video y el modelo cargados antes de dibujar. No se ha comprobado la apertura de Tk en esta sesión; cualquier fallo debe registrarse con mensaje y entorno, no atribuirse al detector sin revisar.
+Ese argumento es archivo de entrada y salida. Confirma el video y el modelo cargados antes de dibujar; si Tk falla, registra mensaje y entorno.
 
-En calibración, prueba el perfil real sobre muestras de varios frames. La vista global muestra predicciones; sin anotaciones humanas completas no mide recall. Los filtros derivados de muestras requieren una acción explícita desde cinco muestras. Al cambiar de modelo revisa las clases disponibles y vuelve a comprobar las muestras.
+Para calibrar detector y filtros sigue [DETECTION_TUNING.md](DETECTION_TUNING.md#calibrar-en-el-configurador). Al cambiar de modelo revisa las clases disponibles y vuelve a comprobar las muestras.
 
 ## Ubicar zonas de origen y destino
 
@@ -56,6 +56,6 @@ La matriz OD solo corresponde a `zones`. `directions` clasifica desplazamiento p
 
 ## Validación para presentar
 
-Sigue autos humanos completos y compara eventos, no solo el total de IDs. Conserva también omisiones, duplicaciones, destinos erróneos y casos incompletos. Usa [validación de eventos](GUIDES/ROUTE_EVENT_REVIEW.md) para ruta/clase/tiempo y [totales por ruta](GUIDES/route_validation.md) como resumen complementario.
+Sigue autos humanos completos y compara eventos, no solo el total de IDs. Conserva también omisiones, duplicaciones, destinos erróneos y casos incompletos. Procedimiento en [ROUTE_VALIDATION.md](ROUTE_VALIDATION.md): eventos por ruta/clase/tiempo como método principal y totales por ruta como resumen.
 
 La presentación debe identificar las rutas revisadas, intervalo, clases, referencia humana y errores medidos. No usar porcentajes de exactitud que provengan de otra cámara, modelo o prueba sintética.

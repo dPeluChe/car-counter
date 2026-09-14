@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_DIR = ROOT / "output" / "recurring-review"
-PROMPT = ROOT / "docs/GUIDES/RECURRING_CODE_REVIEW_PROMPT.md"
+PROMPT = Path(__file__).resolve().with_name("recurring_review_prompt.md")
 BEGIN = "# BEGIN carcounter-recurring-review"
 END = "# END carcounter-recurring-review"
 INTERVAL = 5 * 3600
@@ -160,6 +160,7 @@ def run_due(settings, directory=STATE_DIR, now=None):
         save_json(directory / "state.json", state)
         if not check["ready"]:
             return state
+        prompt = PROMPT.read_bytes()
         stamp = datetime.fromtimestamp(now, ZoneInfo("UTC")).strftime("%Y%m%dT%H%M%SZ")
         report = directory / f"{stamp}.md"
         command = [settings["codex"], "-a", "never", "-s", "workspace-write", "exec",
@@ -171,7 +172,7 @@ def run_due(settings, directory=STATE_DIR, now=None):
                                        cwd=ROOT, start_new_session=True, pass_fds=(lock.fileno(),),
                                        env=execution_environment(settings["codex"]))
             try:
-                process.communicate(PROMPT.read_bytes(), timeout=45 * 60)
+                process.communicate(prompt, timeout=45 * 60)
                 state.update(status="finished" if process.returncode == 0 else "failed",
                              exit_code=process.returncode)
             except subprocess.TimeoutExpired:
