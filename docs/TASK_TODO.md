@@ -32,7 +32,6 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 - [ ] Separar tramos usados para ajustar parámetros de los usados para aceptar el cambio; evitar usar imágenes casi iguales como validación independiente.
 - [ ] Corregir todas las cajas/clases del alcance en LabelMe u otro editor compatible; añadir también autos omitidos. Registrar revisor, fecha y alcance antes de marcar `flags.reviewed=true`.
 - [ ] Contar eventos humanos independientemente del overlay: frame, ruta/sentido, clase y casos incompletos; no copiar eventos predichos a la referencia.
-- [ ] Confirmar el tramo oficial: 3:00 a 4:00 de `glorieta_normal.mp4` (propuesto, igual a `glorieta_test1min.mp4`) o 1:00 a 2:00 (requiere nuevas zonas y caché).
 - [ ] Acordar márgenes al inicio/final del tramo y el trato de vehículos que ya están dentro del encuadre.
 - [ ] Contar eventos humanos con grupos EPS en dos pasadas o por dos personas y reconciliar diferencias antes de `reviewed=true`.
 - [ ] Confirmar o ajustar con esa referencia la [propuesta de aceptación](GUIDES/COUNTING_SCOPE.md#criterio-de-aceptación-propuesta) y fijar la tolerancia temporal según FPS y confirmación.
@@ -55,6 +54,8 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 - [ ] Medir precisión, recall y F1 de `car` y de las demás clases del alcance, separando localización de clasificación y mostrando TP/FP/FN.
 - [ ] Probar autos próximos y límites de tiles antes de aceptar NMS más agresivo; documentar si elimina autos distintos.
 - [ ] Probar consenso de clase contra etiquetas humanas. La clase se congela tras el primer conteo; documentar errores persistentes y decidir si hace falta otro criterio.
+- [ ] Hacer configurable por perfil el mapeo clase → grupo (`settings.class_groups`, con `CLASS_GROUPS` como valor por defecto).
+- [ ] En la referencia humana anotar también el tipo visible (auto, van, combi, pickup, remolque) y, con la matriz de confusión, decidir con datos a qué grupo van `van` y `truck`.
 - [ ] Evaluar pesos alternativos o entrenamiento solo cuando los errores medidos justifiquen el costo, con tramos reservados de validación.
 
 **Entregable:** perfil candidato, matriz de experimentos, imágenes de errores y reporte contra referencia revisada. Qué cambios exigen otra caché: [DETECTION_TUNING.md](GUIDES/DETECTION_TUNING.md#grabar-una-vez-y-repetir-sin-inferencia).
@@ -94,6 +95,8 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 **Archivos relevantes:** `carcounter/counting.py`, `carcounter/tracking.py`, `carcounter/export.py`, `scripts/validate_routes.py`, `tests/test_route_validation.py`, `tests/test_counting_regressions.py`.
 
 - [ ] Revisar pérdidas de ID en oclusiones, cambios de ID cerca de líneas/zonas y IDs duplicados del mismo auto.
+- [ ] Reporte de vehículos incompletos: tracks que confirmaron origen y nunca destino, contados por acceso, con recorte de imagen del primer y último frame (caja, ID, clase, frame) para revisar si falló por oclusión, imagen poco clara o geometría.
+- [ ] Marcar candidatos a cambio de ID: un track que termina y otro que empieza cerca, con clase compatible, en pocos frames; incluirlos en el mismo reporte con ambas imágenes.
 - [ ] Comparar ByteTrack y BoT-SORT sobre una caché común; variar un parámetro por experimento y registrar parámetros efectivos. `with_reid=true` no está soportado en el wrapper actual.
 - [ ] Añadir referencia de identidad física por auto para casos ambiguos; el evaluador actual solo empareja ruta/clase/tiempo, no valida identidad.
 - [ ] Distinguir con evidencia duplicación, falso positivo, clase errónea y desfase temporal; no llamar duplicado a toda predicción sin pareja.
@@ -123,7 +126,7 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 
 ## TODO-029: Movimiento de cámara y geometría del conteo `added: 2026-09-07`
 
-**Prioridad:** P0 cuando afecta el tramo presentado. **Estado:** monitor implementado (ver [2609](TASK_COMPLETED/2609.md)); corrección geométrica pendiente. Mediciones de deriva en [VERIFIED_STATE.md](GUIDES/VERIFIED_STATE.md).
+**Prioridad:** P0 cuando afecta el tramo presentado. **Estado:** monitor implementado (ver [2609](TASK_COMPLETED/2609.md)); corrección geométrica pendiente. Mediciones de deriva en [VERIFIED_STATE.md](GUIDES/VERIFIED_STATE.md). En el video completo, contra el frame de las 3:00: estable (5 px o menos) entre 1:30 y 9:30; 6 a 9 px dentro del tramo oficial; 7 a 19 px antes de 1:15 y 5 a 13 px después de 9:44 ([detalle](GUIDES/COUNTING_SCOPE.md#estabilidad-del-dron-en-el-video-completo)).
 
 **Especificación:** elegir un sistema de referencia único para imagen, cajas, ROI, exclusiones y zonas/líneas. Comparar estabilizar imágenes antes de inferencia frente a transformar coordenadas; documentar qué se hace en bordes sin cobertura y cómo afecta la firma de caché. No reutilizar una caché incompatible ni aplicar dos compensaciones inconsistentes. La compensación del tracker BoT-SORT no mueve las zonas de conteo.
 

@@ -40,10 +40,25 @@ Condición crítica: el ID del tracker debe sobrevivir desde la entrada hasta la
 | Dato | Valor |
 |---|---|
 | Video completo de referencia | `assets/glorieta_normal.mp4`: 13:03, 29.97 fps, 23 472 frames |
-| Tramo propuesto | **3:00 a 4:00**, igual a `assets/glorieta_test1min.mp4` (empieza en el frame 5394 del video completo) |
-| Alternativa | 1:00 a 2:00 |
+| Tramo oficial | **3:00 a 4:00**, igual a `assets/glorieta_test1min.mp4` (empieza en el frame 5394 del video completo). Confirmado el 2026-09-14 |
 
-El dron cambia de encuadre a lo largo del video. Comparado con el 3:00, el minuto 1:00 a 2:00 difiere en imagen entre 15 y 26 (0 es idéntico), así que usarlo exige rehacer zonas, perfil y caché. El 3:00 a 4:00 ya tiene perfil, caché de detecciones y medición de cámara. **Pendiente de confirmar cuál queda como tramo oficial.**
+El video base se cuenta completo en este tramo antes de pasar a otros minutos o videos.
+
+### Estabilidad del dron en el video completo
+
+Medido con el monitor ORB/RANSAC contra el frame de las 3:00, cada 15 s, sobre la línea, la ROI y el centro de la glorieta. La deriva es movimiento del dron: la geometría del perfil no cambia.
+
+| Periodo | Deriva estimada | Lectura |
+|---|---|---|
+| 0:00 a 1:15 | 19 px bajando a 5.5 px | El dron se acomoda; el encuadre no coincide con el perfil |
+| 1:30 a 9:30 | casi siempre 5 px o menos | Toma estable, con picos de 6 a 10 px entre 2:00 y 2:30 |
+| 3:00 a 4:00 (tramo oficial) | 0.1 a 9 px (6.1 px a las 3:14, 9 px a las 3:59) | Aceptable si las zonas tienen margen; no cuenta como estabilizado |
+| 9:44 al final | 5 a 13 px | El dron vuelve a moverse |
+
+Consecuencias:
+
+- Las zonas del tramo oficial deben dejar margen de al menos 10 px respecto a los bordes de calle. Para usar otros minutos hay que rehacer zonas o corregir la geometría (TODO-029).
+- La ROI del perfil actual (`[680,350,960,750]`) cubre solo el lado oeste del anillo. El conteo origen/destino necesita ROI y zonas que cubran todos los accesos de la glorieta (TODO-031).
 
 ## Criterio de aceptación (propuesta)
 
