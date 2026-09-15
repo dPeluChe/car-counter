@@ -4,6 +4,7 @@ import numpy as np
 from PIL import Image, ImageTk
 
 from carcounter.constants import ZONE_COLORS_HEX as ZONE_COLORS, EXCL_COLORS_HEX as EXCL_COLORS
+from setup_panels.geometry_checks import inference_roi
 
 
 class CanvasMixin:
@@ -49,12 +50,32 @@ class CanvasMixin:
             self.line_start = None
             self.line_drawing = False
             cancelled = True
+        if getattr(self, "direction_drawing", False):
+            self.direction_start = None
+            self.direction_drawing = False
+            cancelled = True
         if cancelled:
             self.canvas.config(cursor="crosshair")
-            self.status_var.set("Dibujo cancelado (Escape)")
+            self.status_var.set("Dibujo cancelado (Escape); los elementos existentes se conservan")
             self._redraw()
 
-    def _enter_pan_mode(self, _event=None):
+    def _fit_to_window(self):
+        cw, ch = self.canvas.winfo_width(), self.canvas.winfo_height()
+        if cw <= 1 or ch <= 1 or not self.img_w:
+            self._fit_pending = True
+            return
+        self._fit_pending = False
+        self.zoom = max(0.1, min(8.0, cw / self.img_w, ch / self.img_h))
+        self._clamp_pan()
+
+    def _on_canvas_configure(self, _event=None):
+        if self._fit_pending:
+            self._fit_to_window()
+        self._redraw()
+
+    def _enter_pan_mode(self, event=None):
+        if event is not None and event.widget.winfo_class() in ("Entry", "TEntry", "Text"):
+            return
         self.pan_mode = True
         self.canvas.config(cursor="fleur")
 
@@ -140,8 +161,20 @@ class CanvasMixin:
                 self._draw_zones_overlay()
         elif self.current_step == 3:
             self._draw_tile_overlay()
+        self._draw_roi_overlay()
 
     # ── Overlays ─────────────────────────────────
+    def _draw_roi_overlay(self):
+        """ROI de inferencia del perfil: fuera de ella no se detecta nada."""
+        roi = inference_roi(self._loaded_config)
+        if not roi:
+            return
+        sx1, sy1 = self._img_to_screen(roi[0], roi[1])
+        sx2, sy2 = self._img_to_screen(roi[2], roi[3])
+        self.canvas.create_rectangle(sx1, sy1, sx2, sy2, outline="#F9E2AF", width=2, dash=(8, 4))
+        self.canvas.create_text(sx1 + 4, sy1 + 4, text="ROI de inferencia", anchor="nw",
+                                fill="#F9E2AF", font=("Arial", 9, "bold"))
+
     def _draw_excl_ref(self):
         """Dibuja zonas de exclusión como referencia visual."""
         for idx, (name, pts) in enumerate(self.exclusion_zones.items()):
