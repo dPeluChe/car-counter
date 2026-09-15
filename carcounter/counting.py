@@ -17,6 +17,10 @@ from carcounter.counting_modes import LinesDirectionsMixin
 log = get_logger("counting")
 
 
+def _bbox_text(bbox):
+    return " ".join(str(int(value)) for value in bbox) if bbox else ""
+
+
 class VehicleCounter(LinesDirectionsMixin):
     """Contador de vehiculos con soporte para modos zones, lines y directions."""
 
@@ -82,9 +86,11 @@ class VehicleCounter(LinesDirectionsMixin):
                 info.update(state="new", origin=None, zone_frames=0)
         observation = self._track_observations.setdefault(trk_id, {
             "first_pos": (cx, cy), "first_seen_frame": self.frame_count,
-            "observed_frames": 0,
+            "observed_frames": 0, "first_bbox": bbox,
         })
         observation["observed_frames"] += 1
+        if bbox:
+            observation["last_bbox"] = bbox
         if info and info["state"] == "done":
             cls_name = info["class"]
         else:
@@ -294,6 +300,13 @@ class VehicleCounter(LinesDirectionsMixin):
             "counted_frame": info.get("counted_frame", ""),
             "first_seen_frame": observation.get("first_seen_frame", ""),
             "observed_frames": observation.get("observed_frames", 0),
+            "origin_confirmed": bool(info.get("origin")) and (
+                info.get("state") in ("transit", "done")
+                or info.get("zone_frames", 0) >= self.min_origin_frames),
+            "class_votes": " ".join(f"{name}:{count}"
+                                    for name, count in sorted(observation.get("class_votes", {}).items())),
+            "first_bbox": _bbox_text(observation.get("first_bbox")),
+            "last_bbox": _bbox_text(observation.get("last_bbox")),
             "direction": info.get("assigned_direction", ""),
             "first_x": first_pos[0] if first_pos else "",
             "first_y": first_pos[1] if first_pos else "",

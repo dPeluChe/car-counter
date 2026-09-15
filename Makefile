@@ -10,7 +10,6 @@ OUTDIR  ?= output
 TRUTH   ?= data/validation/route_truth.json
 RESULTS ?= $(OUTDIR)/results.json
 TRACKS  ?= $(OUTDIR)/tracks.csv
-REVIEW_DIR ?= $(OUTDIR)/track_review
 ARGS    ?=
 
 .DEFAULT_GOAL := help
@@ -31,14 +30,15 @@ setup: ## Abre el configurador GUI para dibujar zonas (genera CONFIG)
 run: ## Corre el pipeline en un clip corto (FRAMES frames) -> results.json + od_matrix.csv + tracks.csv
 	$(PYTHON) main.py --config $(CONFIG) --video $(VIDEO) --max-frames $(FRAMES) \
 		--output-json $(OUTDIR)/results.json --output-od-csv $(OUTDIR)/od_matrix.csv \
-		--output-tracks-csv $(OUTDIR)/tracks.csv
+		--output-tracks-csv $(TRACKS)
 
 run-full: ## Corre el pipeline sobre el video completo
 	$(PYTHON) main.py --config $(CONFIG) --video $(VIDEO) \
 		--output-json $(OUTDIR)/results.json --output-od-csv $(OUTDIR)/od_matrix.csv \
-		--output-tracks-csv $(OUTDIR)/tracks.csv
+		--output-tracks-csv $(TRACKS)
 
-review-tracks: ## Tracks sin destino y posibles cambios de ID con recortes -> REVIEW_DIR
+review-tracks: ## Tracks sin destino y posibles cambios de ID con recortes (REVIEW_DIR nuevo)
+	@test -n "$(REVIEW_DIR)" || (echo "REVIEW_DIR requerido: directorio nuevo para el reporte"; exit 1)
 	$(PYTHON) scripts/review_incomplete_tracks.py --results $(RESULTS) --tracks-csv $(TRACKS) \
 		--output-dir $(REVIEW_DIR) $(ARGS)
 

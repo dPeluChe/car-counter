@@ -96,16 +96,22 @@ def export_csv(path, routes_matrix):
     log.info("Resultados CSV: %s", path)
 
 
+TRACK_CSV_FIELDS = [
+    "track_id", "class", "state", "origin", "direction",
+    "destination", "counted_frame", "first_seen_frame", "observed_frames",
+    "origin_confirmed", "class_votes",
+    "first_x", "first_y", "last_x", "last_y", "first_bbox", "last_bbox",
+    "trail_length", "last_seen_frame",
+    "avg_width", "avg_height", "avg_area", "avg_aspect", "avg_elongation",
+]
+
+
 def export_tracks_csv(path, track_data):
     """Guarda datos per-track en CSV (trayectorias, clase, estado)."""
     if not track_data:
         return
-    fields = ["track_id", "class", "state", "origin", "direction",
-              "destination", "counted_frame", "first_seen_frame", "observed_frames",
-              "first_x", "first_y", "last_x", "last_y", "trail_length", "last_seen_frame",
-              "avg_width", "avg_height", "avg_area", "avg_aspect", "avg_elongation"]
     with open(path, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=fields)
+        w = csv.DictWriter(f, fieldnames=TRACK_CSV_FIELDS)
         w.writeheader()
         for row in sorted(track_data, key=lambda r: r["track_id"]):
             w.writerow(row)
