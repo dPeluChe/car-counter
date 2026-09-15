@@ -275,8 +275,12 @@ if __name__ == "__main__":
     parser.add_argument("--video", type=str, default=DEFAULT_VIDEO, help="Ruta al video")
     parser.add_argument("--config", type=str, default=OUTPUT_CONFIG,
                         help="Archivo de configuración (entrada y salida).")
+    parser.add_argument("--model", type=str, default=None,
+                        help="Pesos YOLO para calibrar y previsualizar (el wizard lo pasa)")
     args = parser.parse_args()
 
+    if args.model:
+        MODEL_PATH = args.model
     OUTPUT_CONFIG = args.config
     app = SetupApp()
     app._output_config = OUTPUT_CONFIG

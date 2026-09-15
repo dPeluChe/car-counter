@@ -20,9 +20,6 @@ RED = "#F38BA8"
 PEACH = "#FAB387"
 BTN_BG = "#313244"
 
-# Modelos recomendados por familia
-RECOMMENDED = {"yolov11m", "rfdetr-medium"}
-
 
 def btn(parent, text, command, bg=BTN_BG, fg=FG, font=("Arial", 10), **kw):
     """Boton con theme consistente (macOS compatible)."""
