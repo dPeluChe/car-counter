@@ -8,7 +8,7 @@ Revisión: 2026-09-14. Fuentes: código local, suite de pruebas y artefactos ind
 |---|---|---|
 | Detección | YOLO, SAHI y RF-DETR entregan cajas globales al tracker; clases resueltas desde el modelo | Pruebas de integración; ejecución real con YOLO VisDrone. No hay comparación humana que demuestre un detector ganador |
 | Calibración | Perfil compartido, muestras por frame, correspondencia IoU y filtros explícitos desde cinco muestras | Funciones probadas. GUI Tk sin validar en escritorio (no abrió en el entorno del agente) |
-| Tracking | ByteTrack, BoT-SORT, SORT y wrapper opcional OC-SORT | ByteTrack y BoT-SORT se ejecutaron con la misma caché. El wrapper rechaza `with_reid=true`; BoT-SORT aquí no implica ReID de apariencia. Fragmentación alta: en el replay de 300 frames, 150 de 282 tracks tienen 10 observaciones o menos (`make review-tracks`) |
+| Tracking | ByteTrack, BoT-SORT, SORT y wrapper opcional OC-SORT | ByteTrack y BoT-SORT se ejecutaron con la misma caché. El wrapper rechaza `with_reid=true`; BoT-SORT aquí no implica ReID de apariencia. Fragmentación alta: en el replay de 300 frames, 150 de 282 tracks tienen 10 observaciones o menos y hay 83 posibles cambios de ID, 38 con cambio de clase (`make review-tracks`) |
 | Conteo | Zonas, líneas finitas con confirmación y direcciones | Pruebas sintéticas y replay de una línea. Zonas A→B todavía sin demostración humana del aforo completo |
 | Clase de vehículo | Mayoría por track hasta el primer conteo, conservada después | Pruebas de ruido de clase. Cambiaron 44 clases de tracks en el replay; no se han revisado como correcciones humanas |
 | Eventos | `counting_events` con frame, ID, clase, ruta y geometría | Seis eventos del video real y pruebas de conservación tras purga |

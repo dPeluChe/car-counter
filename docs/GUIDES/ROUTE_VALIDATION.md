@@ -6,7 +6,7 @@ Compara el conteo del sistema contra una referencia humana del mismo video y tra
 
 El JSON de `main.py` contiene `counting_events`: un registro por cruce, ruta entre zonas o dirección confirmada, con ID del evento, ID del track, clase, ruta, frame de confirmación, posición y origen/destino o línea/sentido.
 
-- Los frames empiezan en 1. Tiempo en el video: `(frame - 1) / run.source_fps`. El frame es el de confirmación, que puede ir después del contacto físico.
+- Los frames empiezan en 1 y se cuentan desde `run.start_frame`. Tiempo en el video: `(run.start_frame + frame - 2) / run.source_fps`. El frame es el de confirmación, que puede ir después del contacto físico.
 - La clase es la mayoría de observaciones del track (empate: se mantiene la anterior) y se congela en el primer conteo. Cada evento trae además su grupo EPS (`group`) y el JSON resume `routes_by_group` ([COUNTING_SCOPE.md](COUNTING_SCOPE.md)).
 - Los eventos sobreviven a la purga de tracks inactivos; los cruces de varias líneas del mismo vehículo se guardan por separado.
 - `--output-tracks-csv` conserva tracks retirados con `first_seen_frame`, `observed_frames`, `destination` y `counted_frame`. Un ID es una trayectoria del tracker: un cambio de ID parte un auto en varias. **El número de IDs no es el aforo.**
@@ -56,7 +56,7 @@ Atajo: `make validate-routes RESULTS=... TRUTH=... ARGS="--min-accuracy 0.95"`. 
 
 ## Interpretar errores
 
-- **Faltan autos en una ruta:** detección (autos chicos no detectados) o tracking (cambio de ID a media glorieta pierde el origen). `make review-tracks` lista los tracks sin destino por acceso y los posibles cambios de ID con imágenes.
+- **Faltan autos en una ruta:** detección (autos chicos no detectados) o tracking (cambio de ID a media glorieta pierde el origen). Para ubicar los casos: `make review-tracks` ([PRUEBA-03](MANUAL_VALIDATION.md#prueba-03-continuidad-del-mismo-auto)).
 - **Rutas fantasma:** geometría, asociaciones incorrectas u observaciones de entrada/salida. Subir `min_origin_frames`/`min_dest_frames` es un experimento que también pierde autos rápidos.
 - **Destino equivocado:** el auto pasa por varias salidas antes de la real y el conteo fija la primera distinta al origen.
 

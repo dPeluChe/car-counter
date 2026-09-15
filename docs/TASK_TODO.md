@@ -96,8 +96,10 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 
 - [ ] Revisar pérdidas de ID en oclusiones, cambios de ID cerca de líneas/zonas y IDs duplicados del mismo auto.
 - [ ] Con zonas del tramo oficial, correr `make review-tracks` y clasificar a mano la causa de cada track perdido y de los primeros candidatos a cambio de ID (oclusión, imagen poco clara, geometría o tracker).
-- [ ] Reducir la fragmentación: en el replay de 300 frames 150 de 282 tracks tienen 10 observaciones o menos (mediana 7); comparar `track_buffer`, umbrales y BoT-SORT midiendo esa cifra y las rutas completas.
-- [ ] Verificar la hipótesis de cambio de ID por cambio de clase: el mejor candidato del replay es el mismo auto en la misma posición, ID 385 como `car` en el frame 265 y ID 397 como `van` en el 266. Revisar si el tracker separa por clase y medir cuántos candidatos cambian de clase.
+- [ ] Reducir la fragmentación ([cifra actual](GUIDES/VERIFIED_STATE.md)): comparar `track_buffer`, umbrales y BoT-SORT midiendo fragmentación y rutas completas con `make review-tracks`.
+- [ ] NMS sin clase en YOLO: `carcounter/detector.py` llama al modelo sin `agnostic_nms`, así que una caja `car` y otra `van` sobre el mismo vehículo sobreviven; ByteTrack asocia por IoU y la segunda caja puede crear un ID nuevo. Es la causa probable del mejor candidato del replay (ID 385 `car` → ID 397 `van`, mismo lugar, un frame): en ese replay 38 de los 83 candidatos cambian de clase. Medir con replay antes y después: candidatos con cambio de clase, fragmentación y eventos.
+- [ ] Registrar desde `UltralyticsTracker` los tracks perdidos, removidos y creados por frame, para detectar cambios de ID sin heurística de distancia.
+- [ ] Exportar el frame absoluto del video en `counting_events` y en el CSV de tracks, para que la referencia humana y los recortes usen la misma numeración que un reproductor.
 - [ ] Comparar ByteTrack y BoT-SORT sobre una caché común; variar un parámetro por experimento y registrar parámetros efectivos. `with_reid=true` no está soportado en el wrapper actual.
 - [ ] Añadir referencia de identidad física por auto para casos ambiguos; el evaluador actual solo empareja ruta/clase/tiempo, no valida identidad.
 - [ ] Distinguir con evidencia duplicación, falso positivo, clase errónea y desfase temporal; no llamar duplicado a toda predicción sin pareja.

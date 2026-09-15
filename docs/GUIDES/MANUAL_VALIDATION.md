@@ -44,7 +44,7 @@ Sigue autos antes, durante y después de una oclusión. Registra frame e ID prev
 
 Una trayectoria dibujada que se acorta no prueba un cambio de ID (el historial tiene longitud limitada). Para comparar trackers usa el mismo video, tramo y caché, cambia solo `--tracker` y guarda salidas nuevas.
 
-Para ubicar casos, corre `make review-tracks RESULTS=<json> TRACKS=<csv> REVIEW_DIR=<directorio nuevo>` sobre la corrida (requiere `--output-tracks-csv`). Lista tracks con origen y sin destino por acceso, la fragmentación y posibles cambios de ID, con recortes del primer y último frame. Son candidatos: confirma cada uno en el video.
+Para ubicar casos, corre `make review-tracks RESULTS=<json> TRACKS=<csv> REVIEW_DIR=<directorio nuevo>` sobre la corrida (requiere `--output-tracks-csv`). Lista tracks con origen confirmado y sin destino por acceso, la fragmentación y posibles cambios de ID (con cambio de clase o sin él), con recortes del primer y último frame. Las etiquetas de los recortes usan el frame del video completo. Son candidatos: confirma cada uno en el video.
 
 ## PRUEBA-04: cruce de línea contra conteo humano
 
