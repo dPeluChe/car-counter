@@ -64,7 +64,7 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 
 ## TODO-033: Validación del configurador y calibración `added: 2026-09-14`
 
-**Prioridad:** P0 para que el revisor pueda probar. **Estado:** lógica probada, GUI sin validar en escritorio.
+**Prioridad:** P0 para que el revisor pueda probar. **Estado:** lógica probada, GUI sin validar en escritorio. La auditoría del 2026-09-15 encontró defectos de pérdida de datos, dibujo, autosave y lanzamiento desde el wizard (fase A en corrección); el rediseño del flujo queda en TODO-037.
 
 **Archivos relevantes:** `setup.py`, `setup_panels/calib_tests.py`, `setup_panels/step1_calibration.py`, `setup_panels/step2_preview.py`, `setup_panels/step3_sahi.py`, `carcounter/app_config.py`.
 
@@ -148,6 +148,18 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 **Prioridad:** P2. El resto del trabajo heredado se cerró (ver [2609](TASK_COMPLETED/2609.md)).
 
 - [ ] `python -m carcounter` no expone `--record-detections`/`--replay-detections` ni `--camera-max-drift-px` (este último sí se toma de `settings.camera_max_drift_px` del perfil) y solo muestra el código de salida de `main.py`, no el motivo del fallo.
+
+## TODO-037: Rediseño del flujo de configurador y wizard (fase B) `added: 2026-09-15`
+
+**Prioridad:** P1, después de corregir los defectos de fase A y de la revisión en escritorio (TODO-033). **Evidencia:** auditoría de UI del 2026-09-15 (configurador, wizard y prueba dinámica con ventanas ocultas).
+
+- [ ] Configurador en pasos EPS: perfil y fuente, región de inferencia (dibujar y editar `inference_roi`), exclusiones, zonas de entrada/salida por acceso, validar detección (opcional), tracking y reglas de conteo, resumen y guardar.
+- [ ] Controles para campos que hoy solo se copian del perfil: `inference_roi`, `camera_max_drift_px`, `min_origin_frames`, `min_dest_frames`, `min_crossing_frames`, `match_thresh`, tolerancia por línea.
+- [ ] Confianza por clase generada desde las clases del modelo cargado (incluye bicycle, tricycle) en vez de sliders fijos car/moto/bus/truck/van.
+- [ ] Mostrar detecciones descartadas (ROI, exclusión, filtros de muestras) con otro color y contador; cuadrícula SAHI calculada sobre la ROI.
+- [ ] Sidebar con scroll de rueda y acciones principales fijas fuera del scroll; seleccionar un elemento carga su nombre y permite renombrar; deshacer también en exclusiones y `Command-z` en macOS.
+- [ ] Wizard: paso de perfil al inicio con resumen y `AppConfig.validate()`; paso de resultados con resumen, "Abrir carpeta", "Revisar tracks" (`review_incomplete_tracks.py`) y "Validar rutas" (`validate_routes.py`).
+- [ ] Wizard: opciones de corrida faltantes (inicio y máximo de frames, SAHI, dispositivo, sin ventana, grabar o repetir caché, deriva de cámara); cubre también TODO-036.
 
 ## Fuera del foco de la presentación
 
