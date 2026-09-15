@@ -9,11 +9,13 @@ FRAMES  ?= 1500
 OUTDIR  ?= output
 TRUTH   ?= data/validation/route_truth.json
 RESULTS ?= $(OUTDIR)/results.json
+TRACKS  ?= $(OUTDIR)/tracks.csv
+REVIEW_DIR ?= $(OUTDIR)/track_review
 ARGS    ?=
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install setup run run-full run-aerial replay-aerial segment-video test benchmark \
+.PHONY: help install setup run run-full run-aerial replay-aerial segment-video review-tracks test benchmark \
         validate-routes val-extract val-prelabel val-evaluate clean
 
 help: ## Muestra esta ayuda
@@ -26,13 +28,19 @@ install: ## Instala dependencias en el entorno env/
 setup: ## Abre el configurador GUI para dibujar zonas (genera CONFIG)
 	$(PYTHON) setup.py --video $(VIDEO) --config $(CONFIG)
 
-run: ## Corre el pipeline en un clip corto (FRAMES frames) -> results.json + od_matrix.csv
+run: ## Corre el pipeline en un clip corto (FRAMES frames) -> results.json + od_matrix.csv + tracks.csv
 	$(PYTHON) main.py --config $(CONFIG) --video $(VIDEO) --max-frames $(FRAMES) \
-		--output-json $(OUTDIR)/results.json --output-od-csv $(OUTDIR)/od_matrix.csv
+		--output-json $(OUTDIR)/results.json --output-od-csv $(OUTDIR)/od_matrix.csv \
+		--output-tracks-csv $(OUTDIR)/tracks.csv
 
 run-full: ## Corre el pipeline sobre el video completo
 	$(PYTHON) main.py --config $(CONFIG) --video $(VIDEO) \
-		--output-json $(OUTDIR)/results.json --output-od-csv $(OUTDIR)/od_matrix.csv
+		--output-json $(OUTDIR)/results.json --output-od-csv $(OUTDIR)/od_matrix.csv \
+		--output-tracks-csv $(OUTDIR)/tracks.csv
+
+review-tracks: ## Tracks sin destino y posibles cambios de ID con recortes -> REVIEW_DIR
+	$(PYTHON) scripts/review_incomplete_tracks.py --results $(RESULTS) --tracks-csv $(TRACKS) \
+		--output-dir $(REVIEW_DIR) $(ARGS)
 
 run-aerial: ## Demo de aforo en video normal con VisDrone y recorte (300 frames)
 	$(PYTHON) main.py --config docs/GUIDES/aerial_counting.example.json --no-sahi \
