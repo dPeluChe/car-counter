@@ -69,6 +69,8 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 **Archivos relevantes:** `setup.py`, `setup_panels/calib_tests.py`, `setup_panels/step1_calibration.py`, `setup_panels/step2_preview.py`, `setup_panels/step3_sahi.py`, `carcounter/app_config.py`.
 
 - [ ] Abrir el configurador en el escritorio y confirmar carga del video/modelo del perfil, controles visibles y desplazamiento lateral.
+- [ ] Verificar en escritorio lo corregido en la fase A de UI (2026-09-15): zoom ajustado al abrir, ROI visible con zoom y pan, espacio dentro de nombres sin activar pan, pausar el preview y dibujar sobre ese frame, rangos de filtros visibles en la barra lateral, mensajes de validación al guardar, diálogo de checkpoint después de cargar el perfil.
+- [ ] Verificar el wizard en escritorio: "Configurar zonas" abre el configurador con el perfil elegido y al volver informa si se guardó; "Ejecutar" crea la carpeta de corrida, "Cancelar" detiene el proceso y un error muestra las últimas líneas del log; los botones caben en la ventana.
 - [ ] Verificar muestras de distintos frames, correspondencia uno a uno y aplicación explícita de filtros desde cinco muestras.
 - [ ] Guardar/reabrir una copia y comparar modelo, ROI, muestras, confianza, clases, SAHI y parámetros de tracker; registrar cualquier campo perdido.
 - [ ] Verificar limpieza de muestras/filtros y cambio de modelo sin reutilizar resultados visuales de otro detector.
