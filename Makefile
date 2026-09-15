@@ -2,9 +2,9 @@
 # Uso: `make help`. Variables sobreescribibles: make run VIDEO=assets/otro.mp4 FRAMES=3000
 
 PYTHON  ?= env/bin/python
-VIDEO   ?= assets/glorieta_fast.MP4
+VIDEO   ?= assets/glorieta_test1min.mp4
 CONFIG  ?= config/config.json
-MODEL   ?= models/yolo/yolov11l.pt
+MODEL   ?= models/yolo/yolov8l-visdrone.pt
 FRAMES  ?= 1500
 OUTDIR  ?= output
 TRUTH   ?= data/validation/route_truth.json
@@ -47,7 +47,7 @@ run-aerial: ## Demo de aforo en video normal con VisDrone y recorte (300 frames)
 		--headless --max-frames 300 --output $(OUTDIR)/aerial_demo.mp4 \
 		--output-json $(OUTDIR)/aerial_demo.json --output-tracks-csv $(OUTDIR)/aerial_demo_tracks.csv
 
-replay-aerial: ## Misma demo desde la cache aerial_low_conf.sqlite, sin inferencia ni video
+replay-aerial: ## Misma demo desde la cache aerial_low_conf.sqlite, sin inferencia
 	$(PYTHON) main.py --config docs/GUIDES/aerial_counting.example.json --no-sahi \
 		--headless --no-save --max-frames 300 --replay-detections $(OUTDIR)/aerial_low_conf.sqlite \
 		--output-json $(OUTDIR)/aerial_replay.json --output-tracks-csv $(OUTDIR)/aerial_replay_tracks.csv

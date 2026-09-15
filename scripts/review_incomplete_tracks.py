@@ -47,10 +47,12 @@ def _write_crop(image, box, label, path):
     height, width = image.shape[:2]
     left, top = max(0, int(center_x - CROP_PX)), max(0, int(center_y - CROP_PX))
     patch = image[top:min(height, int(center_y + CROP_PX)), left:min(width, int(center_x + CROP_PX))].copy()
+    if patch.size == 0:
+        return False
     cv2.rectangle(patch, (int(x1) - left, int(y1) - top), (int(x2) - left, int(y2) - top), (0, 0, 255), 2)
     for color, thickness in (((255, 255, 255), 2), ((0, 0, 0), 1)):
         cv2.putText(patch, label, (4, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, thickness)
-    cv2.imwrite(str(path), patch)
+    return cv2.imwrite(str(path), patch)
 
 
 def _render_crops(video, start_frame, requests):
@@ -76,8 +78,8 @@ def _render_crops(video, start_frame, requests):
             if not ok:
                 continue
             for box, label, path in by_frame[frame]:
-                _write_crop(image, box, label, path)
-                written.add(f"images/{path.name}")
+                if _write_crop(image, box, label, path):
+                    written.add(f"images/{path.name}")
     finally:
         cap.release()
     return written

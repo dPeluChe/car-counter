@@ -21,7 +21,11 @@ def load_tracks(path):
     """Lee el CSV de export_tracks_csv con números, cajas y grupo EPS tipados."""
     tracks = []
     with open(path, newline="", encoding="utf-8") as source:
-        for row in csv.DictReader(source):
+        reader = csv.DictReader(source)
+        missing = {"origin_confirmed", "first_bbox", "last_bbox"} - set(reader.fieldnames or ())
+        if missing:
+            raise ValueError(f"{path} no tiene {sorted(missing)}: vuelve a correr main.py con --output-tracks-csv")
+        for row in reader:
             track = dict(row, group=class_group(row["class"]), origin_confirmed=row["origin_confirmed"] == "True")
             track.update({key: _number(row[key]) for key in _FLOATS})
             track.update({key: _number(row[key], int) for key in _INTS})

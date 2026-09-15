@@ -153,12 +153,14 @@ def validate_events(results_path, truth_path, tolerance_frames=15, by_group=Fals
     processed = results.get("frames_processed")
     if (type(start) is not int or type(end) is not int or type(processed) is not int
             or not 1 <= start <= end <= processed):
-        raise ValueError("El tramo revisado debe estar dentro de los frames procesados")
+        raise ValueError("El tramo revisado debe estar dentro de los frames procesados "
+                         "(frames relativos a run.start_frame, del 1 a frames_processed)")
     if results.get("run", {}).get("status") != "completed":
         raise ValueError("La ejecución no está completada")
     all_pred = _event_rows(results.get("counting_events"), 1, processed, by_group)
     pred = [row for row in all_pred if start <= row["frame"] <= end]
     reference = _event_rows(truth.get("events"), start, end, by_group)
+    missing_routes = sorted({row["route"] for row in reference} - {row["route"] for row in all_pred})
     groups = sorted({(row["route"], row["class"]) for row in pred + reference})
     matched_pred, matched_truth, matches = set(), set(), []
     for route, cls_name in groups:
@@ -184,6 +186,7 @@ def validate_events(results_path, truth_path, tolerance_frames=15, by_group=Fals
     return dict(metrics=metrics, matches=matches, unmatched_predictions=unmatched_pred,
                 missed_events=unmatched_truth, start_frame=start, end_frame=end,
                 tolerance_frames=tolerance_frames, by_group=by_group,
+                routes_missing_in_results=missing_routes,
                 scope=f"Emparejamiento temporal por ruta y {'grupo' if by_group else 'clase'}; "
                       "no comprueba identidad física del vehículo")
 
@@ -233,6 +236,10 @@ def main():
         print(f"Reporte guardado en: {args.output}")
 
     if args.events:
+        if report["routes_missing_in_results"]:
+            print("AVISO: rutas de la referencia sin ningún evento del sistema: "
+                  f"{report['routes_missing_in_results']}. Revisa que el nombre coincida con la salida "
+                  "(por ejemplo 'Anillo oeste ↓', con sentido).", file=sys.stderr)
         print(json.dumps(report["metrics"], ensure_ascii=False))
         if args.min_f1 is not None:
             metrics = report["metrics"]

@@ -57,6 +57,20 @@ def test_load_tracks_types_numbers_boxes_and_group(tracks_csv):
     assert tracks[3]["counted_frame"] is None
 
 
+def test_old_csv_without_new_columns_fails_with_clear_message(tmp_path):
+    path = tmp_path / "old.csv"
+    path.write_text("track_id,class,state\n1,car,done\n")
+    with pytest.raises(ValueError, match="vuelve a correr main.py"):
+        load_tracks(path)
+
+
+def test_crop_outside_frame_is_skipped(tmp_path):
+    from scripts.review_incomplete_tracks import _write_crop
+    image = np.zeros((150, 200, 3), np.uint8)
+    assert _write_crop(image, (500, 10, 560, 40), "fuera", tmp_path / "x.jpg") is False
+    assert _write_crop(image, (50, 50, 70, 70), "dentro", tmp_path / "y.jpg") is True
+
+
 def test_incomplete_requires_confirmed_origin_and_separates_end_of_segment(tracks_csv):
     incomplete = find_incomplete(load_tracks(tracks_csv), processed_frames=100)
     assert [(t["track_id"], t["cause_hint"]) for t in incomplete] == [(2, "perdidos"), (3, "fin_del_tramo")]
