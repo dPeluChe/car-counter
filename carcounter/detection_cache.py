@@ -12,10 +12,10 @@ def file_digest(path):
     return digest.hexdigest()
 
 
-def cache_signature(cfg, detector_backend, use_sahi, variant="base"):
+def cache_signature(cfg, detector_backend, use_sahi, variant="base", start_frame=1):
     if detector_backend == "rfdetr" and cfg["model_path"].endswith(".pt"):
         raise ValueError("La caché RF-DETR requiere pesos explícitos .pth del detector utilizado")
-    return {
+    signature = {
         "version": 1,
         "video_sha256": file_digest(cfg["video_path"]),
         "model_sha256": file_digest(cfg["model_path"]),
@@ -25,6 +25,10 @@ def cache_signature(cfg, detector_backend, use_sahi, variant="base"):
         "sahi": {key: cfg[key] for key in ("sahi_slice_w", "sahi_slice_h", "sahi_overlap", "sahi_nms")}
                 if use_sahi else None,
     }
+    # Solo se agrega al empezar después del frame 1 para no invalidar cachés existentes
+    if start_frame != 1:
+        signature["start_frame"] = start_frame
+    return signature
 
 
 class DetectionCacheWriter:

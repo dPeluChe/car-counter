@@ -61,6 +61,8 @@ def build_parser():
     parser.add_argument("--no-save", dest="no_save", action="store_true")
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--max-frames", type=int, default=None)
+    parser.add_argument("--start-frame", type=int, default=1,
+                        help="Primer frame a procesar (desde 1); los frames de eventos se numeran desde aquí")
     parser.add_argument("--detector", default="yolo", choices=["yolo", "rfdetr"])
     parser.add_argument("--rfdetr-variant", default="base",
                         choices=["nano", "small", "medium", "base", "large"])
@@ -98,6 +100,8 @@ def main():
 
     if args.max_frames is not None and args.max_frames < 1:
         raise SystemExit("--max-frames debe ser positivo")
+    if args.start_frame < 1:
+        raise SystemExit("--start-frame debe ser 1 o mayor")
     if args.replay_detections:
         model_yolo = rfdetr_model = sahi_model = sahi_predict_fn = None
         detector_backend = args.detector
@@ -108,7 +112,8 @@ def main():
     cache_writer = cache_reader = None
     if args.record_detections or args.replay_detections:
         from carcounter.detection_cache import DetectionCacheWriter, DetectionCacheReader, cache_signature
-        signature = cache_signature(cfg, detector_backend, use_sahi, args.rfdetr_variant)
+        signature = cache_signature(cfg, detector_backend, use_sahi, args.rfdetr_variant,
+                                    start_frame=args.start_frame)
         if args.replay_detections:
             cache_reader = DetectionCacheReader(args.replay_detections, signature)
             if args.max_frames is not None and args.max_frames > cache_reader.frames:
@@ -135,7 +140,13 @@ def main():
     vid_fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     duration = total_frames / vid_fps if vid_fps > 0 else 0
-    planned_frames = min(total_frames, args.max_frames or total_frames) if total_frames else args.max_frames or 0
+    available_frames = total_frames - args.start_frame + 1 if total_frames else 0
+    if total_frames and available_frames < 1:
+        cap.release()
+        raise SystemExit("--start-frame excede los frames del video")
+    if args.start_frame > 1:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, args.start_frame - 1)
+    planned_frames = min(available_frames, args.max_frames or available_frames) if total_frames else args.max_frames or 0
     log.info("%dx%d @ %.1ffps  —  %.1fs (%d frames)",
              vid_w, vid_h, vid_fps, duration, total_frames)
 
@@ -164,7 +175,7 @@ def main():
     from importlib.metadata import version
     from carcounter.detection_cache import file_digest
     cfg["run_metadata"] = {
-        "status": "completed", "requested_max_frames": args.max_frames,
+        "status": "completed", "requested_max_frames": args.max_frames, "start_frame": args.start_frame,
         "config_snapshot": cfg["raw_config"], "model_path": cfg["model_path"],
         "effective_conf": cfg["effective_conf"], "imgsz": cfg["imgsz"],
         "detector": detector_backend, "device": device,
@@ -214,9 +225,8 @@ def main():
         while True:
             ret, frame = cap.read()
             if not ret or frame is None:
-                expected_frames = min(total_frames, args.max_frames or total_frames)
-                if frame_count < expected_frames:
-                    raise RuntimeError(f"Video interrumpido en frame {frame_count}/{expected_frames}")
+                if frame_count < planned_frames:
+                    raise RuntimeError(f"Video interrumpido en frame {frame_count}/{planned_frames}")
                 break
             frame_count += 1
             counter.set_frame(frame_count)

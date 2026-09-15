@@ -13,7 +13,7 @@ Revisión: 2026-09-14. Fuentes: código local, suite de pruebas y artefactos ind
 | Clase de vehículo | Mayoría por track hasta el primer conteo, conservada después | Pruebas de ruido de clase. Cambiaron 44 clases de tracks en el replay; no se han revisado como correcciones humanas |
 | Eventos | `counting_events` con frame, ID, clase, ruta y geometría | Seis eventos del video real y pruebas de conservación tras purga |
 | Evaluación | Cajas por IoU/clase; eventos por ruta, clase y tiempo | Pruebas con errores controlados. Emparejar eventos no prueba identidad física del auto |
-| Cámara | ORB/RANSAC opcional; detiene si hay deriva excesiva o estimación no fiable | Tramo estable de 60 frames aprobado; otra ejecución detenida en frame 228. No estabiliza video ni geometría |
+| Cámara | ORB/RANSAC opcional; detiene si hay deriva excesiva o estimación no fiable. `segment_video.py` divide el video en tramos estables | Tramo estable de 60 frames aprobado; otra ejecución detenida en frame 228. Tramos de `glorieta_normal.mp4` medidos con 10 px ([detalle](COUNTING_SCOPE.md#tramos-de-cámara-estable)). No estabiliza video ni geometría |
 | Replay | Caché SQLite de cajas previas a filtros/tracking, firma y cierre completo | Comparaciones de eventos y trayectorias. Evita inferencia; sus FPS no son FPS del detector |
 | Automatización | Instalador de cron y consulta de cuota | Pruebas simuladas de condiciones. Cron no instalado; consulta real bloqueada al iniciar estado local de Codex |
 
@@ -52,6 +52,6 @@ Los máximos estimados de deriva fueron 7.8113 px en el normal y 85.2845 px en e
 
 ## Validación automática y límites
 
-La última ejecución de `env/bin/python -m pytest -q` (2026-09-14, con `fastapi`, `httpx` y `libsql-experimental` instalados en `env/`) aprobó 352 pruebas sin omisiones. Sin esas dependencias se omiten las de DB/API. Las de API usan `TestClient`: no validan el servicio durante un procesamiento real.
+La última ejecución de `env/bin/python -m pytest -q` (2026-09-14, con `fastapi`, `httpx` y `libsql-experimental` instalados en `env/`) aprobó 357 pruebas sin omisiones. Sin esas dependencias se omiten las de DB/API. Las de API usan `TestClient`: no validan el servicio durante un procesamiento real.
 
 No hay porcentaje de precisión humana confirmado, nueva calibración de todas las entradas/salidas, estabilización automática, entrenamiento de pesos, benchmark de ONNX/TensorRT ni despliegue verificado. Sus criterios están en el backlog.

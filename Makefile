@@ -13,7 +13,7 @@ ARGS    ?=
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install setup run run-full run-aerial replay-aerial test benchmark \
+.PHONY: help install setup run run-full run-aerial replay-aerial segment-video test benchmark \
         validate-routes val-extract val-prelabel val-evaluate clean
 
 help: ## Muestra esta ayuda
@@ -43,6 +43,10 @@ replay-aerial: ## Misma demo desde la cache aerial_low_conf.sqlite, sin inferenc
 	$(PYTHON) main.py --config docs/GUIDES/aerial_counting.example.json --no-sahi \
 		--headless --no-save --max-frames 300 --replay-detections $(OUTDIR)/aerial_low_conf.sqlite \
 		--output-json $(OUTDIR)/aerial_replay.json --output-tracks-csv $(OUTDIR)/aerial_replay_tracks.csv
+
+segment-video: ## Divide VIDEO en tramos de camara estable -> segments.json + frame de referencia por tramo
+	$(PYTHON) scripts/segment_video.py --video $(VIDEO) --output-json $(OUTDIR)/segments.json \
+		--frames-dir $(OUTDIR)/segments $(ARGS)
 
 test: ## Corre la suite de tests
 	$(PYTHON) -m pytest tests/ -v
