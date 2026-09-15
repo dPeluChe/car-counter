@@ -7,7 +7,6 @@ Uso CLI:
     python -m carcounter.models info rfdetr-base
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -16,60 +15,78 @@ from carcounter.paths import paths
 # ── Catalogo de modelos ───────────────────────
 
 MODELS_DIR = paths.root / "models"
+# Un .pt/.pth real pesa varios MB; archivos menores son marcadores o descargas cortadas
+MIN_WEIGHTS_BYTES = 1_000_000
 
 MODEL_CATALOG = {
-    # ── YOLO (ultralytics) ──
+    # ── Aéreo (local, no descargable) ──
+    "yolov8l-visdrone": {
+        "family": "yolo",
+        "file": "yolo/yolov8l-visdrone.pt",
+        "source": "local",
+        "size_mb": None,
+        "coco_ap50": None,
+        "latency_ms": None,
+        "params": "?",
+        "note": "Entrenado en VisDrone (tomas aéreas); modelo del aforo EPS",
+    },
+    # ── YOLO11 (ultralytics, COCO) ──
     "yolov11n": {
         "family": "yolo",
         "file": "yolo/yolov11n.pt",
+        "asset": "yolo11n.pt",
         "source": "ultralytics",
         "size_mb": 6,
         "coco_ap50": 55.2,
         "latency_ms": 1.5,
         "params": "2.6M",
-        "note": "Nano — mas rapido, menor precision",
+        "note": "Nano",
     },
     "yolov11s": {
         "family": "yolo",
         "file": "yolo/yolov11s.pt",
+        "asset": "yolo11s.pt",
         "source": "ultralytics",
         "size_mb": 19,
         "coco_ap50": 59.2,
         "latency_ms": 2.5,
         "params": "9.4M",
-        "note": "Small — buen balance velocidad/precision",
+        "note": "Small",
     },
     "yolov11m": {
         "family": "yolo",
         "file": "yolo/yolov11m.pt",
+        "asset": "yolo11m.pt",
         "source": "ultralytics",
         "size_mb": 39,
         "coco_ap50": 64.1,
         "latency_ms": 4.7,
         "params": "20.1M",
-        "note": "Medium — recomendado para uso general",
+        "note": "Medium",
     },
     "yolov11l": {
         "family": "yolo",
         "file": "yolo/yolov11l.pt",
+        "asset": "yolo11l.pt",
         "source": "ultralytics",
         "size_mb": 49,
         "coco_ap50": 65.4,
         "latency_ms": 6.2,
         "params": "25.3M",
-        "note": "Large — mayor precision",
+        "note": "Large",
     },
     "yolov11x": {
         "family": "yolo",
         "file": "yolo/yolov11x.pt",
+        "asset": "yolo11x.pt",
         "source": "ultralytics",
         "size_mb": 110,
         "coco_ap50": 66.1,
         "latency_ms": 11.3,
         "params": "56.9M",
-        "note": "XLarge — maxima precision YOLO",
+        "note": "XLarge",
     },
-    # ── RF-DETR (Roboflow) ──
+    # ── RF-DETR (Roboflow, COCO) ──
     "rfdetr-nano": {
         "family": "rfdetr",
         "file": "rfdetr/rfdetr-nano.pth",
@@ -79,7 +96,7 @@ MODEL_CATALOG = {
         "coco_ap50": 67.6,
         "latency_ms": 2.3,
         "params": "~3M",
-        "note": "Nano — supera YOLO11-M en precision con menor latencia",
+        "note": "Nano",
     },
     "rfdetr-small": {
         "family": "rfdetr",
@@ -101,7 +118,7 @@ MODEL_CATALOG = {
         "coco_ap50": 73.6,
         "latency_ms": 4.4,
         "params": "~20M",
-        "note": "Medium — +9.5 AP50 sobre YOLO11-M, similar latencia",
+        "note": "Medium",
     },
     "rfdetr-base": {
         "family": "rfdetr",
@@ -112,7 +129,7 @@ MODEL_CATALOG = {
         "coco_ap50": 74.2,
         "latency_ms": 5.5,
         "params": "29M",
-        "note": "Base — modelo original RF-DETR",
+        "note": "Base",
     },
     "rfdetr-large": {
         "family": "rfdetr",
@@ -123,7 +140,7 @@ MODEL_CATALOG = {
         "coco_ap50": 75.1,
         "latency_ms": 6.8,
         "params": "~50M",
-        "note": "Large — maxima precision RF-DETR",
+        "note": "Large",
     },
 }
 
@@ -133,130 +150,116 @@ def _model_path(model_info):
     return MODELS_DIR / model_info["file"]
 
 
+def is_valid_weights(path):
+    """True si el archivo existe y tiene tamaño de pesos reales (no un marcador)."""
+    try:
+        return bool(path) and Path(path).is_file() and Path(path).stat().st_size >= MIN_WEIGHTS_BYTES
+    except OSError:
+        return False
+
+
 def is_downloaded(model_name):
-    """True si el modelo ya esta descargado localmente o en cache."""
+    """True si el modelo ya esta disponible localmente o en cache."""
     info = MODEL_CATALOG.get(model_name)
     if not info:
         return False
-    # Check local marker/file
     path = _model_path(info)
-    if path.exists() and path.stat().st_size > 0:
+    if is_valid_weights(path):
         return True
-    # RF-DETR models are cached by HuggingFace, check cache
     if info["source"] == "rfdetr":
-        return _rfdetr_in_cache(info)
+        return path.with_suffix(".cached").exists() or _rfdetr_in_cache(info)
     return False
 
 
 def _rfdetr_in_cache(info):
     """Check if RF-DETR weights exist in HuggingFace cache."""
     try:
-        from pathlib import Path
         cache_dir = Path.home() / ".cache" / "rf-detr"
         if not cache_dir.exists():
             return False
-        variant = info.get("variant", "base")
-        pth_name = f"rf-detr-{variant}.pth"
+        pth_name = f"rf-detr-{info.get('variant', 'base')}.pth"
         return any(f.name == pth_name for f in cache_dir.rglob("*.pth"))
     except Exception:
         return False
 
 
 def get_model_path(model_name):
-    """Retorna el path del modelo si existe, None si no."""
+    """Retorna el path del modelo si hay pesos reales, None si no."""
     info = MODEL_CATALOG.get(model_name)
     if not info:
         return None
     path = _model_path(info)
-    return str(path) if path.exists() else None
+    return str(path) if is_valid_weights(path) else None
+
+
+def download_model_with_error(model_name):
+    """Descarga un modelo del catalogo. Retorna (ok, mensaje_de_error)."""
+    info = MODEL_CATALOG.get(model_name)
+    if not info:
+        return False, f"Modelo '{model_name}' no encontrado en el catálogo"
+    path = _model_path(info)
+    if is_valid_weights(path):
+        return True, None
+    if info["source"] == "local":
+        return False, f"{model_name} no se descarga: copia el archivo en {path}"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        if info["source"] == "ultralytics":
+            _download_yolo(model_name, info, path)
+        elif info["source"] == "rfdetr":
+            _download_rfdetr(model_name, info, path)
+        else:
+            return False, f"Fuente desconocida: {info['source']}"
+    except Exception as error:
+        return False, f"{type(error).__name__}: {error}"
+    return True, None
 
 
 def download_model(model_name):
-    """Descarga un modelo del catalogo."""
-    info = MODEL_CATALOG.get(model_name)
-    if not info:
-        print(f"Modelo '{model_name}' no encontrado en el catalogo.")
-        print(f"Modelos disponibles: {', '.join(sorted(MODEL_CATALOG.keys()))}")
-        return False
-
-    path = _model_path(info)
-    if path.exists() and path.stat().st_size > 1000:
-        print(f"  {model_name} ya descargado ({path.stat().st_size / 1e6:.1f} MB)")
-        return True
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    if info["source"] == "ultralytics":
-        return _download_yolo(model_name, info, path)
-    elif info["source"] == "rfdetr":
-        return _download_rfdetr(model_name, info, path)
-    else:
-        print(f"  Fuente desconocida: {info['source']}")
-        return False
+    """Descarga un modelo del catalogo (compatibilidad CLI)."""
+    ok, error = download_model_with_error(model_name)
+    if error:
+        print(f"  Error con {model_name}: {error}")
+    return ok
 
 
 def _download_yolo(model_name, info, path):
-    """Descarga modelo YOLO via ultralytics."""
-    try:
-        from ultralytics import YOLO
-        filename = Path(info["file"]).name
-        print(f"  Descargando {model_name} ({info['size_mb']} MB)...")
-        # ultralytics descarga al dir actual, luego movemos
-        model = YOLO(filename)
-        downloaded = Path(filename)
-        if downloaded.exists():
-            downloaded.rename(path)
-            print(f"  OK -> {path}")
-            return True
-        # ultralytics puede haberlo puesto en otro lugar
-        if path.exists():
-            print(f"  OK -> {path}")
-            return True
-        print(f"  Descarga completada pero archivo no encontrado en {path}")
-        return False
-    except Exception as e:
-        print(f"  Error descargando {model_name}: {e}")
-        return False
+    """Descarga el asset de Ultralytics (yolo11*.pt) directo a su ruta final."""
+    from ultralytics.utils.downloads import attempt_download_asset
+    print(f"  Descargando {model_name} ({info['size_mb']} MB)...")
+    downloaded = Path(attempt_download_asset(str(path.parent / info["asset"])))
+    if downloaded.resolve() != path.resolve() and downloaded.exists():
+        downloaded.replace(path)
+    if not is_valid_weights(path):
+        raise RuntimeError(f"la descarga no dejó pesos válidos en {path}")
+    print(f"  OK -> {path}")
 
 
 def _download_rfdetr(model_name, info, path):
-    """Descarga modelo RF-DETR (se descargan automaticamente al primer predict)."""
-    try:
-        import rfdetr as _rfdetr
-        variant = info.get("variant", "base")
-        variant_map = {
-            "nano": "RFDETRNano", "small": "RFDETRSmall",
-            "medium": "RFDETRMedium", "base": "RFDETRBase",
-            "large": "RFDETRLarge",
-        }
-        cls_name = variant_map.get(variant, "RFDETRBase")
-        model_cls = getattr(_rfdetr, cls_name)
-        print(f"  Descargando {model_name} ({info['size_mb']} MB)...")
-        print(f"  RF-DETR descarga pesos automaticamente al instanciar...")
-        _model = model_cls()
-        # RF-DETR guarda en cache de HuggingFace, no en nuestro dir
-        # Marcamos como disponible creando un archivo marker
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(f"# RF-DETR {variant} - pesos en cache HuggingFace\n")
-        print(f"  OK — pesos cacheados por HuggingFace")
-        return True
-    except ImportError:
-        print(f"  Error: pip install rfdetr")
-        return False
-    except Exception as e:
-        print(f"  Error descargando {model_name}: {e}")
-        return False
+    """RF-DETR baja sus pesos a la cache al instanciar; se deja un marcador .cached, no un .pth falso."""
+    import rfdetr as _rfdetr
+    variant_map = {"nano": "RFDETRNano", "small": "RFDETRSmall", "medium": "RFDETRMedium",
+                   "base": "RFDETRBase", "large": "RFDETRLarge"}
+    model_cls = getattr(_rfdetr, variant_map.get(info.get("variant", "base"), "RFDETRBase"))
+    print(f"  Descargando {model_name} ({info['size_mb']} MB) a la cache de RF-DETR...")
+    model_cls()
+    path.with_suffix(".cached").write_text(f"RF-DETR {info.get('variant', 'base')}: pesos en cache\n")
+    print("  OK: pesos en cache")
+
+
+def _metric(value, fmt):
+    return format(value, fmt) if value is not None else "-"
 
 
 def list_models():
     """Imprime el catalogo de modelos con estado de descarga."""
     print()
     print("=" * 85)
-    print("  CATALOGO DE MODELOS — Car Counter")
+    print("  CATALOGO DE MODELOS: Car Counter")
     print("=" * 85)
 
     for family in ["yolo", "rfdetr"]:
-        family_label = "YOLO (ultralytics)" if family == "yolo" else "RF-DETR (Roboflow DINOv2)"
+        family_label = "YOLO (ultralytics y locales)" if family == "yolo" else "RF-DETR (Roboflow DINOv2)"
         print(f"\n  {family_label}")
         print(f"  {'─' * 80}")
         print(f"  {'Modelo':<18} {'AP50':>6} {'Latencia':>9} {'Params':>8} {'Tamaño':>8} {'Estado':>10}")
@@ -265,16 +268,14 @@ def list_models():
         for name, info in MODEL_CATALOG.items():
             if info["family"] != family:
                 continue
-            downloaded = is_downloaded(name)
-            status = "  ✓" if downloaded else "  ✗"
-            status_color = status
-            print(f"  {name:<18} {info['coco_ap50']:>5.1f}  {info['latency_ms']:>6.1f}ms"
-                  f"  {info['params']:>8} {info['size_mb']:>6}MB {status_color:>10}")
+            status = "  ✓" if is_downloaded(name) else "  ✗"
+            print(f"  {name:<18} {_metric(info['coco_ap50'], '>5.1f'):>6}  {_metric(info['latency_ms'], '>6.1f'):>6}ms"
+                  f"  {info['params']:>8} {_metric(info['size_mb'], '>6'):>6}MB {status:>10}")
 
     print(f"\n  {'─' * 80}")
-    print(f"  Latencias medidas en NVIDIA T4 FP16. AP50 = COCO val2017.")
-    print(f"\n  Descargar:  python -m carcounter.models download <nombre>")
-    print(f"  Info:       python -m carcounter.models info <nombre>")
+    print("  AP50 y latencia: referencia COCO del fabricante (T4 FP16), no medidas en el aforo EPS.")
+    print("\n  Descargar:  python -m carcounter.models download <nombre>")
+    print("  Info:       python -m carcounter.models info <nombre>")
     print("=" * 85)
     print()
 
@@ -286,25 +287,22 @@ def model_info(model_name):
         print(f"Modelo '{model_name}' no encontrado.")
         return
 
-    downloaded = is_downloaded(model_name)
     path = _model_path(info)
-
     print(f"\n  Modelo: {model_name}")
     print(f"  {'─' * 50}")
-    print(f"  Familia:     {info['family'].upper()}")
-    print(f"  COCO AP50:   {info['coco_ap50']}")
-    print(f"  Latencia:    {info['latency_ms']}ms (T4 FP16)")
+    print(f"  Familia:     {info['family'].upper()} ({info['source']})")
+    print(f"  COCO AP50:   {_metric(info['coco_ap50'], '.1f')} (referencia del fabricante)")
+    print(f"  Latencia:    {_metric(info['latency_ms'], '.1f')}ms (T4 FP16)")
     print(f"  Parametros:  {info['params']}")
-    print(f"  Tamaño:      ~{info['size_mb']} MB")
+    print(f"  Tamaño:      ~{_metric(info['size_mb'], '')} MB")
     print(f"  Nota:        {info.get('note', '')}")
-    print(f"  Descargado:  {'Si' if downloaded else 'No'}")
+    print(f"  Descargado:  {'Si' if is_downloaded(model_name) else 'No'}")
     print(f"  Path:        {path}")
 
     if info["family"] == "yolo":
         print(f"\n  Uso: python main.py --model {path} --video assets/video.mp4")
     else:
-        variant = info.get("variant", "base")
-        print(f"\n  Uso: python main.py --detector rfdetr --rfdetr-variant {variant} --video assets/video.mp4")
+        print(f"\n  Uso: python main.py --detector rfdetr --rfdetr-variant {info.get('variant', 'base')} --video assets/video.mp4")
     print()
 
 
