@@ -58,3 +58,27 @@ def test_event_validation_by_group_matches_van_against_human_car(tmp_path):
     by_group = validate_events(results, truth, by_group=True)["metrics"]
     assert (by_class["tp"], by_class["fp"], by_class["fn"]) == (0, 1, 1)
     assert (by_group["tp"], by_group["fp"], by_group["fn"]) == (1, 0, 0)
+
+
+def test_event_validation_reports_reference_routes_missing_in_results(tmp_path):
+    from scripts.validate_routes import validate_events
+    sha = "b" * 64
+    results = _write(tmp_path, "results.json", {
+        "frames_processed": 50, "run": {"status": "completed", "video_sha256": sha},
+        "counting_events": [{"frame": 10, "route": "Anillo oeste ↓", "class": "car"}]})
+    truth = _write(tmp_path, "truth.json", {
+        "reviewed": True, "video_sha256": sha, "start_frame": 1, "end_frame": 50,
+        "events": [{"frame": 10, "route": "Anillo oeste", "class": "car"}]})
+    assert validate_events(results, truth)["routes_missing_in_results"] == ["Anillo oeste"]
+
+
+def test_documented_event_truth_example_is_accepted_once_reviewed(tmp_path):
+    from pathlib import Path
+    from scripts.validate_routes import validate_events
+    example = json.loads(Path("docs/GUIDES/events_truth.example.json").read_text(encoding="utf-8"))
+    truth = _write(tmp_path, "truth.json", dict(example, reviewed=True))
+    results = _write(tmp_path, "results.json", {
+        "frames_processed": 300, "run": {"status": "completed", "video_sha256": example["video_sha256"]},
+        "counting_events": [{"frame": 121, "route": "Anillo oeste ↓", "class": "car"}]})
+    report = validate_events(results, truth, by_group=True)
+    assert report["metrics"]["tp"] == 1 and report["routes_missing_in_results"] == []

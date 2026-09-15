@@ -78,9 +78,11 @@ Con 5 px el umbral queda al nivel del ruido de la estimación (2 a 5 px en tomas
 
 Cómo usarlo:
 
-1. Dibujar zonas y exclusiones sobre la imagen de referencia del tramo (`tramo04_frame3601.jpg` para el tramo oficial) y guardar un perfil por tramo.
-2. Correr cada tramo con su perfil: `main.py --video assets/glorieta_normal.mp4 --start-frame <inicio> --max-frames <frames>`. Para el tramo oficial: `--start-frame 5396 --max-frames 1799`. Los frames de los eventos se cuentan desde `--start-frame`; el JSON guarda `run.start_frame`.
+1. Dibujar zonas y exclusiones de cada tramo y guardar un perfil por tramo. La imagen de referencia de cada uno queda en el `--frames-dir` usado (para esta tabla: `output/segments_normal_10px/segments/tramo04_frame3601.jpg`). El configurador abre videos, no imágenes.
+2. Correr cada tramo con su perfil: `main.py --video assets/glorieta_normal.mp4 --start-frame <inicio> --max-frames <frames>`. Los frames de los eventos se cuentan desde `--start-frame`; el JSON guarda `run.start_frame`.
 3. Los tramos `transition` no se cuentan hasta tener corrección geométrica (TODO-029).
+
+**Tramo oficial para validación:** se trabaja sobre `assets/glorieta_test1min.mp4`, que es exactamente ese minuto (frame 1 del clip = frame 5396 del completo). Así el configurador lo abre directo en su frame 1, el perfil de ejemplo ya apunta a él y el frame del reproductor coincide con el `frame` de los eventos. Correr el mismo minuto sobre el video completo (`--start-frame 5396 --max-frames 1799`) da resultados algo distintos porque es otra codificación; no mezclar ambas fuentes en una misma validación.
 
 La resolución es el intervalo de muestreo (5 s): el cambio real puede ocurrir entre la última muestra estable y la que abre el tramo siguiente.
 

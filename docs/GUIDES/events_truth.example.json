@@ -1,0 +1,12 @@
+{
+  "video": "assets/glorieta_test1min.mp4",
+  "video_sha256": "92f2dac20caedb03a36704a60080e260fea13a6b4b691cc8760accffb2708c8a",
+  "start_frame": 1,
+  "end_frame": 300,
+  "reviewed": false,
+  "reviewer": "",
+  "reviewed_at": "",
+  "events": [
+    {"frame": 120, "route": "Anillo oeste ↓", "class": "ligeros"}
+  ]
+}

@@ -95,8 +95,11 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 **Archivos relevantes:** `carcounter/counting.py`, `carcounter/tracking.py`, `carcounter/export.py`, `scripts/validate_routes.py`, `tests/test_route_validation.py`, `tests/test_counting_regressions.py`.
 
 - [ ] Revisar pérdidas de ID en oclusiones, cambios de ID cerca de líneas/zonas y IDs duplicados del mismo auto.
-- [ ] Reporte de vehículos incompletos: tracks que confirmaron origen y nunca destino, contados por acceso, con recorte de imagen del primer y último frame (caja, ID, clase, frame) para revisar si falló por oclusión, imagen poco clara o geometría.
-- [ ] Marcar candidatos a cambio de ID: un track que termina y otro que empieza cerca, con clase compatible, en pocos frames; incluirlos en el mismo reporte con ambas imágenes.
+- [ ] Con zonas del tramo oficial, correr `make review-tracks` y clasificar a mano la causa de cada track perdido y de los primeros candidatos a cambio de ID (oclusión, imagen poco clara, geometría o tracker).
+- [ ] Reducir la fragmentación ([cifra actual](GUIDES/VERIFIED_STATE.md)): comparar `track_buffer`, umbrales y BoT-SORT midiendo fragmentación y rutas completas con `make review-tracks`.
+- [ ] NMS sin clase en YOLO: `carcounter/detector.py` llama al modelo sin `agnostic_nms`, así que una caja `car` y otra `van` sobre el mismo vehículo sobreviven; ByteTrack asocia por IoU y la segunda caja puede crear un ID nuevo. Es la causa probable del mejor candidato del replay (ID 385 `car` → ID 397 `van`, mismo lugar, un frame): en ese replay 38 de los 83 candidatos cambian de clase. Medir con replay antes y después: candidatos con cambio de clase, fragmentación y eventos.
+- [ ] Registrar desde `UltralyticsTracker` los tracks perdidos, removidos y creados por frame, para detectar cambios de ID sin heurística de distancia.
+- [ ] Exportar el frame absoluto del video en `counting_events` y en el CSV de tracks, para que la referencia humana y los recortes usen la misma numeración que un reproductor.
 - [ ] Comparar ByteTrack y BoT-SORT sobre una caché común; variar un parámetro por experimento y registrar parámetros efectivos. `with_reid=true` no está soportado en el wrapper actual.
 - [ ] Añadir referencia de identidad física por auto para casos ambiguos; el evaluador actual solo empareja ruta/clase/tiempo, no valida identidad.
 - [ ] Distinguir con evidencia duplicación, falso positivo, clase errónea y desfase temporal; no llamar duplicado a toda predicción sin pareja.
@@ -126,7 +129,7 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 
 ## TODO-029: Movimiento de cámara y geometría del conteo `added: 2026-09-07`
 
-**Prioridad:** P0 cuando afecta el tramo presentado. **Estado:** monitor implementado (ver [2609](TASK_COMPLETED/2609.md)); corrección geométrica pendiente. Mediciones de deriva en [VERIFIED_STATE.md](GUIDES/VERIFIED_STATE.md). En el video completo, contra el frame de las 3:00: estable (5 px o menos) entre 1:30 y 9:30; 6 a 9 px dentro del tramo oficial; 7 a 19 px antes de 1:15 y 5 a 13 px después de 9:44 ([detalle](GUIDES/COUNTING_SCOPE.md#estabilidad-del-dron-en-el-video-completo)).
+**Prioridad:** P0 cuando afecta el tramo presentado. **Estado:** monitor implementado (ver [2609](TASK_COMPLETED/2609.md)); corrección geométrica pendiente. Mediciones de deriva en [VERIFIED_STATE.md](GUIDES/VERIFIED_STATE.md). En el video completo, contra el frame de las 3:00: estable (casi siempre 5 px o menos) entre 1:30 y 9:30; 0.1 a 9 px dentro del tramo oficial; de 19 bajando a 5.5 px antes de 1:15 y 5 a 13 px después de 9:44 ([detalle](GUIDES/COUNTING_SCOPE.md#estabilidad-del-dron-en-el-video-completo)).
 
 **Especificación:** elegir un sistema de referencia único para imagen, cajas, ROI, exclusiones y zonas/líneas. Comparar estabilizar imágenes antes de inferencia frente a transformar coordenadas; documentar qué se hace en bordes sin cobertura y cómo afecta la firma de caché. No reutilizar una caché incompatible ni aplicar dos compensaciones inconsistentes. La compensación del tracker BoT-SORT no mueve las zonas de conteo.
 
