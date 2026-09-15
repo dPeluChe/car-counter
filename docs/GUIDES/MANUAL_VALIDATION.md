@@ -44,6 +44,8 @@ Sigue autos antes, durante y después de una oclusión. Registra frame e ID prev
 
 Una trayectoria dibujada que se acorta no prueba un cambio de ID (el historial tiene longitud limitada). Para comparar trackers usa el mismo video, tramo y caché, cambia solo `--tracker` y guarda salidas nuevas.
 
+Para ubicar casos, corre `make review-tracks RESULTS=<json> TRACKS=<csv> REVIEW_DIR=<directorio nuevo>` sobre la corrida (requiere `--output-tracks-csv`). Lista tracks con origen y sin destino por acceso, la fragmentación y posibles cambios de ID, con recortes del primer y último frame. Son candidatos: confirma cada uno en el video.
+
 ## PRUEBA-04: cruce de línea contra conteo humano
 
 Cuenta cada cruce de Anillo oeste y su sentido de forma independiente. Rozar la línea, pasar por fuera del extremo o quedarse detenido no debe sumar. Revisa un regreso en sentido contrario si existe. Registra como casos de borde los autos ya sobre la línea al inicio, cortados al final u ocultos al cruzar.

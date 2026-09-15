@@ -22,6 +22,7 @@ make run               # pipeline en clip corto -> output/results.json
 make run-aerial        # demo aérea: VisDrone + ROI, una línea, 300 frames (inferencia)
 make replay-aerial     # misma demo desde la caché local, sin inferencia
 make segment-video VIDEO=assets/glorieta_normal.mp4   # tramos de cámara estable + frame de referencia
+make review-tracks RESULTS=... TRACKS=...              # tracks sin destino y posibles cambios de ID, con recortes
 make validate-routes   # conteo por ruta contra referencia humana
 make test
 ```

@@ -56,7 +56,7 @@ Atajo: `make validate-routes RESULTS=... TRUTH=... ARGS="--min-accuracy 0.95"`. 
 
 ## Interpretar errores
 
-- **Faltan autos en una ruta:** detección (autos chicos no detectados) o tracking (cambio de ID a media glorieta pierde el origen).
+- **Faltan autos en una ruta:** detección (autos chicos no detectados) o tracking (cambio de ID a media glorieta pierde el origen). `make review-tracks` lista los tracks sin destino por acceso y los posibles cambios de ID con imágenes.
 - **Rutas fantasma:** geometría, asociaciones incorrectas u observaciones de entrada/salida. Subir `min_origin_frames`/`min_dest_frames` es un experimento que también pierde autos rápidos.
 - **Destino equivocado:** el auto pasa por varias salidas antes de la real y el conteo fija la primera distinta al origen.
 
