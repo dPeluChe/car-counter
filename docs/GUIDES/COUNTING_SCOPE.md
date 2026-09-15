@@ -40,7 +40,7 @@ Condición crítica: el ID del tracker debe sobrevivir desde la entrada hasta la
 | Dato | Valor |
 |---|---|
 | Video completo de referencia | `assets/glorieta_normal.mp4`: 13:03, 29.97 fps, 23 472 frames |
-| Tramo oficial | **3:00 a 4:00**, igual a `assets/glorieta_test1min.mp4` (empieza en el frame 5394 del video completo). Confirmado el 2026-09-14 |
+| Tramo oficial | **3:00 a 4:00**, igual a `assets/glorieta_test1min.mp4` (su primer frame es el 5396 del video completo: `--start-frame 5396`). Confirmado el 2026-09-14 |
 
 El video base se cuenta completo en este tramo antes de pasar a otros minutos o videos.
 
@@ -54,6 +54,35 @@ Medido con el monitor ORB/RANSAC contra el frame de las 3:00, cada 15 s, sobre l
 | 1:30 a 9:30 | casi siempre 5 px o menos | Toma estable, con picos de 6 a 10 px entre 2:00 y 2:30 |
 | 3:00 a 4:00 (tramo oficial) | 0.1 a 9 px (6.1 px a las 3:14, 9 px a las 3:59) | Aceptable si las zonas tienen margen; no cuenta como estabilizado |
 | 9:44 al final | 5 a 13 px | El dron vuelve a moverse |
+
+### Tramos de cámara estable
+
+`scripts/segment_video.py` (o `make segment-video VIDEO=...`) recorre el video cada 5 s y abre un tramo nuevo cuando el fondo se desplaza más de 10 px respecto al primer frame del tramo. Guarda `segments.json` y una imagen del frame de referencia de cada tramo estable. Los tramos de menos de 30 s son `transition`: el dron se está moviendo y no tienen geometría.
+
+Resultado en `glorieta_normal.mp4` con 10 px:
+
+| Tramo | Periodo | Frames | Referencia | Deriva máxima |
+|---|---|---|---|---|
+| 1 | 0:00 a 0:20 | 1-600 | transición | 9.0 px |
+| 2 | 0:20 a 0:55 | 601-1650 | 601 | 9.4 px |
+| 3 | 0:55 a 2:00 | 1651-3600 | 1651 | 9.5 px |
+| 4 | **2:00 a 6:25** (incluye el tramo oficial) | 3601-11550 | 3601 | 9.8 px |
+| 5 | 6:25 a 7:20 | 11551-13200 | 11551 | 8.2 px |
+| 6 | 7:20 a 7:40 | 13201-13800 | transición | 7.6 px |
+| 7 | 7:40 a 10:25 | 13801-18750 | 13801 | 8.8 px |
+| 8 | 10:25 a 12:00 | 18751-21600 | 18751 | 7.5 px |
+| 9 | 12:00 a 12:50 | 21601-23100 | 21601 | 9.4 px |
+| 10 | 12:50 a 13:03 | 23101-23472 | transición | 3.7 px |
+
+Con 5 px el umbral queda al nivel del ruido de la estimación (2 a 5 px en tomas quietas) y casi todo sale como transición. Con 8 px el tramo oficial queda partido en dos. Con 10 px, el mismo margen que se deja en las zonas, el tramo oficial cae dentro de un solo tramo estable.
+
+Cómo usarlo:
+
+1. Dibujar zonas y exclusiones sobre la imagen de referencia del tramo (`tramo04_frame3601.jpg` para el tramo oficial) y guardar un perfil por tramo.
+2. Correr cada tramo con su perfil: `main.py --video assets/glorieta_normal.mp4 --start-frame <inicio> --max-frames <frames>`. Para el tramo oficial: `--start-frame 5396 --max-frames 1799`. Los frames de los eventos se cuentan desde `--start-frame`; el JSON guarda `run.start_frame`.
+3. Los tramos `transition` no se cuentan hasta tener corrección geométrica (TODO-029).
+
+La resolución es el intervalo de muestreo (5 s): el cambio real puede ocurrir entre la última muestra estable y la que abre el tramo siguiente.
 
 ### Metadatos del video
 

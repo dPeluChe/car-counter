@@ -45,6 +45,12 @@ Punto de partida: [KICKOFF_260914.md](KICKOFF_260914.md). Todo el trabajo de sep
 - Ningún video tiene telemetría por frame; las exportaciones la eliminaron. Pedir originales DJI con `.SRT`.
 - Decisión: la geometría (zonas y exclusiones) debe servir para todo el video, por tramos estables o con ajuste por frame (TODO-029). El responsable revisará el marcaje completo de rutas y exclusiones.
 
+## Tramos de cámara estable (opción 1)
+
+- `segment_video.py` divide el video por estabilidad; con 10 px, `glorieta_normal.mp4` queda en 7 tramos estables y 3 transiciones cortas. El tramo 2:00 a 6:25 es uno solo y contiene el oficial.
+- `main.py --start-frame` corre un tramo con su perfil; el seek es exacto. El clip de prueba empieza en el frame 5396, no en el 5394.
+- Siguiente: perfil con varios tramos para contar el video completo en una sola pasada.
+
 ## Fuera del repo
 
 `env/bin/pip` apunta a la ruta anterior del proyecto; usar `env/bin/python -m pip` o recrear el entorno.
