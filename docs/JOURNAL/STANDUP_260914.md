@@ -38,6 +38,13 @@ Punto de partida: [KICKOFF_260914.md](KICKOFF_260914.md). Todo el trabajo de sep
 - Margen propuesto ±20 % con regla para conteos chicos, respaldado en [la investigación](../RESEARCH/COUNTING_ACCURACY_2026_09_14.md).
 - Hallazgo: `glorieta_test1min.mp4` es el minuto 3:00 a 4:00 de `glorieta_normal.mp4`; el 1:00 a 2:00 tiene otro encuadre. Tramo oficial pendiente de confirmar.
 
+## Cierre: dron y metadatos
+
+- Tramo oficial confirmado: 3:00 a 4:00 de `glorieta_normal.mp4`.
+- La deriva del encuadre es movimiento del dron en una sola toma continua (sin cortes): estable entre 1:30 y 9:30, se mueve al inicio y desde 9:44.
+- Ningún video tiene telemetría por frame; las exportaciones la eliminaron. Pedir originales DJI con `.SRT`.
+- Decisión: la geometría (zonas y exclusiones) debe servir para todo el video, por tramos estables o con ajuste por frame (TODO-029). El responsable revisará el marcaje completo de rutas y exclusiones.
+
 ## Fuera del repo
 
 `env/bin/pip` apunta a la ruta anterior del proyecto; usar `env/bin/python -m pip` o recrear el entorno.

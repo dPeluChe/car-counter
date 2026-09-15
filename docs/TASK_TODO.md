@@ -130,6 +130,9 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 
 **Especificación:** elegir un sistema de referencia único para imagen, cajas, ROI, exclusiones y zonas/líneas. Comparar estabilizar imágenes antes de inferencia frente a transformar coordenadas; documentar qué se hace en bordes sin cobertura y cómo afecta la firma de caché. No reutilizar una caché incompatible ni aplicar dos compensaciones inconsistentes. La compensación del tracker BoT-SORT no mueve las zonas de conteo.
 
+- [ ] Pedir a EPS o al operador los archivos originales del dron (`DJI_*.MP4` y `.SRT`) de cada vuelo: los videos actuales perdieron la telemetría por frame al exportarse ([detalle](GUIDES/COUNTING_SCOPE.md#metadatos-del-video)).
+- [ ] Segmentar automáticamente cada video por estabilidad: tramos donde la deriva contra su frame de referencia no supere el umbral, cada uno con su frame de referencia y su geometría (zonas, líneas y exclusiones) o su ajuste.
+- [ ] Una sola geometría para todo el video: transformar zonas, líneas y exclusiones por frame con la similitud estimada respecto al frame donde se dibujaron, y rechazar los frames sin estimación fiable.
 - [ ] Mantener sincronizados detección, tracking y geometría durante la corrección elegida.
 - [ ] Rechazar cambios de escena, correspondencias insuficientes y regiones sin cobertura; explicar el motivo en la salida.
 - [ ] Calibrar tolerancia con casos revisados, no elevarla para ocultar el fallo.
