@@ -27,7 +27,7 @@ Estado real de lo comprobado: [GUIDES/VERIFIED_STATE.md](GUIDES/VERIFIED_STATE.m
 | Dibujar zonas origen/destino en una glorieta | [ROUNDABOUT_GUIDE.md](GUIDES/ROUNDABOUT_GUIDE.md) |
 | Activar el cron de revisión con Codex | [RECURRING_CODE_REVIEW_CRON.md](GUIDES/RECURRING_CODE_REVIEW_CRON.md) |
 
-Perfiles de ejemplo usados por código y guías: `GUIDES/aerial_counting.example.json` (Makefile `run-aerial`) y `GUIDES/route_truth.example.json`.
+Perfiles y plantillas de ejemplo: `GUIDES/aerial_counting.example.json` (Makefile `run-aerial`), `GUIDES/events_truth.example.json` (referencia humana de eventos) y `GUIDES/route_truth.example.json` (totales por ruta).
 
 ## Informes
 

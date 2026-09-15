@@ -13,7 +13,9 @@ cp docs/GUIDES/aerial_counting.example.json "$CARCOUNTER_REVIEW_DIR/profile.json
 printf '%s\n' "$CARCOUNTER_REVIEW_DIR"
 ```
 
-Usa la variable en la misma terminal. En otra máquina comprueba que existan entorno Python, video y pesos. No uses `make clean` durante la validación: borra `output/`.
+Usa la variable en la misma terminal. En otra máquina comprueba que existan entorno Python, video y pesos. No uses `make clean` durante la validación: borra `output/`. Si `libsql-experimental` está instalado, cada corrida terminada también se guarda en `data/carcounter.db`.
+
+Video de validación: `assets/glorieta_test1min.mp4`, el tramo oficial 3:00 a 4:00 ([COUNTING_SCOPE.md](COUNTING_SCOPE.md#tramo-de-validación)). Su frame 1 es el primer frame de cada corrida, así que el número de frame del reproductor es el que usan eventos y referencias.
 
 Registra revisor, fecha, video/tramo, perfil, modelo y comando de cada corrida. `run.video_sha256`, `run.source_fps` y `run.config_snapshot` del resultado ayudan a identificarla.
 
@@ -68,7 +70,7 @@ Para el minuto completo (`--max-frames 1799`) graba una caché nueva una sola ve
 
 ## PRUEBA-07: movimiento de cámara
 
-Corre la auditoría de [DETECTION_TUNING.md](DETECTION_TUNING.md#movimiento-de-cámara) con `--config "$CARCOUNTER_REVIEW_DIR/profile.json"` y salida en el mismo directorio. Compara líneas y zonas con referencias fijas del pavimento al inicio y al final del tramo.
+Corre la auditoría de [DETECTION_TUNING.md](DETECTION_TUNING.md#movimiento-de-cámara) con `--config "$CARCOUNTER_REVIEW_DIR/profile.json" --max-frames 1799` (el perfil apunta al clip del tramo oficial) y salida en el mismo directorio. Compara líneas y zonas con referencias fijas del pavimento al inicio y al final del tramo.
 
 ## PRUEBA-08: evidencia y cierre
 

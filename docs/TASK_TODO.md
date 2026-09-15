@@ -129,7 +129,7 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 
 ## TODO-029: Movimiento de cámara y geometría del conteo `added: 2026-09-07`
 
-**Prioridad:** P0 cuando afecta el tramo presentado. **Estado:** monitor implementado (ver [2609](TASK_COMPLETED/2609.md)); corrección geométrica pendiente. Mediciones de deriva en [VERIFIED_STATE.md](GUIDES/VERIFIED_STATE.md). En el video completo, contra el frame de las 3:00: estable (5 px o menos) entre 1:30 y 9:30; 6 a 9 px dentro del tramo oficial; 7 a 19 px antes de 1:15 y 5 a 13 px después de 9:44 ([detalle](GUIDES/COUNTING_SCOPE.md#estabilidad-del-dron-en-el-video-completo)).
+**Prioridad:** P0 cuando afecta el tramo presentado. **Estado:** monitor implementado (ver [2609](TASK_COMPLETED/2609.md)); corrección geométrica pendiente. Mediciones de deriva en [VERIFIED_STATE.md](GUIDES/VERIFIED_STATE.md). En el video completo, contra el frame de las 3:00: estable (casi siempre 5 px o menos) entre 1:30 y 9:30; 0.1 a 9 px dentro del tramo oficial; de 19 bajando a 5.5 px antes de 1:15 y 5 a 13 px después de 9:44 ([detalle](GUIDES/COUNTING_SCOPE.md#estabilidad-del-dron-en-el-video-completo)).
 
 **Especificación:** elegir un sistema de referencia único para imagen, cajas, ROI, exclusiones y zonas/líneas. Comparar estabilizar imágenes antes de inferencia frente a transformar coordenadas; documentar qué se hace en bordes sin cobertura y cómo afecta la firma de caché. No reutilizar una caché incompatible ni aplicar dos compensaciones inconsistentes. La compensación del tracker BoT-SORT no mueve las zonas de conteo.
 

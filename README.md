@@ -30,10 +30,10 @@ make test
 Sin make:
 
 ```bash
-python setup.py --video assets/mi_video.mp4                          # configurar una vez por video
-python main.py --config config/config.json --video assets/mi_video.mp4
-python main.py --help                                                # todos los flags
-python -m carcounter                                                 # wizard: modelo, video, lanzamiento
+env/bin/python setup.py --video assets/mi_video.mp4                  # configurar una vez por video
+env/bin/python main.py --config config/config.json --video assets/mi_video.mp4
+env/bin/python main.py --help                                        # todos los flags
+env/bin/python -m carcounter                                         # wizard: modelo, video, lanzamiento
 ```
 
 Repetir pruebas sin inferencia, ajustar tracker y vigilar la cámara: [DETECTION_TUNING.md](docs/GUIDES/DETECTION_TUNING.md).
@@ -72,8 +72,9 @@ carcounter/
   models.py, ui_models.py  catálogo y descarga de modelos
   api.py, db.py          REST/MJPEG y libSQL (opcionales)
 scripts/                 evaluate_pipeline, validate_routes, extract_validation_frames,
-                         pre_label_frames, audit_camera_motion, benchmark_pipeline,
-                         export_model, recurring_review
+                         pre_label_frames, audit_camera_motion, segment_video,
+                         review_incomplete_tracks, benchmark_pipeline, export_model,
+                         recurring_review
 tests/                   pytest
 ```
 

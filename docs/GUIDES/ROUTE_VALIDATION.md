@@ -19,13 +19,13 @@ El JSON de `main.py` contiene `counting_events`: un registro por cruce, ruta ent
 
 ## Método principal: eventos
 
-1. Copia la plantilla vacía del tramo de la demo (300 frames, `reviewed=false`):
+1. Copia la plantilla ([events_truth.example.json](events_truth.example.json)), borra el evento de ejemplo y ajusta `end_frame` al tramo que revisarás (300 para el replay de PRUEBA-01, 1799 para el minuto completo):
 
    ```bash
-   cp output/aerial_events_truth_template.json "$CARCOUNTER_REVIEW_DIR/truth.json"
+   cp docs/GUIDES/events_truth.example.json "$CARCOUNTER_REVIEW_DIR/truth.json"
    ```
 
-2. Mirando el video original, registra cada evento con `frame`, `route` y `class`, incluidos los autos que el sistema omitió. Usa los nombres de ruta del perfil. No copies predicciones como referencia.
+2. Anota sobre `assets/glorieta_test1min.mp4`: su frame 1 es el primer frame procesado, así que el número de frame del reproductor es el `frame` del evento. Registra `frame`, `route` y `class` de cada vehículo, incluidos los que el sistema omitió. `route` debe ser idéntica a la de la salida, con sentido o flecha (`Anillo oeste ↓`, `Norte → Sur`); `class` puede ser la clase o el grupo EPS. No copies predicciones como referencia.
 3. El SHA-256 debe coincidir con `run.video_sha256` del resultado; `start_frame` y `end_frame` delimitan lo revisado. Marca `reviewed=true` solo al terminar todo el tramo.
 4. Evalúa:
 
@@ -37,7 +37,7 @@ El JSON de `main.py` contiene `counting_events`: un registro por cruce, ruta ent
      --output "$CARCOUNTER_REVIEW_DIR/event_validation.json"
    ```
 
-Empareja uno a uno por ruta, clase y cercanía temporal, y devuelve precisión, recall, F1, predicciones sin pareja y omisiones. Dos predicciones sobre el primer auto y ninguna sobre el segundo dan un falso positivo y una omisión aunque el total cuadre. `--min-f1` fija el criterio acordado; una referencia vacía no lo aprueba. Con `--by-group` empareja por grupo EPS en vez de clase: la referencia puede escribir `ligeros`, `pesados` o `dos_ruedas`, o la clase, que se convierte a su grupo.
+Empareja uno a uno por ruta, clase y cercanía temporal, y devuelve precisión, recall, F1, predicciones sin pareja y omisiones. Si una ruta de la referencia no aparece en la salida, avisa: casi siempre es un nombre mal escrito. Dos predicciones sobre el primer auto y ninguna sobre el segundo dan un falso positivo y una omisión aunque el total cuadre. `--min-f1` fija el criterio acordado; una referencia vacía no lo aprueba. Con `--by-group` empareja por grupo EPS en vez de clase: la referencia puede escribir `ligeros`, `pesados` o `dos_ruedas`, o la clase, que se convierte a su grupo.
 
 Los 15 frames son un valor inicial: ajústalo al FPS, a la separación entre autos y al criterio humano de cruce. Ampliarlo demasiado oculta errores. Una predicción sin pareja puede ser duplicado, falso positivo, clase equivocada o desfase; el evaluador **no comprueba identidad física** cuando dos autos iguales pasan juntos.
 
