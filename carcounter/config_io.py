@@ -34,6 +34,11 @@ def parse_lines(cfg):
     return result
 
 
+def parse_directions(cfg):
+    """Extrae vectores de direccion del config (se ignoran los incompletos)."""
+    return {name: [list(p) for p in pts[:2]] for name, pts in cfg.get("directions", {}).items() if len(pts) >= 2}
+
+
 def build_config(*, counting_mode, exclusion_zones, zones, counting_lines, directions=None,
                  min_area, max_area, conf_threshold, imgsz,
                  sample_constraints, sample_count,

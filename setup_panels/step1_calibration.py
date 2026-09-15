@@ -53,8 +53,6 @@ class CalibrationMixin:
                  variable=self.conf_threshold, orient="horizontal",
                  bg="#181825", fg="#CDD6F4", troughcolor="#313244",
                  highlightthickness=0).pack(side="left", fill="x", expand=True)
-        tk.Label(row, textvariable=tk.StringVar(), bg="#181825", fg="#89B4FA",
-                 font=("Arial", 10)).pack(side="right")
         self.lbl_conf_val = tk.Label(self.panel_step1, bg="#181825", fg="#89B4FA",
                                      font=("Arial", 10))
         self.lbl_conf_val.pack()
@@ -252,6 +250,11 @@ class CalibrationMixin:
         self.max_area.set(constraints["max_area"])
         self.lbl_min_area.config(text=f"{self.min_area.get()} px²")
         self.lbl_max_area.config(text=f"{self.max_area.get()} px²")
+        c = constraints
+        text = (f"Filtros aplicados: ancho {c['min_width']}-{c['max_width']} px, "
+                f"alto {c['min_height']}-{c['max_height']} px, área {c['min_area']}-{c['max_area']} px²")
+        self.lbl_samples_info.config(text=text, wraplength=280, justify="left")
+        self.status_var.set(f"✅ {text}")
 
     @staticmethod
     def _point_in_box(px, py, box):
@@ -291,24 +294,12 @@ class CalibrationMixin:
     # viven ahora en setup_panels/calib_tests.py (CalibTestsMixin).
 
     def _confirm_calib(self):
-        # La calibracion (filtro min/max area) es opcional: con tomas aereas de
-        # autos muy chicos el test YOLO puede no validar. Permitir continuar sin
-        # filtro de area (permisivo) en vez de bloquear.
-        if not self.calib_test_passed:
-            if not messagebox.askyesno(
-                "Calibración opcional",
-                "No validaste ningún vehículo con [Probar YOLO].\n\n"
-                "¿Continuar sin filtro de área? (recomendado para tomas aéreas "
-                "de autos muy pequeños; el pipeline detectará por confianza)."):
-                return
-            self._loaded_sample_constraints = None
-            self.min_area.set(0)
-            self.max_area.set(999999)
-            self.lbl_min_area.config(text="0 px²")
-            self.lbl_max_area.config(text="999999 px²")
+        # Calibrar es opcional (autos aéreos chicos pueden no validar); avanzar nunca quita filtros aplicados
         self.calib_confirmed = True
-        self.lbl_calib_status.config(text="✅  Calibración confirmada", fg="#A6E3A1")
-        self.status_var.set("Calibración confirmada — pasando a Paso 2")
+        filters = "con filtros de muestras" if self._loaded_sample_constraints else "sin filtros de tamaño"
+        tested = "" if self.calib_test_passed else ", sin prueba validada"
+        self.lbl_calib_status.config(text=f"✅  Calibración confirmada ({filters}{tested})", fg="#A6E3A1")
+        self.status_var.set(f"Calibración confirmada {filters}{tested}; pasando a Paso 2")
         self.after(500, lambda: self._activate_step(2))
 
     def _on_calib_press(self, event):

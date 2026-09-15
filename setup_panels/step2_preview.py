@@ -25,9 +25,10 @@ class PreviewMixin:
             self._start_zone_preview()
 
     def _start_zone_preview(self):
-        if self.zone_drawing:
-            self.status_var.set("⚠ Termina de dibujar la zona actual antes de reproducir.")
+        if self.zone_drawing or self.line_drawing or self.direction_drawing:
+            self.status_var.set("⚠ Termina o cancela (Escape) el dibujo actual antes de reproducir.")
             return
+        self._preview_last_frame = None
         self._preview_playing = True
         self._preview_frame_idx = self.current_frame_idx
         self._preview_cap = cv2.VideoCapture(self.video_path)
@@ -46,31 +47,38 @@ class PreviewMixin:
         if self._preview_cap is not None:
             self._preview_cap.release()
             self._preview_cap = None
+        if self._preview_last_frame is not None:
+            # Al pausar se dibuja sobre el frame en pantalla, no sobre el de antes de reproducir
+            index, frame = self._preview_last_frame
+            self._preview_last_frame = None
+            self.frame_orig = frame.copy()
+            self.frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            self.current_frame_idx = index
+            self.lbl_frame_info.config(text=f"Frame {index + 1}/{self.total_frames}")
         if hasattr(self, "btn_preview") and self.btn_preview:
-            self.btn_preview.config(text="▶  Reproducir zonas", bg="#F9E2AF", fg="#11111B")
+            self.btn_preview.config(text="▶  Reproducir", bg="#F9E2AF", fg="#11111B")
         self._redraw_zones()
 
     def _zone_preview_tick(self):
         if not self._preview_playing or self._preview_cap is None:
             return
-        SKIP = 1
-        for _ in range(SKIP - 1):
-            self._preview_cap.grab()
-        ret, frame = self._preview_cap.read()
-        self._preview_frame_idx += SKIP
-
-        if not ret or self._preview_frame_idx >= self.total_frames:
-            self._preview_frame_idx = 0
-            self._preview_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            self._preview_job = self.after(80, self._zone_preview_tick)
+        try:
+            ret, frame = self._preview_cap.read()
+            if not ret:
+                self._preview_frame_idx = 0
+                self._preview_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                self._preview_job = self.after(80, self._zone_preview_tick)
+                return
+            self._preview_last_frame = (self._preview_frame_idx, frame)
+            self._preview_frame_idx += 1
+            base = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            if self._preview_show_detections and self.model is not None:
+                self._draw_detections_on_preview(base, frame)
+            self._overlay_zones_on_preview(base)
+        except Exception as error:
+            self._stop_zone_preview()
+            self.status_var.set(f"⚠ Reproducción detenida por un error: {error}")
             return
-
-        base = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-        if self._preview_show_detections and self.model is not None:
-            self._draw_detections_on_preview(base, frame)
-
-        self._overlay_zones_on_preview(base)
 
         self.display_frame_zones = base
         self._redraw()

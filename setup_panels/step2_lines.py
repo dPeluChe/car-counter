@@ -17,11 +17,10 @@ class LinesMixin:
         if not name:
             messagebox.showwarning("Línea", "Escribe un nombre para la línea.")
             return
-        if name in self.counting_lines:
-            if not messagebox.askyesno("Línea existe",
-                                        f"La línea '{name}' ya existe. ¿Sobreescribir?"):
-                return
-            del self.counting_lines[name]
+        if name in self.counting_lines and not messagebox.askyesno(
+                "Línea existe", f"La línea '{name}' ya existe. ¿Reemplazarla al terminar la nueva?"):
+            return
+        self._line_draw_name = name
         self.line_drawing = True
         self.line_start = None
         self.canvas.config(cursor="crosshair")
@@ -30,7 +29,7 @@ class LinesMixin:
         )
 
     def _finish_line(self, ix, iy):
-        name = self.current_line_name.get().strip()
+        name = self._line_draw_name
         self.counting_lines[name] = [list(self.line_start), [ix, iy]]
         self.line_drawing = False
         self.line_start = None
@@ -47,7 +46,7 @@ class LinesMixin:
 
     def _delete_selected_line(self):
         sel = self.zones_listbox.curselection()
-        if not sel:
+        if self.counting_mode.get() != "lines" or not sel:
             messagebox.showinfo("Eliminar", "Selecciona una línea de la lista.")
             return
         name = list(self.counting_lines.keys())[sel[0]]
