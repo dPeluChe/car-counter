@@ -1,11 +1,10 @@
-"""Auto-save progresivo para el configurador.
+"""Auto-save progresivo del configurador: un checkpoint por perfil.
 
-Guarda checkpoints cada N segundos para prevenir perdida de trabajo.
-Al arrancar, ofrece resumir desde el ultimo checkpoint.
+Guarda el estado cada N segundos solo si cambió desde la última carga o guardado.
 """
 
+import hashlib
 import json
-import os
 import time
 from pathlib import Path
 from carcounter.logging_config import get_logger
@@ -13,203 +12,133 @@ from carcounter.logging_config import get_logger
 log = get_logger("autosave")
 
 AUTOSAVE_DIR = Path(__file__).resolve().parent.parent / "config"
-AUTOSAVE_FILE = AUTOSAVE_DIR / ".autosave_checkpoint.json"
-AUTOSAVE_INTERVAL_MS = 30_000  # 30 segundos
+AUTOSAVE_INTERVAL_MS = 30_000
+CHECKPOINT_TTL_S = 86400
 
 
-def _get_autosave_path():
-    """Retorna la ruta del archivo de autosave."""
-    return AUTOSAVE_FILE
+def checkpoint_path(profile_path):
+    """Un archivo por perfil: evita mezclar geometría de perfiles o videos distintos."""
+    digest = hashlib.sha1(str(Path(profile_path).resolve()).encode("utf-8")).hexdigest()[:12]
+    return AUTOSAVE_DIR / f".autosave_{digest}.json"
 
 
-def has_checkpoint():
-    """Verifica si existe un checkpoint de autosave."""
-    path = _get_autosave_path()
-    return path.exists() and path.stat().st_size > 0
-
-
-def load_checkpoint():
-    """Carga el checkpoint de autosave.
-
-    Returns:
-        dict con el estado guardado, o None si no existe
-    """
-    path = _get_autosave_path()
-    if not path.exists():
-        return None
+def load_checkpoint(profile_path):
     try:
-        with open(path) as f:
-            data = json.load(f)
-        log.info("Checkpoint cargado: %s", path)
-        return data
-    except (json.JSONDecodeError, IOError) as e:
-        log.warning("Error leyendo checkpoint: %s", e)
+        return json.loads(checkpoint_path(profile_path).read_text())
+    except (OSError, json.JSONDecodeError):
         return None
 
 
-def save_checkpoint(state):
-    """Guarda un checkpoint con el estado actual.
-
-    Args:
-        state: dict con el estado a persistir
-    """
-    path = _get_autosave_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
+def save_checkpoint(profile_path, state):
+    path = checkpoint_path(profile_path)
     try:
-        data = dict(state)
-        data["_autosave_timestamp"] = time.time()
-        with open(path, "w") as f:
-            json.dump(data, f, indent=2)
-        log.debug("Checkpoint guardado: %s", path)
-    except IOError as e:
-        log.warning("Error guardando checkpoint: %s", e)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(dict(state, _autosave_timestamp=time.time()), indent=2))
+    except OSError as error:
+        log.warning("Error guardando checkpoint: %s", error)
 
 
-def clear_checkpoint():
-    """Elimina el checkpoint de autosave."""
-    path = _get_autosave_path()
-    if path.exists():
-        path.unlink()
-        log.debug("Checkpoint eliminado")
+def clear_checkpoint(profile_path):
+    checkpoint_path(profile_path).unlink(missing_ok=True)
 
 
-def get_checkpoint_age():
-    """Retorna la edad del checkpoint en segundos, o None si no existe."""
-    path = _get_autosave_path()
-    if not path.exists():
+def usable_checkpoint(profile_path, video_path):
+    """Checkpoint reciente del mismo perfil y video, o None."""
+    state = load_checkpoint(profile_path)
+    if not state or time.time() - state.get("_autosave_timestamp", 0) > CHECKPOINT_TTL_S:
         return None
-    try:
-        with open(path) as f:
-            data = json.load(f)
-        ts = data.get("_autosave_timestamp", 0)
-        return time.time() - ts
-    except (json.JSONDecodeError, IOError):
-        return None
+    return state if state.get("video_path") == video_path else None
+
+
+def _geometry(elements):
+    return {name: [list(point) for point in points] for name, points in elements.items()}
 
 
 class AutoSaveManager:
-    """Gestiona autosave periodico integrado con Tkinter.
+    """Autosave periódico integrado con Tkinter."""
 
-    Uso:
-        manager = AutoSaveManager(app)
-        manager.start()
-        # ... al guardar config oficial:
-        manager.clear()
-    """
+    SCALAR_VARS = (
+        "conf_threshold", "infer_imgsz", "min_area", "max_area", "slice_w", "slice_h", "overlap",
+        "nms_threshold", "max_age", "min_hits", "iou_thresh", "conf_car", "conf_motorbike", "conf_bus",
+        "conf_truck", "conf_van", "sahi_enabled", "track_low_thresh", "track_high_thresh",
+        "new_track_thresh", "track_buffer", "fuse_score",
+    )
 
     def __init__(self, app, interval_ms=AUTOSAVE_INTERVAL_MS):
         self._app = app
         self._interval_ms = interval_ms
         self._job = None
+        self._clean = None
 
     def start(self):
-        """Inicia el ciclo de autosave."""
-        self._schedule()
+        self.stop()
+        self._job = self._app.after(self._interval_ms, self._tick)
 
     def stop(self):
-        """Detiene el ciclo de autosave."""
         if self._job is not None:
             self._app.after_cancel(self._job)
             self._job = None
 
-    def clear(self):
-        """Limpia el checkpoint (llamar despues de guardar config oficial)."""
-        clear_checkpoint()
+    def _tick(self):
+        self.save_if_dirty()
+        self._job = self._app.after(self._interval_ms, self._tick)
 
-    def _schedule(self):
-        """Programa el siguiente checkpoint."""
-        self._save_now()
-        self._job = self._app.after(self._interval_ms, self._schedule)
+    def mark_clean(self, clear=True):
+        """El estado actual quedó guardado o recién cargado: no hay checkpoint hasta el próximo cambio."""
+        self._clean = self._fingerprint(self.capture_state())
+        if clear:
+            clear_checkpoint(self._app._output_config)
 
-    def _save_now(self):
-        """Captura y guarda el estado actual de la app."""
+    def save_if_dirty(self):
         try:
-            state = self._capture_state()
-            save_checkpoint(state)
-        except Exception as e:
-            log.warning("Error en autosave: %s", e)
-
-    def _capture_state(self):
-        """Extrae el estado relevante de la aplicacion."""
-        app = self._app
-        state = {
-            "current_step": app.current_step,
-            "video_path": app.video_path,
-            "counting_mode": app.counting_mode.get(),
-            "exclusion_zones": dict(app.exclusion_zones),
-            "zones": dict(app.zones),
-            "counting_lines": {
-                name: [list(p) for p in pts]
-                for name, pts in app.counting_lines.items()
-            },
-            "conf_threshold": app.conf_threshold.get(),
-            "infer_imgsz": app.infer_imgsz.get(),
-            "min_area": app.min_area.get(),
-            "max_area": app.max_area.get(),
-            "vehicle_samples": app.vehicle_samples,
-            "slice_w": app.slice_w.get(),
-            "slice_h": app.slice_h.get(),
-            "overlap": app.overlap.get(),
-            "nms_threshold": app.nms_threshold.get(),
-            "max_age": app.max_age.get(),
-            "min_hits": app.min_hits.get(),
-            "iou_thresh": app.iou_thresh.get(),
-            "conf_car": app.conf_car.get(),
-            "conf_motorbike": app.conf_motorbike.get(),
-            "conf_bus": app.conf_bus.get(),
-            "conf_truck": app.conf_truck.get(),
-        }
-        return state
+            state = self.capture_state()
+            if self._fingerprint(state) == self._clean:
+                return False
+            save_checkpoint(self._app._output_config, state)
+            return True
+        except Exception as error:
+            log.warning("Error en autosave: %s", error)
+            return False
 
     @staticmethod
-    def restore_state(app, state):
-        """Restaura el estado desde un checkpoint al app.
+    def _fingerprint(state):
+        return json.dumps({k: v for k, v in state.items() if k != "current_step"}, sort_keys=True, default=str)
 
-        Args:
-            app: SetupApp instance
-            state: dict del checkpoint
-        """
-        if "exclusion_zones" in state:
-            app.exclusion_zones = state["exclusion_zones"]
-            app._invalidate_excl_cache()
-            app._refresh_excl_list()
+    def capture_state(self):
+        app = self._app
+        state = dict(
+            current_step=app.current_step, video_path=app.video_path, model_path=app._model_path,
+            counting_mode=app.counting_mode.get(),
+            exclusion_zones=_geometry(app.exclusion_zones), zones=_geometry(app.zones),
+            counting_lines=_geometry(app.counting_lines), directions=_geometry(app.directions),
+            vehicle_samples=[dict(sample, bbox=list(sample["bbox"])) for sample in app.vehicle_samples],
+            sample_constraints=app._loaded_sample_constraints,
+            conf_per_class_modified=app._conf_per_class_modified,
+        )
+        state.update({name: getattr(app, name).get() for name in self.SCALAR_VARS})
+        return state
 
-        if "counting_mode" in state:
-            app.counting_mode.set(state["counting_mode"])
-            app._set_counting_mode(state["counting_mode"])
-
-        if "zones" in state:
-            app.zones = state["zones"]
-
-        if "counting_lines" in state:
-            app.counting_lines = state["counting_lines"]
-
-        app._refresh_zones_list()
-
-        # Restore scalar values
-        _set = lambda var, key: var.set(state[key]) if key in state else None
-        _set(app.conf_threshold, "conf_threshold")
-        _set(app.infer_imgsz, "infer_imgsz")
-        _set(app.min_area, "min_area")
-        _set(app.max_area, "max_area")
-        _set(app.slice_w, "slice_w")
-        _set(app.slice_h, "slice_h")
-        _set(app.overlap, "overlap")
-        _set(app.nms_threshold, "nms_threshold")
-        _set(app.max_age, "max_age")
-        _set(app.min_hits, "min_hits")
-        _set(app.iou_thresh, "iou_thresh")
-        _set(app.conf_car, "conf_car")
-        _set(app.conf_motorbike, "conf_motorbike")
-        _set(app.conf_bus, "conf_bus")
-        _set(app.conf_truck, "conf_truck")
-
-        if "vehicle_samples" in state:
-            app.vehicle_samples = state["vehicle_samples"]
-
-        # Navigate to the step the user was on
-        step = state.get("current_step", 0)
-        app._activate_step(step)
+    @classmethod
+    def restore_state(cls, app, state):
+        """Reemplaza por completo geometría y parámetros con los del checkpoint."""
+        app.exclusion_zones = _geometry(state.get("exclusion_zones", {}))
+        app.zones = _geometry(state.get("zones", {}))
+        app.counting_lines = _geometry(state.get("counting_lines", {}))
+        app.directions = _geometry(state.get("directions", {}))
+        app._invalidate_excl_cache()
+        app._refresh_excl_list()
+        app._conf_per_class_modified = state.get("conf_per_class_modified", app._conf_per_class_modified)
+        for name in cls.SCALAR_VARS:
+            if name in state:
+                getattr(app, name).set(state[name])
+        app.vehicle_samples = list(state.get("vehicle_samples", []))
+        app._loaded_sample_constraints = state.get("sample_constraints")
+        app.lbl_min_area.config(text=f"{app.min_area.get()} px²")
+        app.lbl_max_area.config(text=f"{app.max_area.get()} px²")
+        app._update_samples_label()
+        mode = state.get("counting_mode", "zones")
+        app.counting_mode.set(mode)
+        app._set_counting_mode(mode)
+        app._activate_step(state.get("current_step", 0))
         app._redraw_zones()
-
-        log.info("Estado restaurado desde checkpoint (paso %d)", step)
+        log.info("Estado restaurado desde checkpoint")

@@ -17,7 +17,7 @@ from tkinter import messagebox
 import os
 
 from carcounter.paths import paths
-from carcounter.autosave import AutoSaveManager, has_checkpoint, load_checkpoint, get_checkpoint_age
+from carcounter.autosave import AutoSaveManager, usable_checkpoint
 
 from setup_panels.canvas import CanvasMixin
 from setup_panels.video_model import VideoModelMixin
@@ -73,8 +73,8 @@ class SetupApp(CanvasMixin, VideoModelMixin, ConfigLoaderMixin, ExclusionMixin,
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.bind("<Control-z>", lambda e: self._undo_last_point())
         self._load_video_and_model()
-        self._check_autosave_checkpoint()
-        self._autosave.start()
+        # after_idle corre al entrar a mainloop, ya con el --config cargado
+        self.after_idle(self._check_autosave_checkpoint)
 
     # ──────────────────────────────────────────────
     # UI principal
@@ -142,7 +142,7 @@ class SetupApp(CanvasMixin, VideoModelMixin, ConfigLoaderMixin, ExclusionMixin,
         self.canvas.bind("<MouseWheel>", self._on_zoom)
         self.canvas.bind("<Button-4>", self._on_zoom)
         self.canvas.bind("<Button-5>", self._on_zoom)
-        self.canvas.bind("<Configure>", lambda e: self._redraw())
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
         self.bind_all("<KeyPress-space>", self._enter_pan_mode)
         self.bind_all("<KeyRelease-space>", self._exit_pan_mode)
         self.bind_all("<Escape>", self._on_escape)
@@ -169,22 +169,17 @@ class SetupApp(CanvasMixin, VideoModelMixin, ConfigLoaderMixin, ExclusionMixin,
     # Navegación entre pasos
     # ──────────────────────────────────────────────
     def _check_autosave_checkpoint(self):
-        """Ofrece restaurar desde checkpoint si existe."""
-        if not has_checkpoint():
-            return
-        age = get_checkpoint_age()
-        if age is None or age > 86400:  # > 24h, ignorar
-            return
-        age_str = f"{int(age // 60)} min" if age < 3600 else f"{int(age // 3600)}h"
-        if messagebox.askyesno(
-            "Sesion anterior",
-            f"Se encontro un checkpoint de hace {age_str}.\n"
-            "¿Restaurar la sesion anterior?",
-        ):
-            state = load_checkpoint()
-            if state:
-                AutoSaveManager.restore_state(self, state)
-                self.status_var.set("Sesion restaurada desde checkpoint")
+        """Ofrece restaurar el checkpoint de este perfil y video; si se rechaza, se descarta."""
+        state = usable_checkpoint(self._output_config, self.video_path)
+        restore = state is not None and messagebox.askyesno(
+            "Sesión anterior",
+            f"Hay cambios sin guardar de {os.path.basename(self._output_config)} "
+            "de una sesión anterior.\n\n¿Restaurarlos? Reemplazan la geometría y los parámetros cargados.")
+        self._autosave.mark_clean(clear=not restore)
+        if restore:
+            AutoSaveManager.restore_state(self, state)
+            self.status_var.set("Sesión restaurada desde el checkpoint (aún sin guardar)")
+        self._autosave.start()
 
     def _on_close(self):
         self._autosave.stop()
@@ -210,25 +205,15 @@ class SetupApp(CanvasMixin, VideoModelMixin, ConfigLoaderMixin, ExclusionMixin,
         panels[idx].pack(fill="both", expand=True)
         self._sidebar_canvas.yview_moveto(0)
 
-        if idx == 0:
-            self.canvas.config(cursor="crosshair")
-            self.calib_drawing = False
-            self.zone_drawing = False
-            self.line_drawing = False
-            self.excl_drawing = False
-        elif idx == 1:
-            self.canvas.config(cursor="crosshair")
-            self.calib_drawing = False
-            self.zone_drawing = False
-        elif idx == 2:
-            self.canvas.config(cursor="crosshair")
-            self.calib_drawing = False
-            self.zone_drawing = False
+        # Cambiar de pestaña cancela el dibujo a medias; el elemento original sigue intacto
+        self.calib_drawing = self.zone_drawing = self.excl_drawing = False
+        self.line_drawing = self.direction_drawing = False
+        self.current_zone_pts, self.excl_current_pts = [], []
+        self.line_start = self.direction_start = None
+        self.canvas.config(cursor="arrow" if idx == 3 else "crosshair")
+        if idx == 2:
             self._redraw_zones()
         elif idx == 3:
-            self.canvas.config(cursor="arrow")
-            self.zone_drawing = False
-            self.calib_drawing = False
             self._update_tile_preview()
 
         self._redraw()
