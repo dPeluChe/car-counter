@@ -94,6 +94,12 @@ def init_state(app, *, video_path: str, model_path: str, output_config: str):
     app._preview_cap = None
     app._preview_frame_idx = 0
     app._preview_show_detections = False
+    app._preview_last_frame = None
+
+    # Nombre fijado al empezar cada dibujo: el original solo se reemplaza al cerrar el nuevo
+    app._zone_draw_name = app._excl_draw_name = None
+    app._line_draw_name = app._direction_draw_name = None
+    app._fit_pending = True
 
     # SAHI / tracker
     app.sahi_enabled = tk.BooleanVar(value=False)

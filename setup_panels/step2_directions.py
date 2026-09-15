@@ -17,11 +17,10 @@ class DirectionsMixin:
         if not name:
             messagebox.showwarning("Dirección", "Escribe un nombre para la dirección.")
             return
-        if name in self.directions:
-            if not messagebox.askyesno("Dirección existe",
-                                        f"La dirección '{name}' ya existe. ¿Sobreescribir?"):
-                return
-            del self.directions[name]
+        if name in self.directions and not messagebox.askyesno(
+                "Dirección existe", f"La dirección '{name}' ya existe. ¿Reemplazarla al terminar la nueva?"):
+            return
+        self._direction_draw_name = name
         self.direction_drawing = True
         self.direction_start = None
         self.canvas.config(cursor="crosshair")
@@ -30,7 +29,7 @@ class DirectionsMixin:
         )
 
     def _finish_direction(self, ix, iy):
-        name = self.current_direction_name.get().strip()
+        name = self._direction_draw_name
         self.directions[name] = [list(self.direction_start), [ix, iy]]
         self.direction_drawing = False
         self.direction_start = None
@@ -42,7 +41,7 @@ class DirectionsMixin:
 
     def _delete_selected_direction(self):
         sel = self.zones_listbox.curselection()
-        if not sel:
+        if self.counting_mode.get() != "directions" or not sel:
             messagebox.showinfo("Eliminar", "Selecciona una dirección de la lista.")
             return
         name = list(self.directions.keys())[sel[0]]
