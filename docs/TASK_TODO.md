@@ -14,6 +14,8 @@
 | 4 | TODO-031 | Perfil de rutas completas y video de evidencia |
 | Condicional P0 | TODO-029 | Geometría coherente cuando se mueve la cámara |
 | En paralelo con pruebas humanas | TODO-033 | Configurador utilizable y parámetros persistentes |
+| Después de TODO-033 | TODO-037 | Rediseño del flujo de configurador y wizard (fase B) |
+| Después de TODO-028 | TODO-038 | Costo de SAHI por tile sin cambiar clases ni aforo |
 | Después de exactitud | TODO-023 / TODO-024 | Rendimiento y formatos con beneficio medido |
 | Operación opcional | TODO-034 | Cron activado y verificado desde entorno permitido |
 | Opcional | TODO-036 | Replay y control de cámara desde el wizard |
@@ -172,7 +174,7 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 
 **Hallazgo:** SAHI reescala cada tile a `settings.imgsz` (1600 por defecto), así que un tile de 512 se amplía 3.1x. `carcounter/detection.py:detect_objects` reasigna `sahi_model.image_size` en cada frame y le gana a lo que fija `carcounter/runtime.py:load_sahi`.
 
-**Medido** (`glorieta_test1min`, VisDrone, tile 512, overlap 0.2, conf 0.10, una corrida por configuración, las tres seguidas en la misma sesión):
+**Medido** (`glorieta_test1min`, VisDrone, tile 512, overlap 0.2, conf 0.10, una corrida por configuración, las tres seguidas en la misma sesión). Detalle, método y límites: [SAHI_IMAGE_SIZE_2026_09_15.md](RESEARCH/SAHI_IMAGE_SIZE_2026_09_15.md).
 
 | `image_size` | Frame completo | Tramo de 300 frames con ROI | Eventos | Ligeros | Pesados |
 |---|---|---|---|---|---|

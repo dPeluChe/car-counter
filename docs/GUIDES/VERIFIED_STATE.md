@@ -1,6 +1,6 @@
 # Estado verificado del flujo
 
-Revisión: 2026-09-14. Fuentes: código local, suite de pruebas y artefactos indicados. Implementado no significa validado en producción.
+Revisión: 2026-09-15. Fuentes: código local, suite de pruebas y artefactos indicados. Implementado no significa validado en producción.
 
 ## Capacidades y evidencia
 
@@ -15,6 +15,7 @@ Revisión: 2026-09-14. Fuentes: código local, suite de pruebas y artefactos ind
 | Evaluación | Cajas por IoU/clase; eventos por ruta, clase y tiempo | Pruebas con errores controlados. Emparejar eventos no prueba identidad física del auto |
 | Cámara | ORB/RANSAC opcional; detiene si hay deriva excesiva o estimación no fiable. `segment_video.py` divide el video en tramos estables | Tramo estable de 60 frames aprobado; otra ejecución detenida en frame 228. Tramos de `glorieta_normal.mp4` medidos con 10 px ([detalle](COUNTING_SCOPE.md#tramos-de-cámara-estable)). No estabiliza video ni geometría |
 | Replay | Caché SQLite de cajas previas a filtros/tracking, firma y cierre completo | Comparaciones de eventos y trayectorias. Evita inferencia; sus FPS no son FPS del detector |
+| Wizard | `python -m carcounter` elige video, modelo y perfil, abre el configurador como subproceso, valida el perfil con `AppConfig.validate()` antes de correr y deja carpeta por corrida (video, JSON, tracks, OD, log) | Prueba dinámica con ventanas ocultas y subproceso simulado; los subprocesos se lanzan con `start_new_session=True` y "Cancelar" cierra el grupo. Sin validar en escritorio; no expone todavía las opciones de corrida de `main.py` (TODO-036) |
 | Automatización | Instalador de cron y consulta de cuota | Pruebas simuladas de condiciones. Cron no instalado; consulta real bloqueada al iniciar estado local de Codex |
 
 ## Caso reproducible local

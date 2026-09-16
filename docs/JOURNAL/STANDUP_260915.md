@@ -35,3 +35,23 @@ Continúa [STANDUP_260914.md](STANDUP_260914.md).
 8. Grabar una vez la caché de 1799 frames con ese perfil.
 9. PRUEBA-06: variantes de zonas con replay, `make review-tracks` con origen confirmado y referencia de 1799 frames.
 10. PRUEBA-08: registro de incidencias desde el paso 1.
+
+## Cierre del día: pulido del flujo de UI (PR #13)
+
+Antes de empezar las pruebas se revisó el flujo completo de UI, que no se había tocado. Salió en dos tandas: fase A (defectos de pérdida de datos, dibujo, autosave y lanzamiento) y ronda 2 sobre los cuatro reportes de simplify, con dos agentes en worktrees y los commits desde la sesión coordinadora.
+
+### Qué cambió
+
+- **Configurador:** ROI de inferencia editable desde la GUI (antes solo a mano en el JSON, y una zona fuera de la ROI contaba cero sin avisar); `--model` explícito ya no lo pisa el perfil; un perfil sin `sahi.enabled` ya no enciende SAHI; los valores por defecto de tracker y SAHI salen del esquema; `conf_per_class` solo escribe clases que el modelo puede emitir.
+- **Wizard:** "Ejecutar" valida el perfil antes de gastar una corrida; sin perfil preseleccionado; resumen de perfil en el Paso 3; "Cancelar" también cierra un configurador colgado.
+- **Compartido:** `carcounter/process_utils.py` con cierre por grupo de procesos, usado también por el cron.
+
+### Hallazgos
+
+- **Preview congelado:** la inferencia corría en el hilo de Tk, 1186 a 1653 ms por tick. Ahora corre en un hilo y el tick baja a 3.6 ms; las cajas van uno o dos segundos atrasadas, que es el precio aceptado.
+- **Costo de SAHI:** reescala cada tile a `imgsz` (1600), 73.6 s por el tramo de 300 frames. Bajarlo a 640 corre 3.7x más rápido pero reasigna clases y el aforo pasa de 3 ligeros y 2 pesados a 5 y 1. No se cambió el default; queda en TODO-038 con [informe](../RESEARCH/SAHI_IMAGE_SIZE_2026_09_15.md).
+- **Corrección a lo anotado arriba:** el NMS por clase solo aplica a la ruta sin SAHI. Con SAHI, `geometry.apply_nms` suprime por IoU sin mirar la clase, así que ese duplicado no sobrevive por ahí.
+
+### Estado
+
+Suite en 395 pruebas y probe de ventana oculta 16 de 16. La verificación en escritorio sigue pendiente y es el paso 5 de la lista de arriba, ahora con los puntos de la ronda 2 añadidos en TODO-033.
