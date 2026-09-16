@@ -10,32 +10,54 @@ from carcounter.runtime import resolve_runtime_config
 from types import SimpleNamespace
 
 
+def profile_inference_params(app):
+    """Lee el perfil desde las variables de Tk; solo se puede llamar en el hilo de Tk."""
+    config = app._build_current_config()
+    cfg = resolve_runtime_config(config, SimpleNamespace(
+        detector="yolo", video=None, model=None, imgsz=None))
+    use_sahi = config["sahi"]["enabled"]
+    sahi_model = app._ensure_sahi_model(cfg["effective_conf"]) if use_sahi else None
+    predict_fn = None
+    if use_sahi:
+        from sahi.predict import get_sliced_prediction
+        predict_fn = get_sliced_prediction
+    return {
+        "cfg": cfg, "use_sahi": use_sahi, "sahi_model": sahi_model,
+        "predict_fn": predict_fn, "model": app.model,
+        "exclusion_np": {name: np.asarray(pts, dtype=np.int32)
+                         for name, pts in app.exclusion_zones.items()},
+    }
+
+
+def infer_with_params(frame, params):
+    """Inferencia pura: no toca Tk, asi que puede correr en otro hilo."""
+    cfg = params["cfg"]
+    raw = detect_objects(
+        frame, model=params["model"], effective_conf=cfg["effective_conf"],
+        imgsz=cfg["imgsz"], use_sahi=params["use_sahi"], sahi_model=params["sahi_model"],
+        sahi_predict_fn=params["predict_fn"], sahi_slice_w=cfg["sahi_slice_w"],
+        sahi_slice_h=cfg["sahi_slice_h"], sahi_overlap=cfg["sahi_overlap"],
+        sahi_nms_threshold=cfg["sahi_nms"],
+        inference_roi=cfg["settings"].get("inference_roi"),
+    )
+    rows, classes = filter_detections(
+        raw, lambda name: cfg["conf_per_class"].get(name, cfg["conf_threshold"]),
+        cfg["geo_constraints"], params["exclusion_np"],
+    )
+    return [dict(bbox=tuple(map(int, row[:4])), conf=float(row[4]), cls_name=name)
+            for row, name in zip(rows, classes)]
+
+
 class CalibTestsMixin:
+    def _profile_inference_params(self):
+        return profile_inference_params(self)
+
+    @staticmethod
+    def _infer_with_params(frame, params):
+        return infer_with_params(frame, params)
+
     def _predict_current_profile(self, frame):
-        config = self._build_current_config()
-        cfg = resolve_runtime_config(config, SimpleNamespace(
-            detector="yolo", video=None, model=None, imgsz=None))
-        use_sahi = config["sahi"]["enabled"]
-        sahi_model = self._ensure_sahi_model(cfg["effective_conf"]) if use_sahi else None
-        predict_fn = None
-        if use_sahi:
-            from sahi.predict import get_sliced_prediction
-            predict_fn = get_sliced_prediction
-        raw = detect_objects(
-            frame, model=self.model, effective_conf=cfg["effective_conf"],
-            imgsz=cfg["imgsz"], use_sahi=use_sahi, sahi_model=sahi_model,
-            sahi_predict_fn=predict_fn, sahi_slice_w=cfg["sahi_slice_w"],
-            sahi_slice_h=cfg["sahi_slice_h"], sahi_overlap=cfg["sahi_overlap"],
-            sahi_nms_threshold=cfg["sahi_nms"],
-            inference_roi=cfg["settings"].get("inference_roi"),
-        )
-        rows, classes = filter_detections(
-            raw, lambda name: cfg["conf_per_class"].get(name, cfg["conf_threshold"]),
-            cfg["geo_constraints"],
-            {name: np.asarray(pts, dtype=np.int32) for name, pts in self.exclusion_zones.items()},
-        )
-        return [dict(bbox=tuple(map(int, row[:4])), conf=float(row[4]), cls_name=name)
-                for row, name in zip(rows, classes)]
+        return infer_with_params(frame, profile_inference_params(self))
 
     def _run_global_detection_test(self):
         if self.model is None:
@@ -66,7 +88,7 @@ class CalibTestsMixin:
                     min(self.calib_rect_start[1], self.calib_rect_end[1]),
                     max(self.calib_rect_start[0], self.calib_rect_end[0]),
                     max(self.calib_rect_start[1], self.calib_rect_end[1]))
-        self.calib_test_passed = self.calib_confirmed = False
+        self.calib_test_passed = False
         self.config(cursor="watch")
         self.btn_yolo_test.config(state="disabled")
         self.update_idletasks()
@@ -97,7 +119,7 @@ class CalibTestsMixin:
         self.update_idletasks()
         cap = cv2.VideoCapture(self.video_path)
         matched = 0
-        self.calib_test_passed = self.calib_confirmed = False
+        self.calib_test_passed = False
         try:
             for frame_number in sorted({sample["frame"] for sample in samples}):
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)

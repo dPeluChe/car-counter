@@ -1,13 +1,6 @@
-"""Mixin de preview de zonas/video para el Paso 2.
+"""Mixin de preview de zonas/video para el Paso 2."""
 
-Metodos extraidos de step2_zones.py para dejar ese archivo mas focalizado
-en la logica de zonas + construccion del panel compartido.
-
-Metodos:
-  - _toggle_zone_preview / _start_zone_preview / _stop_zone_preview
-  - _zone_preview_tick (loop de reproduccion con overlay)
-  - _toggle_yolo_preview (toggle de deteccion en preview)
-"""
+import threading
 
 import cv2
 import numpy as np
@@ -29,6 +22,7 @@ class PreviewMixin:
             self.status_var.set("⚠ Termina o cancela (Escape) el dibujo actual antes de reproducir.")
             return
         self._preview_last_frame = None
+        self._preview_detections = []
         self._preview_playing = True
         self._preview_frame_idx = self.current_frame_idx
         self._preview_cap = cv2.VideoCapture(self.video_path)
@@ -73,7 +67,9 @@ class PreviewMixin:
             self._preview_frame_idx += 1
             base = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             if self._preview_show_detections and self.model is not None:
-                self._draw_detections_on_preview(base, frame)
+                self._request_preview_detections(frame)
+                self._report_preview_error()
+                self._draw_detections_on_preview(base)
             self._overlay_zones_on_preview(base)
         except Exception as error:
             self._stop_zone_preview()
@@ -88,9 +84,49 @@ class PreviewMixin:
         )
         self._preview_job = self.after(80, self._zone_preview_tick)
 
-    def _draw_detections_on_preview(self, base_rgb, frame_bgr):
-        """Corre YOLO sobre el frame y dibuja detecciones en el preview RGB."""
-        for det in self._predict_current_profile(frame_bgr):
+    def _request_preview_detections(self, frame_bgr):
+        """Inferir tarda cientos de ms: va en un hilo para no congelar la ventana.
+
+        El hilo solo escribe atributos, nunca toca widgets; el dibujo usa las
+        ultimas cajas listas, asi que pueden ir uno o dos frames atrasadas.
+        """
+        if self._preview_infer_busy:
+            return
+        snapshot = frame_bgr.copy()
+        try:
+            # Leer el perfil toca variables de Tk: va aqui, no en el hilo
+            params = self._profile_inference_params()
+        except Exception as error:
+            self._preview_error = error
+            return
+        self._preview_infer_busy = True
+
+        def work():
+            detections, failure = [], None
+            try:
+                detections = self._infer_with_params(snapshot, params)
+            except Exception as error:
+                failure = error
+            finally:
+                # Solo atributos: el aviso lo muestra el tick, que si corre en el hilo de Tk
+                self._preview_detections = detections
+                self._preview_error = failure
+                self._preview_infer_busy = False
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _report_preview_error(self):
+        """Si el hilo fallo, apaga las detecciones y avisa; el video sigue reproduciendose."""
+        if self._preview_error is None:
+            return
+        error, self._preview_error = self._preview_error, None
+        self._preview_show_detections = False
+        self.btn_det_toggle.config(text="🔍  Detecciones YOLO: OFF", fg="#6C7086")
+        self.status_var.set(f"⚠ Detecciones apagadas por un error: {error}")
+
+    def _draw_detections_on_preview(self, base_rgb):
+        """Dibuja en el preview RGB las ultimas detecciones que alcanzo a calcular el hilo."""
+        for det in self._preview_detections:
             x1, y1, x2, y2 = det["bbox"]
             label = f"{det['cls_name']} {det['conf']:.2f}"
             cv2.rectangle(base_rgb, (x1, y1), (x2, y2), (255, 200, 50), 2)

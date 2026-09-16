@@ -45,7 +45,7 @@ def build_config(*, counting_mode, exclusion_zones, zones, counting_lines, direc
                  conf_per_class, conf_per_class_modified,
                  slice_w, slice_h, overlap, nms_threshold,
                  max_age, min_hits, iou_threshold,
-                 video_path, model_path, loaded_config=None):
+                 video_path, model_path, loaded_config=None, inference_roi=None):
     """Construye el dict de configuracion para guardar."""
     config = {
         "counting_mode": counting_mode,
@@ -96,6 +96,12 @@ def build_config(*, counting_mode, exclusion_zones, zones, counting_lines, direc
             for key, val in loaded.items():
                 if key not in config.get(section, {}):
                     config.setdefault(section, {})[key] = val
+
+    # Va despues de preservar campos extra: quitar la ROI en la UI tiene que ganarle al perfil cargado
+    if inference_roi:
+        config["settings"]["inference_roi"] = [int(v) for v in inference_roi]
+    else:
+        config["settings"].pop("inference_roi", None)
 
     return config
 

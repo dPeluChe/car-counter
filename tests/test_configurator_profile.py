@@ -2,16 +2,20 @@ import time
 
 from carcounter import autosave
 from carcounter.config_io import build_config, parse_directions, parse_settings
-from setup_panels.geometry_checks import elements_outside_roi, inference_roi
+from carcounter.geometry import inference_roi
+from setup_panels.geometry_checks import elements_outside_roi
+from setup_panels.state import SCALAR_VARS
+from setup_panels.step3_sahi import conf_per_class
 
 
-def _config(directions, sample_constraints):
+def _config(directions, sample_constraints, inference_roi=None, loaded_config=None):
     return build_config(
         counting_mode="directions", exclusion_zones={}, zones={}, counting_lines={},
         directions=directions, min_area=120, max_area=4000, conf_threshold=0.2, imgsz=1600,
         sample_constraints=sample_constraints, sample_count=6, conf_per_class={}, conf_per_class_modified=False,
         slice_w=512, slice_h=512, overlap=0.2, nms_threshold=0.5, max_age=30, min_hits=3, iou_threshold=0.3,
-        video_path="video.mp4", model_path="model.pt", loaded_config=None)
+        video_path="video.mp4", model_path="model.pt", loaded_config=loaded_config,
+        inference_roi=inference_roi)
 
 
 def test_round_trip_keeps_directions_and_sample_filters():
@@ -57,3 +61,30 @@ def test_elements_outside_roi():
     assert elements_outside_roi(None, zones, lines) == []
     assert inference_roi({"settings": {"inference_roi": roi}}) == roi
     assert inference_roi(None) is None
+
+
+def test_inference_roi_round_trip_and_removal():
+    roi = [10, 20, 100, 200]
+    saved = _config({}, None, inference_roi=roi)
+    assert saved["settings"]["inference_roi"] == roi
+    assert inference_roi(saved) == roi
+
+    # Quitar la ROI en la UI le gana al perfil cargado: si no, seguiria recortando la inferencia
+    cleared = _config({}, None, inference_roi=None, loaded_config=saved)
+    assert "inference_roi" not in cleared["settings"]
+    assert inference_roi(cleared) is None
+
+
+def test_conf_per_class_uses_only_classes_del_modelo():
+    values = {"car": 0.3, "motorbike": 0.4, "van": 0.2}
+    # VisDrone nombra "motor"; el alias solo entra si el checkpoint lo tiene
+    assert conf_per_class(values, {"car", "motor"}) == {"car": 0.3, "motor": 0.4}
+    assert conf_per_class(values, {"car", "motorcycle", "van"}) == {"car": 0.3, "motorcycle": 0.4, "van": 0.2}
+    assert conf_per_class({"truck": 0.5}, {"car"}) == {}
+    # Sin modelo cargado no se inventan alias
+    assert conf_per_class(values) == values
+
+
+def test_autosave_scalar_vars_vienen_de_state():
+    assert autosave.SCALAR_VARS is SCALAR_VARS
+    assert "fuse_score" in SCALAR_VARS and "sahi_enabled" in SCALAR_VARS

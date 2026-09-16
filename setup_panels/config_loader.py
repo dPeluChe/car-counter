@@ -6,6 +6,7 @@ from tkinter import messagebox
 from carcounter.config_io import (
     load_config, parse_directions, parse_exclusion_zones, parse_lines, parse_settings, parse_zones,
 )
+from carcounter.geometry import inference_roi
 
 
 class ConfigLoaderMixin:
@@ -20,7 +21,7 @@ class ConfigLoaderMixin:
         self._loaded_config = cfg
 
         cfg_model = cfg.get("model_path")
-        if cfg_model and cfg_model != self._model_path:
+        if cfg_model and cfg_model != self._model_path and not self._model_override:
             try:
                 self._on_model_selected(os.path.basename(cfg_model), cfg_model)
             except Exception as error:
@@ -31,8 +32,11 @@ class ConfigLoaderMixin:
                     "Modelo del perfil",
                     f"No se pudo cargar {cfg_model}:\n{error}\n\n"
                     "Se cargan igual la geometría y los parámetros. Elige un modelo en [Modelos] para probar detección.")
-        self.sahi_enabled.set(cfg.get("sahi", {}).get("enabled", True))
+        # Un perfil que no dice nada de SAHI lo deja apagado: encenderlo solo multiplica el costo por tile
+        self.sahi_enabled.set(cfg.get("sahi", {}).get("enabled", False))
         self.vehicle_samples = cfg.get("settings", {}).get("vehicle_samples", [])
+        self.inference_roi = inference_roi(cfg)
+        self._update_roi_label()
 
         cfg_video = cfg.get("video_path", "")
         if cfg_video and cfg_video != self.video_path \

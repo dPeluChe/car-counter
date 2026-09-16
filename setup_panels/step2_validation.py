@@ -6,7 +6,7 @@ from tkinter import messagebox
 import cv2
 import numpy as np
 
-from setup_panels.geometry_checks import elements_outside_roi, inference_roi
+from setup_panels.geometry_checks import elements_outside_roi
 
 
 class ZoneValidationMixin:
@@ -67,7 +67,7 @@ class ZoneValidationMixin:
         # Aviso no bloqueante: fuera de la ROI no hay detecciones y ese elemento no contará
         elements = {"zones": (self.zones, None, None), "lines": (None, self.counting_lines, None),
                     "directions": (None, None, self.directions)}[mode]
-        outside = elements_outside_roi(inference_roi(self._loaded_config), *elements)
+        outside = elements_outside_roi(self.inference_roi, *elements)
         if outside:
             return True, "Fuera de la ROI de inferencia (no detectará ahí): " + ", ".join(outside)
         return True, ""

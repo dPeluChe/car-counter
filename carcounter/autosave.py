@@ -15,6 +15,14 @@ AUTOSAVE_DIR = Path(__file__).resolve().parent.parent / "config"
 AUTOSAVE_INTERVAL_MS = 30_000
 CHECKPOINT_TTL_S = 86400
 
+# Variables escalares de Tk que se guardan y restauran; setup_panels/state.py las crea leyendo esta lista
+SCALAR_VARS = (
+    "conf_threshold", "infer_imgsz", "min_area", "max_area", "slice_w", "slice_h", "overlap",
+    "nms_threshold", "max_age", "min_hits", "iou_thresh", "conf_car", "conf_motorbike", "conf_bus",
+    "conf_truck", "conf_van", "sahi_enabled", "track_low_thresh", "track_high_thresh",
+    "new_track_thresh", "track_buffer", "fuse_score",
+)
+
 
 def checkpoint_path(profile_path):
     """Un archivo por perfil: evita mezclar geometría de perfiles o videos distintos."""
@@ -56,13 +64,6 @@ def _geometry(elements):
 
 class AutoSaveManager:
     """Autosave periódico integrado con Tkinter."""
-
-    SCALAR_VARS = (
-        "conf_threshold", "infer_imgsz", "min_area", "max_area", "slice_w", "slice_h", "overlap",
-        "nms_threshold", "max_age", "min_hits", "iou_thresh", "conf_car", "conf_motorbike", "conf_bus",
-        "conf_truck", "conf_van", "sahi_enabled", "track_low_thresh", "track_high_thresh",
-        "new_track_thresh", "track_buffer", "fuse_score",
-    )
 
     def __init__(self, app, interval_ms=AUTOSAVE_INTERVAL_MS):
         self._app = app
@@ -114,8 +115,9 @@ class AutoSaveManager:
             vehicle_samples=[dict(sample, bbox=list(sample["bbox"])) for sample in app.vehicle_samples],
             sample_constraints=app._loaded_sample_constraints,
             conf_per_class_modified=app._conf_per_class_modified,
+            inference_roi=list(app.inference_roi) if app.inference_roi else None,
         )
-        state.update({name: getattr(app, name).get() for name in self.SCALAR_VARS})
+        state.update({name: getattr(app, name).get() for name in SCALAR_VARS})
         return state
 
     @classmethod
@@ -128,7 +130,9 @@ class AutoSaveManager:
         app._invalidate_excl_cache()
         app._refresh_excl_list()
         app._conf_per_class_modified = state.get("conf_per_class_modified", app._conf_per_class_modified)
-        for name in cls.SCALAR_VARS:
+        roi = state.get("inference_roi")
+        app.inference_roi = [int(v) for v in roi] if roi else None
+        for name in SCALAR_VARS:
             if name in state:
                 getattr(app, name).set(state[name])
         app.vehicle_samples = list(state.get("vehicle_samples", []))

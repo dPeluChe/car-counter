@@ -125,6 +125,8 @@ class SetupApp(CanvasMixin, VideoModelMixin, ConfigLoaderMixin, ExclusionMixin,
             scrollregion=self._sidebar_canvas.bbox("all")))
         self._sidebar_canvas.bind("<Configure>", lambda event: self._sidebar_canvas.itemconfigure(
             sidebar_window, width=event.width))
+        sidebar_wrap.bind("<Enter>", lambda event: self._bind_sidebar_wheel(True))
+        sidebar_wrap.bind("<Leave>", lambda event: self._bind_sidebar_wheel(False))
 
         # Canvas
         canvas_wrap = tk.Frame(self.content, bg="#1E1E2E")
@@ -159,6 +161,18 @@ class SetupApp(CanvasMixin, VideoModelMixin, ConfigLoaderMixin, ExclusionMixin,
         self._build_panel_sahi()     # Paso 3
         self._activate_step(0)
 
+    def _bind_sidebar_wheel(self, active):
+        """La rueda sobre el panel lateral lo desplaza; sobre el canvas del video sigue haciendo zoom."""
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            if active:
+                self.bind_all(sequence, self._on_sidebar_scroll)
+            else:
+                self.unbind_all(sequence)
+
+    def _on_sidebar_scroll(self, event):
+        up = getattr(event, "delta", 0) > 0 or getattr(event, "num", None) == 4
+        self._sidebar_canvas.yview_scroll(-1 if up else 1, "units")
+
     def _lbl(self, parent, text, bold=False, color="#A6ADC8"):
         font = ("Arial", 9, "bold") if bold else ("Arial", 9)
         tk.Label(parent, text=text, bg="#181825", fg=color,
@@ -170,16 +184,19 @@ class SetupApp(CanvasMixin, VideoModelMixin, ConfigLoaderMixin, ExclusionMixin,
     # ──────────────────────────────────────────────
     def _check_autosave_checkpoint(self):
         """Ofrece restaurar el checkpoint de este perfil y video; si se rechaza, se descarta."""
-        state = usable_checkpoint(self._output_config, self.video_path)
-        restore = state is not None and messagebox.askyesno(
-            "Sesión anterior",
-            f"Hay cambios sin guardar de {os.path.basename(self._output_config)} "
-            "de una sesión anterior.\n\n¿Restaurarlos? Reemplazan la geometría y los parámetros cargados.")
-        self._autosave.mark_clean(clear=not restore)
-        if restore:
-            AutoSaveManager.restore_state(self, state)
-            self.status_var.set("Sesión restaurada desde el checkpoint (aún sin guardar)")
-        self._autosave.start()
+        try:
+            state = usable_checkpoint(self._output_config, self.video_path)
+            restore = state is not None and messagebox.askyesno(
+                "Sesión anterior",
+                f"Hay cambios sin guardar de {os.path.basename(self._output_config)} "
+                "de una sesión anterior.\n\n¿Restaurarlos? Reemplazan la geometría y los parámetros cargados.")
+            self._autosave.mark_clean(clear=not restore)
+            if restore:
+                AutoSaveManager.restore_state(self, state)
+                self.status_var.set("Sesión restaurada desde el checkpoint (aún sin guardar)")
+        finally:
+            # Si la restauracion falla igual hay que proteger lo que el usuario dibuje despues
+            self._autosave.start()
 
     def _on_close(self):
         self._autosave.stop()
@@ -207,16 +224,18 @@ class SetupApp(CanvasMixin, VideoModelMixin, ConfigLoaderMixin, ExclusionMixin,
 
         # Cambiar de pestaña cancela el dibujo a medias; el elemento original sigue intacto
         self.calib_drawing = self.zone_drawing = self.excl_drawing = False
-        self.line_drawing = self.direction_drawing = False
+        self.line_drawing = self.direction_drawing = self.roi_drawing = False
         self.current_zone_pts, self.excl_current_pts = [], []
         self.line_start = self.direction_start = None
+        self.roi_start = self.roi_end = None
         self.canvas.config(cursor="arrow" if idx == 3 else "crosshair")
+        # _redraw_zones y _update_tile_preview ya redibujan; llamar _redraw despues duplicaba el trabajo
         if idx == 2:
             self._redraw_zones()
         elif idx == 3:
             self._update_tile_preview()
-
-        self._redraw()
+        else:
+            self._redraw()
 
     # ──────────────────────────────────────────────
     # Eventos de canvas (dispatcher)
@@ -269,6 +288,8 @@ if __name__ == "__main__":
     OUTPUT_CONFIG = args.config
     app = SetupApp()
     app._output_config = OUTPUT_CONFIG
+    # Un --model explicito no lo pisa el model_path del perfil que se cargue abajo
+    app._model_override = bool(args.model)
     if args.video != DEFAULT_VIDEO:
         app.video_path = args.video
         app._load_frame()
