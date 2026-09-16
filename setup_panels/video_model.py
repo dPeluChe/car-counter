@@ -89,7 +89,7 @@ class VideoModelMixin:
             self._model_path = path
             self.model = model
             self.sahi_model = None
-            self.calib_test_passed = self.calib_confirmed = False
+            self.calib_test_passed = False
             if self.frame_orig is not None:
                 # Las cajas pintadas eran del modelo anterior
                 self._restore_original_frame()

@@ -4,7 +4,6 @@ import numpy as np
 from PIL import Image, ImageTk
 
 from carcounter.constants import ZONE_COLORS_HEX as ZONE_COLORS, EXCL_COLORS_HEX as EXCL_COLORS
-from setup_panels.geometry_checks import inference_roi
 
 
 class CanvasMixin:
@@ -53,6 +52,10 @@ class CanvasMixin:
         if getattr(self, "direction_drawing", False):
             self.direction_start = None
             self.direction_drawing = False
+            cancelled = True
+        if getattr(self, "roi_drawing", False):
+            self.roi_start = self.roi_end = None
+            self.roi_drawing = False
             cancelled = True
         if cancelled:
             self.canvas.config(cursor="crosshair")
@@ -165,15 +168,19 @@ class CanvasMixin:
 
     # ── Overlays ─────────────────────────────────
     def _draw_roi_overlay(self):
-        """ROI de inferencia del perfil: fuera de ella no se detecta nada."""
-        roi = inference_roi(self._loaded_config)
+        """ROI de inferencia: fuera de ella no se detecta nada."""
+        roi = self.inference_roi
+        drawing = self.roi_drawing and self.roi_start and self.roi_end
+        if drawing:
+            roi = [*self.roi_start, *self.roi_end]
         if not roi:
             return
+        color = "#F38BA8" if drawing else "#F9E2AF"
         sx1, sy1 = self._img_to_screen(roi[0], roi[1])
         sx2, sy2 = self._img_to_screen(roi[2], roi[3])
-        self.canvas.create_rectangle(sx1, sy1, sx2, sy2, outline="#F9E2AF", width=2, dash=(8, 4))
-        self.canvas.create_text(sx1 + 4, sy1 + 4, text="ROI de inferencia", anchor="nw",
-                                fill="#F9E2AF", font=("Arial", 9, "bold"))
+        self.canvas.create_rectangle(sx1, sy1, sx2, sy2, outline=color, width=2, dash=(8, 4))
+        self.canvas.create_text(min(sx1, sx2) + 4, min(sy1, sy2) + 4, text="ROI de inferencia",
+                                anchor="nw", fill=color, font=("Arial", 9, "bold"))
 
     def _draw_excl_ref(self):
         """Dibuja zonas de exclusión como referencia visual."""

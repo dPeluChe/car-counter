@@ -7,6 +7,22 @@ from tkinter import messagebox
 from carcounter.app_config import AppConfig
 from carcounter.config_io import build_config, save_config
 
+# Un slider puede corresponder a varios nombres segun el checkpoint (VisDrone dice "motor", COCO "motorcycle")
+CONF_CLASS_ALIASES = {"motorbike": ("motor", "motorcycle")}
+
+
+def conf_per_class(values, known_names=None):
+    """Confianza por clase solo para clases que el modelo puede emitir; inventarlas ensucia el perfil."""
+    result = {}
+    for name, value in values.items():
+        for candidate in (name,) + CONF_CLASS_ALIASES.get(name, ()):
+            if known_names is None:
+                if candidate == name:
+                    result[candidate] = value
+            elif candidate in known_names:
+                result[candidate] = value
+    return result
+
 
 class SAHIMixin:
     """Métodos de configuración SAHI y guardado (Paso 3)."""
@@ -124,6 +140,19 @@ class SAHIMixin:
             self.lbl_tiles.config(text="Tiles por frame: —")
         self._redraw()
 
+    def _conf_per_class(self):
+        names = getattr(self.model, "names", None)
+        if isinstance(names, dict):
+            names = list(names.values())
+        known = {str(n).strip().lower() for n in names} if names else None
+        return conf_per_class({
+            "car": self.conf_car.get(),
+            "motorbike": self.conf_motorbike.get(),
+            "bus": self.conf_bus.get(),
+            "truck": self.conf_truck.get(),
+            "van": self.conf_van.get(),
+        }, known)
+
     def _build_current_config(self):
         config = build_config(
             counting_mode=self.counting_mode.get(),
@@ -137,15 +166,7 @@ class SAHIMixin:
             imgsz=self.infer_imgsz.get(),
             sample_constraints=self._sample_constraints(),
             sample_count=len(self.vehicle_samples),
-            conf_per_class={
-                "car": self.conf_car.get(),
-                "motorbike": self.conf_motorbike.get(),
-                "bus": self.conf_bus.get(),
-                "truck": self.conf_truck.get(),
-                "van": self.conf_van.get(),
-                "motor": self.conf_motorbike.get(),
-                "motorcycle": self.conf_motorbike.get(),
-            },
+            conf_per_class=self._conf_per_class(),
             conf_per_class_modified=self._conf_per_class_modified,
             slice_w=self.slice_w.get(),
             slice_h=self.slice_h.get(),
@@ -157,6 +178,7 @@ class SAHIMixin:
             video_path=self.video_path,
             model_path=self._model_path,
             loaded_config=self._loaded_config,
+            inference_roi=self.inference_roi,
         )
 
         config["sahi"]["enabled"] = self.sahi_enabled.get()
