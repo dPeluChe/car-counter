@@ -121,6 +121,11 @@ def in_exclusion_zone(cx, cy, exclusion_np):
 
 # ── Inference ROI ────────────────────────────
 
+def inference_roi(config):
+    """ROI de inferencia declarada en un perfil ya cargado, o None."""
+    return ((config or {}).get("settings") or {}).get("inference_roi")
+
+
 def validate_inference_roi(roi, width, height):
     """Valida [x1, y1, x2, y2] enteros dentro de width x height y retorna la tupla."""
     if len(roi) != 4 or any(type(v) is not int for v in roi):

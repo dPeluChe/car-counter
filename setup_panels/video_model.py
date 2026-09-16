@@ -22,7 +22,7 @@ class VideoModelMixin:
         self._load_frame()
 
     def _load_frame(self):
-        self._load_frame_at(0)
+        self._load_frame_at(0, fit=True)
 
     def _ensure_nav_cap(self):
         """Abre o reutiliza el VideoCapture para navegacion."""
@@ -35,7 +35,8 @@ class VideoModelMixin:
             self._nav_cap.release()
             self._nav_cap = None
 
-    def _load_frame_at(self, frame_idx):
+    def _load_frame_at(self, frame_idx, fit=False):
+        """Carga un frame; solo ajusta el zoom a la ventana al abrir el video, no al navegar."""
         cap = self._ensure_nav_cap()
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         if total_frames > 0:
@@ -51,8 +52,8 @@ class VideoModelMixin:
         self.img_h, self.img_w = frame.shape[:2]
         self.total_frames = max(1, total_frames)
         self.current_frame_idx = frame_idx
-        self.zoom = 1.0
-        self.pan_x = self.pan_y = 0
+        if fit:
+            self._fit_to_window()
         self.lbl_video.config(text=f"Video: {os.path.basename(self.video_path)}  ({self.img_w}×{self.img_h})")
         self.lbl_frame_info.config(text=f"Frame {self.current_frame_idx + 1}/{self.total_frames}")
         self.display_frame_zones = self.frame_rgb.copy()
@@ -88,5 +89,9 @@ class VideoModelMixin:
             self._model_path = path
             self.model = model
             self.sahi_model = None
-            self.calib_test_passed = self.calib_confirmed = False
+            self.calib_test_passed = False
+            if self.frame_orig is not None:
+                # Las cajas pintadas eran del modelo anterior
+                self._restore_original_frame()
+                self._redraw_zones()
             self.status_var.set(f"Modelo cambiado a {name}")

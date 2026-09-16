@@ -1,9 +1,27 @@
 """Mixin para Paso 3: SAHI + Guardar."""
 
+import os
 import tkinter as tk
 from tkinter import messagebox
 
+from carcounter.app_config import AppConfig
 from carcounter.config_io import build_config, save_config
+
+# Un slider puede corresponder a varios nombres segun el checkpoint (VisDrone dice "motor", COCO "motorcycle")
+CONF_CLASS_ALIASES = {"motorbike": ("motor", "motorcycle")}
+
+
+def conf_per_class(values, known_names=None):
+    """Confianza por clase solo para clases que el modelo puede emitir; inventarlas ensucia el perfil."""
+    result = {}
+    for name, value in values.items():
+        for candidate in (name,) + CONF_CLASS_ALIASES.get(name, ()):
+            if known_names is None:
+                if candidate == name:
+                    result[candidate] = value
+            elif candidate in known_names:
+                result[candidate] = value
+    return result
 
 
 class SAHIMixin:
@@ -97,7 +115,7 @@ class SAHIMixin:
                                         bg="#313244", fg="#89B4FA", relief="flat", pady=4)
         self.btn_tile_grid.pack(fill="x", pady=2)
 
-        self.btn_save = tk.Button(self.panel_step3, text="💾  GUARDAR config.json",
+        self.btn_save = tk.Button(self.panel_step3, text=f"💾  Guardar {os.path.basename(self._output_config)}",
                                   command=self._save_config,
                                   bg="#A6E3A1", fg="#11111B", font=("Arial", 10, "bold"),
                                   relief="flat", pady=8)
@@ -122,6 +140,19 @@ class SAHIMixin:
             self.lbl_tiles.config(text="Tiles por frame: —")
         self._redraw()
 
+    def _conf_per_class(self):
+        names = getattr(self.model, "names", None)
+        if isinstance(names, dict):
+            names = list(names.values())
+        known = {str(n).strip().lower() for n in names} if names else None
+        return conf_per_class({
+            "car": self.conf_car.get(),
+            "motorbike": self.conf_motorbike.get(),
+            "bus": self.conf_bus.get(),
+            "truck": self.conf_truck.get(),
+            "van": self.conf_van.get(),
+        }, known)
+
     def _build_current_config(self):
         config = build_config(
             counting_mode=self.counting_mode.get(),
@@ -135,15 +166,7 @@ class SAHIMixin:
             imgsz=self.infer_imgsz.get(),
             sample_constraints=self._sample_constraints(),
             sample_count=len(self.vehicle_samples),
-            conf_per_class={
-                "car": self.conf_car.get(),
-                "motorbike": self.conf_motorbike.get(),
-                "bus": self.conf_bus.get(),
-                "truck": self.conf_truck.get(),
-                "van": self.conf_van.get(),
-                "motor": self.conf_motorbike.get(),
-                "motorcycle": self.conf_motorbike.get(),
-            },
+            conf_per_class=self._conf_per_class(),
             conf_per_class_modified=self._conf_per_class_modified,
             slice_w=self.slice_w.get(),
             slice_h=self.slice_h.get(),
@@ -155,6 +178,7 @@ class SAHIMixin:
             video_path=self.video_path,
             model_path=self._model_path,
             loaded_config=self._loaded_config,
+            inference_roi=self.inference_roi,
         )
 
         config["sahi"]["enabled"] = self.sahi_enabled.get()
@@ -164,35 +188,31 @@ class SAHIMixin:
         return config
 
     def _save_config(self):
-        mode = self.counting_mode.get()
-        # Reutilizar validacion del paso 2
         ok, msg = self._validate_zones()
         if not ok:
             messagebox.showwarning("Guardar", msg)
             return
-
         config = self._build_current_config()
-
+        errors = AppConfig.from_dict(config).validate()
+        if errors:
+            messagebox.showwarning("Perfil inválido", "No se guardó:\n\n" + "\n".join(errors))
+            return
         try:
-            from carcounter.app_config import TrackerConfig
-            errors = TrackerConfig(**{key: value for key, value in config["tracker"].items()
-                                      if key in TrackerConfig.__dataclass_fields__}).validate()
-            if errors:
-                messagebox.showwarning("Parámetros de tracking", "\n".join(errors))
-                return
             save_config(self._output_config, config)
-            # Limpiar autosave checkpoint despues de guardar exitosamente
-            if hasattr(self, "_autosave"):
-                self._autosave.clear()
-            excl_info = f" · {len(self.exclusion_zones)} excl" if self.exclusion_zones else ""
-            self.lbl_save_status.config(
-                text=f"✅ Guardado: {self._output_config}\n{len(self.zones)} zonas{excl_info} · SAHI {self.slice_w.get()}×{self.slice_h.get()}",
-                fg="#A6E3A1")
-            self.status_var.set(f"✅ Configuración guardada en {self._output_config}")
-            excl_msg = f"\nExclusión: {', '.join(self.exclusion_zones.keys())}\n" if self.exclusion_zones else ""
-            messagebox.showinfo("Guardado",
-                                f"Configuración guardada exitosamente en:\n{self._output_config}\n\n"
-                                f"Zonas: {', '.join(self.zones.keys())}\n{excl_msg}\n"
-                                f"Siguiente paso:\n  python main.py")
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo guardar:\n{e}")
+            return
+        self._loaded_config = config
+        if hasattr(self, "_autosave"):
+            self._autosave.mark_clean()
+        excl_info = f" · {len(self.exclusion_zones)} excl" if self.exclusion_zones else ""
+        self.lbl_save_status.config(
+            text=f"✅ Guardado: {self._output_config}\n{len(self.zones)} zonas{excl_info} · SAHI {self.slice_w.get()}×{self.slice_h.get()}",
+            fg="#A6E3A1")
+        self.status_var.set(f"✅ Perfil guardado en {self._output_config}")
+        excl_msg = f"\nExclusiones: {', '.join(self.exclusion_zones)}" if self.exclusion_zones else ""
+        roi_msg = f"\n\nAviso: {msg}" if msg else ""
+        messagebox.showinfo("Guardado",
+                            f"Perfil guardado en:\n{self._output_config}\n\n"
+                            f"Zonas: {', '.join(self.zones)}{excl_msg}{roi_msg}\n\n"
+                            f"Para contar:\n  env/bin/python main.py --config {self._output_config}")

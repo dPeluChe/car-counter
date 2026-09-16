@@ -107,12 +107,10 @@ class ExclusionMixin:
         if not name:
             messagebox.showwarning("Exclusión", "Escribe un nombre para la zona.")
             return
-        if name in self.exclusion_zones:
-            if not messagebox.askyesno("Zona existe", f"La zona '{name}' ya existe. ¿Sobreescribir?"):
-                return
-            del self.exclusion_zones[name]
-            self._invalidate_excl_cache()
-            self._refresh_excl_list()
+        if name in self.exclusion_zones and not messagebox.askyesno(
+                "Zona existe", f"La zona '{name}' ya existe. ¿Reemplazarla al cerrar el nuevo polígono?"):
+            return
+        self._excl_draw_name = name
         self.excl_current_pts = []
         self.excl_drawing = True
         self.canvas.config(cursor="crosshair")
@@ -120,7 +118,7 @@ class ExclusionMixin:
         self._redraw()
 
     def _close_excl_zone(self):
-        name = self.excl_zone_name.get().strip()
+        name = self._excl_draw_name
         if len(self.excl_current_pts) < 3:
             messagebox.showwarning("Exclusión", "Se necesitan al menos 3 puntos.")
             return

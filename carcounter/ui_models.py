@@ -30,7 +30,7 @@ def show_model_dialog(parent, on_select=None):
 
     tk.Label(dlg, text="Gestor de Modelos", bg=BG, fg=FG,
              font=("Arial", 14, "bold")).pack(pady=(12, 4))
-    tk.Label(dlg, text="AP50 = precision COCO (mayor = mejor). Latencia en NVIDIA T4 FP16.",
+    tk.Label(dlg, text="AP50 y latencia: referencia COCO del fabricante (T4 FP16), no medidas en el aforo EPS.",
              bg=BG, fg=FG_DIM, font=("Arial", 9)).pack()
 
     table_frame = tk.Frame(dlg, bg=BG_DARK)
@@ -71,14 +71,20 @@ def show_model_dialog(parent, on_select=None):
 
     def _use(name):
         info = MODEL_CATALOG[name]
-        path = get_model_path(name) if info["family"] == "yolo" else None
+        if info["family"] != "yolo":
+            status_var.set(f"{name}: el configurador solo calibra con YOLO")
+            return
+        path = get_model_path(name)
+        if not path:
+            status_var.set(f"{name}: pesos no encontrados")
+            return
         status_var.set(f"Seleccionado: {name}")
         if on_select:
             on_select(name, path)
 
     for family_label, family_key, desc in [
-        ("YOLO", "yolo", "Rapido, versatil, ideal para tiempo real"),
-        ("RF-DETR", "rfdetr", "Transformer DINOv2, mayor precision"),
+        ("YOLO", "yolo", "Incluye VisDrone (aéreo, EPS) y YOLO11 genérico COCO"),
+        ("RF-DETR", "rfdetr", "Genérico COCO; solo para ejecutar, no para calibrar"),
     ]:
         fh = tk.Frame(inner, bg="#313244", pady=3)
         fh.pack(fill="x", pady=(6, 0))
@@ -103,15 +109,11 @@ def show_model_dialog(parent, on_select=None):
             tk.Label(left, text=info.get("note", ""), bg=BG_CARD, fg=FG_DIM,
                      font=("Arial", 8), anchor="w").pack(fill="x")
 
-            # Metrics
-            ap = info["coco_ap50"]
-            ap_fg = GREEN if ap >= 70 else (FG if ap >= 60 else FG_DIM)
-            tk.Label(row, text=f"AP50:{ap:.1f}", bg=BG_CARD, fg=ap_fg,
-                     font=("Courier", 9, "bold"), width=10).pack(side="left")
-            tk.Label(row, text=f"{info['latency_ms']}ms", bg=BG_CARD, fg=FG_DIM,
-                     font=("Courier", 9), width=6).pack(side="left")
-            tk.Label(row, text=f"{info['size_mb']}MB", bg=BG_CARD, fg=FG_DIM,
-                     font=("Courier", 9), width=6).pack(side="left")
+            if info["coco_ap50"] is not None:
+                tk.Label(row, text=f"AP50:{info['coco_ap50']:.1f}", bg=BG_CARD, fg=FG_DIM,
+                         font=("Courier", 9, "bold"), width=10).pack(side="left")
+                tk.Label(row, text=f"{info['latency_ms']}ms", bg=BG_CARD, fg=FG_DIM,
+                         font=("Courier", 9), width=6).pack(side="left")
 
             # Status + button
             lbl = tk.Label(row, text="OK" if downloaded else "--", bg=BG_CARD,
@@ -123,6 +125,9 @@ def show_model_dialog(parent, on_select=None):
                 btn = tk.Button(row, text="Usar", bg=GREEN, fg=BG_DARK,
                                 font=("Arial", 9, "bold"), relief="flat", width=10,
                                 command=lambda n=name: _use(n))
+            elif info["source"] == "local":
+                btn = tk.Label(row, text="No encontrado", bg=BG_CARD, fg=RED,
+                               font=("Arial", 9), width=12)
             else:
                 btn = tk.Button(row, text="Descargar", bg=ACCENT, fg=BG_DARK,
                                 font=("Arial", 9, "bold"), relief="flat", width=10,

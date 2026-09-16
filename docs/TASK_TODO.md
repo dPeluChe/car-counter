@@ -14,6 +14,8 @@
 | 4 | TODO-031 | Perfil de rutas completas y video de evidencia |
 | Condicional P0 | TODO-029 | Geometría coherente cuando se mueve la cámara |
 | En paralelo con pruebas humanas | TODO-033 | Configurador utilizable y parámetros persistentes |
+| Después de TODO-033 | TODO-037 | Rediseño del flujo de configurador y wizard (fase B) |
+| Después de TODO-028 | TODO-038 | Costo de SAHI por tile sin cambiar clases ni aforo |
 | Después de exactitud | TODO-023 / TODO-024 | Rendimiento y formatos con beneficio medido |
 | Operación opcional | TODO-034 | Cron activado y verificado desde entorno permitido |
 | Opcional | TODO-036 | Replay y control de cámara desde el wizard |
@@ -64,11 +66,16 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 
 ## TODO-033: Validación del configurador y calibración `added: 2026-09-14`
 
-**Prioridad:** P0 para que el revisor pueda probar. **Estado:** lógica probada, GUI sin validar en escritorio.
+**Prioridad:** P0 para que el revisor pueda probar. **Estado:** lógica probada, GUI sin validar en escritorio. La auditoría del 2026-09-15 encontró defectos de pérdida de datos, dibujo, autosave y lanzamiento desde el wizard; fase A y ronda 2 corregidas y verificadas con ventanas ocultas (ver [2609](TASK_COMPLETED/2609.md)), falta la verificación visual. El rediseño del flujo queda en TODO-037.
 
 **Archivos relevantes:** `setup.py`, `setup_panels/calib_tests.py`, `setup_panels/step1_calibration.py`, `setup_panels/step2_preview.py`, `setup_panels/step3_sahi.py`, `carcounter/app_config.py`.
 
 - [ ] Abrir el configurador en el escritorio y confirmar carga del video/modelo del perfil, controles visibles y desplazamiento lateral.
+- [ ] Verificar en escritorio lo corregido en la fase A de UI (2026-09-15): zoom ajustado al abrir, ROI visible con zoom y pan, espacio dentro de nombres sin activar pan, pausar el preview y dibujar sobre ese frame, rangos de filtros visibles en la barra lateral, mensajes de validación al guardar, diálogo de checkpoint después de cargar el perfil.
+- [ ] Verificar el wizard en escritorio: "Configurar zonas" abre el configurador con el perfil elegido y al volver informa si se guardó; "Ejecutar" crea la carpeta de corrida, "Cancelar" detiene el proceso y un error muestra las últimas líneas del log; los botones caben en la ventana.
+- [ ] Verificar en escritorio lo corregido en la ronda 2 (2026-09-15): dibujar y quitar la ROI de inferencia arrastrando sobre el video y confirmar que se guarda y se relee; abrir con `--model` explícito y comprobar que el perfil no lo pisa; cargar un perfil sin `sahi.enabled` y confirmar que SAHI queda apagado; guardar un perfil sin tocar el tracker y comparar que no cambió ningún campo.
+- [ ] Verificar en escritorio el preview con detecciones: la ventana no se congela y las cajas van uno o dos segundos atrasadas respecto al video (comportamiento esperado, no defecto); un error apaga las detecciones y el video sigue.
+- [ ] Verificar en escritorio el wizard de la ronda 2: "Ejecutar" con un perfil inválido avisa qué corregir en vez de lanzar la corrida; sin perfil preseleccionado; el resumen del Paso 3 muestra modo, geometría, video, modelo y ROI; "Cancelar" cierra un configurador abierto tras confirmar.
 - [ ] Verificar muestras de distintos frames, correspondencia uno a uno y aplicación explícita de filtros desde cinco muestras.
 - [ ] Guardar/reabrir una copia y comparar modelo, ROI, muestras, confianza, clases, SAHI y parámetros de tracker; registrar cualquier campo perdido.
 - [ ] Verificar limpieza de muestras/filtros y cambio de modelo sin reutilizar resultados visuales de otro detector.
@@ -97,7 +104,7 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 - [ ] Revisar pérdidas de ID en oclusiones, cambios de ID cerca de líneas/zonas y IDs duplicados del mismo auto.
 - [ ] Con zonas del tramo oficial, correr `make review-tracks` y clasificar a mano la causa de cada track perdido y de los primeros candidatos a cambio de ID (oclusión, imagen poco clara, geometría o tracker).
 - [ ] Reducir la fragmentación ([cifra actual](GUIDES/VERIFIED_STATE.md)): comparar `track_buffer`, umbrales y BoT-SORT midiendo fragmentación y rutas completas con `make review-tracks`.
-- [ ] NMS sin clase en YOLO: `carcounter/detector.py` llama al modelo sin `agnostic_nms`, así que una caja `car` y otra `van` sobre el mismo vehículo sobreviven; ByteTrack asocia por IoU y la segunda caja puede crear un ID nuevo. Es la causa probable del mejor candidato del replay (ID 385 `car` → ID 397 `van`, mismo lugar, un frame): en ese replay 38 de los 83 candidatos cambian de clase. Medir con replay antes y después: candidatos con cambio de clase, fragmentación y eventos.
+- [ ] NMS sin clase en YOLO: `carcounter/detector.py` llama al modelo sin `agnostic_nms`, así que una caja `car` y otra `van` sobre el mismo vehículo sobreviven; ByteTrack asocia por IoU y la segunda caja puede crear un ID nuevo. Solo aplica a la ruta sin SAHI: con SAHI, `carcounter/geometry.py:apply_nms` suprime por IoU sin mirar la clase y ese duplicado no sobrevive. Es la causa probable del mejor candidato del replay (ID 385 `car` → ID 397 `van`, mismo lugar, un frame): en ese replay 38 de los 83 candidatos cambian de clase. Medir con replay antes y después: candidatos con cambio de clase, fragmentación y eventos.
 - [ ] Registrar desde `UltralyticsTracker` los tracks perdidos, removidos y creados por frame, para detectar cambios de ID sin heurística de distancia.
 - [ ] Exportar el frame absoluto del video en `counting_events` y en el CSV de tracks, para que la referencia humana y los recortes usen la misma numeración que un reproductor.
 - [ ] Comparar ByteTrack y BoT-SORT sobre una caché común; variar un parámetro por experimento y registrar parámetros efectivos. `with_reid=true` no está soportado en el wrapper actual.
@@ -148,6 +155,40 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 **Prioridad:** P2. El resto del trabajo heredado se cerró (ver [2609](TASK_COMPLETED/2609.md)).
 
 - [ ] `python -m carcounter` no expone `--record-detections`/`--replay-detections` ni `--camera-max-drift-px` (este último sí se toma de `settings.camera_max_drift_px` del perfil) y solo muestra el código de salida de `main.py`, no el motivo del fallo.
+
+## TODO-037: Rediseño del flujo de configurador y wizard (fase B) `added: 2026-09-15`
+
+**Prioridad:** P1, después de corregir los defectos de fase A y de la revisión en escritorio (TODO-033). **Evidencia:** auditoría de UI del 2026-09-15 (configurador, wizard y prueba dinámica con ventanas ocultas).
+
+- [ ] Configurador en pasos EPS: perfil y fuente, exclusiones, zonas de entrada/salida por acceso, validar detección (opcional), tracking y reglas de conteo, resumen y guardar. La región de inferencia ya se dibuja y se edita desde el Paso 1 (ronda 2).
+- [ ] Controles para campos que hoy solo se copian del perfil: `camera_max_drift_px`, `min_origin_frames`, `min_dest_frames`, `min_crossing_frames`, `match_thresh`, tolerancia por línea.
+- [ ] Confianza por clase generada desde las clases del modelo cargado (incluye bicycle, tricycle) en vez de sliders fijos car/moto/bus/truck/van.
+- [ ] Mostrar detecciones descartadas (ROI, exclusión, filtros de muestras) con otro color y contador; cuadrícula SAHI calculada sobre la ROI.
+- [ ] Sidebar con scroll de rueda y acciones principales fijas fuera del scroll; seleccionar un elemento carga su nombre y permite renombrar; deshacer también en exclusiones y `Command-z` en macOS.
+- [ ] Wizard: paso de perfil al inicio con resumen y `AppConfig.validate()`; paso de resultados con resumen, "Abrir carpeta", "Revisar tracks" (`review_incomplete_tracks.py`) y "Validar rutas" (`validate_routes.py`).
+- [ ] Wizard: opciones de corrida faltantes (inicio y máximo de frames, SAHI, dispositivo, sin ventana, grabar o repetir caché, deriva de cámara); cubre también TODO-036.
+
+## TODO-038: Costo de SAHI por tile y su efecto en las clases `added: 2026-09-15`
+
+**Prioridad:** P1, después de la referencia humana (TODO-028). **Estado:** medido, sin cambio aplicado. **Depende de:** TODO-028 para tener contra qué comparar que no sea la configuración actual.
+
+**Hallazgo:** SAHI reescala cada tile a `settings.imgsz` (1600 por defecto), así que un tile de 512 se amplía 3.1x. `carcounter/detection.py:detect_objects` reasigna `sahi_model.image_size` en cada frame y le gana a lo que fija `carcounter/runtime.py:load_sahi`.
+
+**Medido** (`glorieta_test1min`, VisDrone, tile 512, overlap 0.2, conf 0.10, una corrida por configuración, las tres seguidas en la misma sesión). Detalle, método y límites: [SAHI_IMAGE_SIZE_2026_09_15.md](RESEARCH/SAHI_IMAGE_SIZE_2026_09_15.md).
+
+| `image_size` | Frame completo | Tramo de 300 frames con ROI | Eventos | Ligeros | Pesados |
+|---|---|---|---|---|---|
+| 1600 (actual) | 61 602 ms/frame | 73.6 s (4.08 FPS) | 5 | 3 | 2 |
+| 640 | 9 316 ms/frame | 19.8 s (15.12 FPS) | 6 | 5 | 1 |
+| 512 | 6 805 ms/frame | 17.1 s (17.53 FPS) | 6 | 5 | 1 |
+
+**Por qué no se cambió:** bajar `image_size` no solo detecta menos, reasigna clases. Con 640 el `truck` del frame 187 sale como `car` y cambia de grupo, de modo que el aforo del tramo pasa de 3 ligeros y 2 pesados a 5 y 1. La clase es justo lo que define el grupo EPS. Además en 1600 salen 245 cajas `motor`, 11 `bicycle`, 6 `tricycle` y 5 `awning-tricycle`; con 640 quedan 99 `motor` y ninguna `bicycle` ni `tricycle`, o sea que el grupo `dos_ruedas` se borra casi entero (en este tramo no hubo eventos de ese grupo, así que no alteró el resultado).
+
+La comparación a frame completo no decide: de las 1022 cajas que 640 pierde contra 1600 (conf ≥ 0.25), solo 68 caen dentro de la ROI, y el resto ocurre en zonas que nunca llegan a evento.
+
+- [ ] Repetir sobre varios tramos y contra referencia humana revisada, no contra la salida de 1600, antes de mover el valor.
+- [ ] Separar el `imgsz` del frame completo del tamaño con que se infiere cada tile: hoy es el mismo campo y por eso el costo escala con una resolución que el tile no tiene.
+- [ ] Medir el efecto sobre los grupos EPS, no solo sobre el total de eventos (`routes_by_group`).
 
 ## Fuera del foco de la presentación
 

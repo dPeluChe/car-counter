@@ -53,8 +53,6 @@ class CalibrationMixin:
                  variable=self.conf_threshold, orient="horizontal",
                  bg="#181825", fg="#CDD6F4", troughcolor="#313244",
                  highlightthickness=0).pack(side="left", fill="x", expand=True)
-        tk.Label(row, textvariable=tk.StringVar(), bg="#181825", fg="#89B4FA",
-                 font=("Arial", 10)).pack(side="right")
         self.lbl_conf_val = tk.Label(self.panel_step1, bg="#181825", fg="#89B4FA",
                                      font=("Arial", 10))
         self.lbl_conf_val.pack()
@@ -86,6 +84,22 @@ class CalibrationMixin:
         self.lbl_imgsz_val.pack()
         self.infer_imgsz.trace_add("write", self._update_imgsz_label)
         self._update_imgsz_label()
+
+        tk.Frame(self.panel_step1, bg="#313244", height=1).pack(fill="x", pady=6)
+        self._lbl(self.panel_step1, "ROI de inferencia (opcional):", color="#CDD6F4")
+        self._lbl(self.panel_step1,
+                  "Recorta el área donde se detecta.\nFuera de la ROI no se cuenta nada.")
+        self.btn_roi_define = tk.Button(self.panel_step1, text="⬚  Definir ROI",
+                                        command=self._start_roi_draw,
+                                        bg="#313244", fg="#F9E2AF", relief="flat", pady=4)
+        self.btn_roi_define.pack(fill="x", pady=2)
+        self.btn_roi_clear = tk.Button(self.panel_step1, text="✕  Quitar ROI",
+                                       command=self._clear_roi,
+                                       bg="#313244", fg="#F38BA8", relief="flat", pady=4)
+        self.btn_roi_clear.pack(fill="x", pady=2)
+        self.lbl_roi = tk.Label(self.panel_step1, text="ROI: todo el frame",
+                                bg="#181825", fg="#A6ADC8", font=("Arial", 9))
+        self.lbl_roi.pack(anchor="w")
 
         self._lbl(self.panel_step1, "Área mínima detectada:", color="#A6ADC8")
         self.lbl_min_area = tk.Label(self.panel_step1, text="0 px²",
@@ -153,18 +167,18 @@ class CalibrationMixin:
     # ── UI helpers ───────────────────────────────
     def _on_per_class_conf_modified(self):
         self._conf_per_class_modified = True
-        self.calib_test_passed = self.calib_confirmed = False
+        self.calib_test_passed = False
 
     def _update_conf_label(self, *_):
         self.lbl_conf_val.config(text=f"Valor: {self.conf_threshold.get():.2f}")
-        self.calib_test_passed = self.calib_confirmed = False
+        self.calib_test_passed = False
         if not self._conf_per_class_modified:
             val = self.conf_threshold.get()
             for v in (self.conf_car, self.conf_motorbike, self.conf_bus, self.conf_truck, self.conf_van):
                 v.set(val)
 
     def _update_imgsz_label(self, *_):
-        self.calib_test_passed = self.calib_confirmed = False
+        self.calib_test_passed = False
         self.lbl_imgsz_val.config(text=f"Valor: {self.infer_imgsz.get()} px")
 
     def _update_samples_label(self):
@@ -175,6 +189,42 @@ class CalibrationMixin:
         self.lbl_samples_info.config(
             text=f"Muestras: {len(self.vehicle_samples)}  areas {min(areas)}-{max(areas)} px²"
         )
+
+    # ── ROI de inferencia ────────────────────────
+    def _start_roi_draw(self):
+        self.roi_drawing = True
+        self.roi_start = self.roi_end = None
+        self.canvas.config(cursor="crosshair")
+        self.status_var.set("Arrastra sobre el video para marcar la ROI; Escape cancela")
+        self._redraw()
+
+    def _clear_roi(self):
+        self.inference_roi = None
+        self.roi_drawing = False
+        self.roi_start = self.roi_end = None
+        self._update_roi_label()
+        self.status_var.set("ROI quitada: se detecta en todo el frame")
+        self._redraw()
+
+    def _update_roi_label(self):
+        roi = self.inference_roi
+        self.lbl_roi.config(
+            text=f"ROI: {roi[0]},{roi[1]} a {roi[2]},{roi[3]}" if roi else "ROI: todo el frame")
+
+    def _finish_roi(self):
+        x1, x2 = sorted((self.roi_start[0], self.roi_end[0]))
+        y1, y2 = sorted((self.roi_start[1], self.roi_end[1]))
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(self.img_w, x2), min(self.img_h, y2)
+        self.roi_drawing = False
+        self.roi_start = self.roi_end = None
+        if x2 - x1 < 16 or y2 - y1 < 16:
+            self.status_var.set("ROI descartada: el área marcada es muy chica")
+        else:
+            self.inference_roi = [int(x1), int(y1), int(x2), int(y2)]
+            self.status_var.set(f"ROI de inferencia: {x1},{y1} a {x2},{y2}")
+        self._update_roi_label()
+        self._redraw()
 
     # ── Calibración lógica ───────────────────────
     def _sample_constraints(self):
@@ -187,7 +237,6 @@ class CalibrationMixin:
         self.calib_rect_start = None
         self.calib_rect_end = None
         self.calib_drawing = False
-        self.calib_confirmed = False
         self.calib_test_passed = False
         self.frame_rgb = cv2.cvtColor(self.frame_orig, cv2.COLOR_BGR2RGB)
         self.lbl_calib_status.config(text="⚠  Pendiente de confirmar", fg="#F38BA8")
@@ -218,7 +267,6 @@ class CalibrationMixin:
             "width": width, "height": height,
             "area": area, "aspect": aspect,
         })
-        self.calib_confirmed = False
         self._update_samples_label()
         self.lbl_calib_status.config(
             text=f"✅ Muestra agregada ({len(self.vehicle_samples)})", fg="#A6E3A1")
@@ -233,7 +281,6 @@ class CalibrationMixin:
         self.max_area.set(999999)
         self.lbl_min_area.config(text="0 px²")
         self.lbl_max_area.config(text="999999 px²")
-        self.calib_confirmed = False
         self._update_samples_label()
         self.lbl_calib_status.config(text="⚠  Muestras limpiadas", fg="#F9E2AF")
         self.status_var.set("Muestras limpiadas")
@@ -245,13 +292,18 @@ class CalibrationMixin:
             return
         constraints = compute_sample_constraints(self.vehicle_samples)
         self._loaded_sample_constraints = constraints
-        self.calib_test_passed = self.calib_confirmed = False
+        self.calib_test_passed = False
         if constraints is None:
             return
         self.min_area.set(constraints["min_area"])
         self.max_area.set(constraints["max_area"])
         self.lbl_min_area.config(text=f"{self.min_area.get()} px²")
         self.lbl_max_area.config(text=f"{self.max_area.get()} px²")
+        c = constraints
+        text = (f"Filtros aplicados: ancho {c['min_width']}-{c['max_width']} px, "
+                f"alto {c['min_height']}-{c['max_height']} px, área {c['min_area']}-{c['max_area']} px²")
+        self.lbl_samples_info.config(text=text, wraplength=280, justify="left")
+        self.status_var.set(f"✅ {text}")
 
     @staticmethod
     def _point_in_box(px, py, box):
@@ -291,35 +343,29 @@ class CalibrationMixin:
     # viven ahora en setup_panels/calib_tests.py (CalibTestsMixin).
 
     def _confirm_calib(self):
-        # La calibracion (filtro min/max area) es opcional: con tomas aereas de
-        # autos muy chicos el test YOLO puede no validar. Permitir continuar sin
-        # filtro de area (permisivo) en vez de bloquear.
-        if not self.calib_test_passed:
-            if not messagebox.askyesno(
-                "Calibración opcional",
-                "No validaste ningún vehículo con [Probar YOLO].\n\n"
-                "¿Continuar sin filtro de área? (recomendado para tomas aéreas "
-                "de autos muy pequeños; el pipeline detectará por confianza)."):
-                return
-            self._loaded_sample_constraints = None
-            self.min_area.set(0)
-            self.max_area.set(999999)
-            self.lbl_min_area.config(text="0 px²")
-            self.lbl_max_area.config(text="999999 px²")
-        self.calib_confirmed = True
-        self.lbl_calib_status.config(text="✅  Calibración confirmada", fg="#A6E3A1")
-        self.status_var.set("Calibración confirmada — pasando a Paso 2")
+        # Calibrar es opcional (autos aéreos chicos pueden no validar); avanzar nunca quita filtros aplicados
+        filters = "con filtros de muestras" if self._loaded_sample_constraints else "sin filtros de tamaño"
+        tested = "" if self.calib_test_passed else ", sin prueba validada"
+        self.lbl_calib_status.config(text=f"✅  Calibración confirmada ({filters}{tested})", fg="#A6E3A1")
+        self.status_var.set(f"Calibración confirmada {filters}{tested}; pasando a Paso 2")
         self.after(500, lambda: self._activate_step(2))
 
     def _on_calib_press(self, event):
         """Maneja clic izquierdo en Paso 1."""
         ix, iy = self._screen_to_img(event.x, event.y)
+        if self.roi_drawing:
+            self.roi_start = self.roi_end = (ix, iy)
+            return
         self.calib_rect_start = (ix, iy)
         self.calib_rect_end = (ix, iy)
         self.calib_drawing = True
 
     def _on_calib_drag(self, event):
         """Maneja arrastre en Paso 1."""
+        if self.roi_drawing and self.roi_start:
+            self.roi_end = self._screen_to_img(event.x, event.y)
+            self._redraw()
+            return
         if self.calib_drawing:
             ix, iy = self._screen_to_img(event.x, event.y)
             self.calib_rect_end = (ix, iy)
@@ -327,10 +373,13 @@ class CalibrationMixin:
 
     def _on_calib_release(self, event):
         """Maneja soltar botón en Paso 1."""
+        if self.roi_drawing and self.roi_start:
+            self.roi_end = self._screen_to_img(event.x, event.y)
+            self._finish_roi()
+            return
         ix, iy = self._screen_to_img(event.x, event.y)
         self.calib_rect_end = (ix, iy)
         self.calib_drawing = False
         self.calib_test_passed = False
-        self.calib_confirmed = False
         self.lbl_calib_status.config(text="⚠  Pendiente de confirmar", fg="#F38BA8")
         self._redraw()

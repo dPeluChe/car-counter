@@ -17,11 +17,7 @@ ACCENT = "#89B4FA"
 GREEN = "#A6E3A1"
 YELLOW = "#F9E2AF"
 RED = "#F38BA8"
-PEACH = "#FAB387"
 BTN_BG = "#313244"
-
-# Modelos recomendados por familia
-RECOMMENDED = {"yolov11m", "rfdetr-medium"}
 
 
 def btn(parent, text, command, bg=BTN_BG, fg=FG, font=("Arial", 10), **kw):

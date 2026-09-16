@@ -8,12 +8,13 @@ from pathlib import Path
 import selectors
 import shlex
 import shutil
-import signal
 import subprocess
 import sys
 import time
 from zoneinfo import ZoneInfo
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from carcounter.process_utils import stop_process  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_DIR = ROOT / "output" / "recurring-review"
@@ -62,16 +63,6 @@ def quota_decision(payload, reserve=5):
     available = min(remaining)
     return dict(ready=available > reserve, remaining_percent=available,
                 reason="Cuota disponible" if available > reserve else "Cuota agotada o en reserva")
-
-
-def stop_process(process):
-    if process.poll() is None:
-        os.killpg(process.pid, signal.SIGTERM)
-        try:
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.wait()
 
 
 def execution_environment(codex):
