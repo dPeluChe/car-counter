@@ -17,7 +17,7 @@ class VideoStepMixin:
         f = self._content
         summary = tk.Frame(f, bg=BG_CARD, padx=12, pady=8)
         summary.pack(fill="x")
-        tk.Label(summary, text=f"Modelo: {self._model_choice()['label'] or 'sin elegir'}", bg=BG_CARD, fg=GREEN,
+        tk.Label(summary, text=f"Modelo: {self._model_choice().label or 'sin elegir'}", bg=BG_CARD, fg=GREEN,
                  font=("Arial", 11, "bold"), anchor="w").pack(fill="x")
 
         tk.Label(f, text="Elige el video a procesar", bg=BG, fg="#FFFFFF",

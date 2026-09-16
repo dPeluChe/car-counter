@@ -9,7 +9,7 @@ from tkinter import messagebox
 
 from carcounter.app_steps import LaunchStepMixin, ModelStepMixin, RunControlMixin, VideoStepMixin
 from carcounter.app_theme import ACCENT, BG, BG_DARK, FG_BRIGHT, FG_DIM, GREEN
-from carcounter.paths import paths
+from carcounter.process_utils import stop_process
 
 
 class CarCounterApp(ModelStepMixin, VideoStepMixin, LaunchStepMixin, RunControlMixin, tk.Tk):
@@ -24,8 +24,8 @@ class CarCounterApp(ModelStepMixin, VideoStepMixin, LaunchStepMixin, RunControlM
 
         self._selected_model = tk.StringVar(value="")
         self._selected_video = tk.StringVar(value="")
-        default_config = str(paths.default_config) if paths.default_config.exists() else ""
-        self._selected_config = tk.StringVar(value=default_config)
+        # Sin perfil por defecto: uno viejo de config/ daría zonas que no son las del video elegido
+        self._selected_config = tk.StringVar(value="")
         self._selected_tracker = tk.StringVar(value="bytetrack")
         self._custom_model_path = ""
         self._current_step = 0
@@ -94,7 +94,7 @@ class CarCounterApp(ModelStepMixin, VideoStepMixin, LaunchStepMixin, RunControlM
         if self._busy():
             if not messagebox.askyesno("Proceso en curso", "Hay un proceso en curso. ¿Cancelarlo y salir?"):
                 return
-            self._process.terminate()
+            stop_process(self._process)
         self.destroy()
 
 
