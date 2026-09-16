@@ -6,8 +6,8 @@ Revisión: 2026-09-14. Fuentes: código local, suite de pruebas y artefactos ind
 
 | Área | Implementación existente | Evidencia y límite |
 |---|---|---|
-| Detección | YOLO, SAHI y RF-DETR entregan cajas globales al tracker; clases resueltas desde el modelo | Pruebas de integración; ejecución real con YOLO VisDrone. No hay comparación humana que demuestre un detector ganador |
-| Calibración | Perfil compartido, muestras por frame, correspondencia IoU y filtros explícitos desde cinco muestras | Funciones probadas. GUI Tk sin validar en escritorio (no abrió en el entorno del agente) |
+| Detección | YOLO, SAHI y RF-DETR entregan cajas globales al tracker; clases resueltas desde el modelo | Pruebas de integración; ejecución real con YOLO VisDrone. No hay comparación humana que demuestre un detector ganador. SAHI reescala cada tile a `imgsz` (1600 por defecto), lo que cuesta 61.6 s por frame completo y 73.6 s por el tramo de 300 frames con la ROI de referencia; bajarlo acelera 3.7x pero cambia clases y aforo ([TODO-038](../TASK_TODO.md)) |
+| Calibración | Perfil compartido, muestras por frame, correspondencia IoU y filtros explícitos desde cinco muestras; ROI de inferencia editable desde la GUI | Funciones probadas; prueba dinámica con ventanas ocultas (16 comprobaciones, incluida la ida y vuelta de la ROI por perfil y checkpoint). GUI Tk sin validar en escritorio (no abrió en el entorno del agente). El preview con detecciones infiere en un hilo: el tick de Tk baja de 1186-1653 ms a 3.6 ms de mediana y las cajas van uno o dos segundos atrasadas |
 | Tracking | ByteTrack, BoT-SORT, SORT y wrapper opcional OC-SORT | ByteTrack y BoT-SORT se ejecutaron con la misma caché. El wrapper rechaza `with_reid=true`; BoT-SORT aquí no implica ReID de apariencia. Fragmentación alta: en el replay de 300 frames, 150 de 282 tracks tienen 10 observaciones o menos y hay 83 posibles cambios de ID, 38 con cambio de clase (`make review-tracks`) |
 | Conteo | Zonas, líneas finitas con confirmación y direcciones | Pruebas sintéticas y replay de una línea. Zonas A→B todavía sin demostración humana del aforo completo |
 | Clase de vehículo | Mayoría por track hasta el primer conteo, conservada después | Pruebas de ruido de clase. Cambiaron 44 clases de tracks en el replay; no se han revisado como correcciones humanas |
@@ -52,6 +52,6 @@ Los máximos estimados de deriva fueron 7.8113 px en el normal y 85.2845 px en e
 
 ## Validación automática y límites
 
-La última ejecución de `env/bin/python -m pytest -q` (2026-09-14, con `fastapi`, `httpx` y `libsql-experimental` instalados en `env/`) aprobó 384 pruebas sin omisiones. Sin esas dependencias se omiten las de DB/API. Las de API usan `TestClient`: no validan el servicio durante un procesamiento real.
+La última ejecución de `env/bin/python -m pytest -q` (2026-09-15, con `fastapi`, `httpx` y `libsql-experimental` instalados en `env/`) aprobó 395 pruebas sin omisiones. Sin esas dependencias se omiten las de DB/API. Las de API usan `TestClient`: no validan el servicio durante un procesamiento real.
 
 No hay porcentaje de precisión humana confirmado, nueva calibración de todas las entradas/salidas, estabilización automática, entrenamiento de pesos, benchmark de ONNX/TensorRT ni despliegue verificado. Sus criterios están en el backlog.
