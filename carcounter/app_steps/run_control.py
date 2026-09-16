@@ -7,12 +7,14 @@ import sys
 from tkinter import filedialog, messagebox
 
 from carcounter.paths import paths
+from carcounter.process_utils import kill_group, terminate_group
 from carcounter.wizard_actions import (
-    build_run_command, build_setup_command, load_profile, make_run_dir, open_folder_command,
-    resolve_model, resolve_path, results_summary, same_file, tail, video_resolution,
+    build_run_command, build_setup_command, load_json, make_run_dir, open_folder_command,
+    profile_errors, resolve_model, resolve_path, results_summary, same_file, tail, video_resolution,
 )
 
 POLL_MS = 500
+KILL_AFTER_MS = 10_000
 
 
 def _mtime(path):
@@ -26,7 +28,7 @@ class RunControlMixin:
     """Lanza setup.py y main.py como subprocesos y consulta su estado con after()."""
 
     def _profile(self):
-        return load_profile(self._selected_config.get())
+        return load_json(self._selected_config.get())
 
     def _model_choice(self):
         return resolve_model(self._selected_model.get(), self._custom_model_path, self._profile())
@@ -34,9 +36,15 @@ class RunControlMixin:
     def _busy(self):
         return self._process is not None and self._process.poll() is None
 
-    def _set_running(self, running):
-        if self._cancel_btn is not None and self._cancel_btn.winfo_exists():
-            self._cancel_btn.config(state="normal" if running else "disabled")
+    def _refresh_step(self):
+        """Redibuja el paso 3: los botones toman su estado de _busy() al construirse."""
+        if self._current_step == 2:
+            self._show_step(2)
+
+    def _launch(self, command, kind, **kwargs):
+        self._process = subprocess.Popen(command, cwd=str(paths.root), start_new_session=True, **kwargs)
+        self._process_kind = kind
+        self.after(POLL_MS, self._poll_process)
 
     def _open_setup(self):
         if self._busy():
@@ -47,10 +55,10 @@ class RunControlMixin:
             messagebox.showwarning("Video", "Elige un video primero")
             return
         model = self._model_choice()
-        if model["error"]:
-            messagebox.showwarning("Modelo", model["error"])
+        if model.error:
+            messagebox.showwarning("Modelo", model.error)
             return
-        if model["setup_model"] is None:
+        if model.setup_model is None:
             messagebox.showwarning("Modelo", "El configurador calibra con YOLO: se abrirá con su modelo por "
                                              "defecto. RF-DETR solo se usa al ejecutar.")
         config = self._selected_config.get()
@@ -63,12 +71,9 @@ class RunControlMixin:
                 return
             self._selected_config.set(config)
         self._setup_mtime = _mtime(config)
-        command = build_setup_command(sys.executable, video, config, model["setup_model"])
-        self._process = subprocess.Popen(command, cwd=str(paths.root))
-        self._process_kind = "setup"
+        self._launch(build_setup_command(sys.executable, video, config, model.setup_model), "setup")
         self._status.set("Configurador abierto: guarda el perfil y ciérralo para volver")
-        self._set_running(False)
-        self.after(POLL_MS, self._poll_process)
+        self._refresh_step()
 
     def _run_processing(self):
         if self._busy():
@@ -81,10 +86,15 @@ class RunControlMixin:
         if not config or not Path(config).is_file():
             messagebox.showwarning("Perfil", "Carga un perfil o créalo con Configurar zonas")
             return
-        profile = load_profile(config)
+        errors = profile_errors(config)
+        if errors:
+            messagebox.showwarning("Perfil inválido", "main.py lo rechazaría; corrígelo en el configurador:\n\n"
+                                   + "\n".join(errors))
+            return
+        profile = load_json(config)
         model = resolve_model(self._selected_model.get(), self._custom_model_path, profile)
-        if model["error"]:
-            messagebox.showwarning("Modelo", model["error"])
+        if model.error:
+            messagebox.showwarning("Modelo", model.error)
             return
         profile_video = resolve_path(profile.get("video_path", ""))
         if not self._confirm_video_matches(video, profile_video):
@@ -93,16 +103,13 @@ class RunControlMixin:
         run_dir = make_run_dir(video)
         run_dir.mkdir(parents=True, exist_ok=True)
         command = build_run_command(sys.executable, config, video, profile_video,
-                                     self._selected_tracker.get(), model["args"], run_dir)
+                                     self._selected_tracker.get(), model.args, run_dir)
         (run_dir / "command.txt").write_text(shlex.join(command) + "\n", encoding="utf-8")
         self._run_dir = run_dir
         self._log_file = open(run_dir / "run.log", "w", encoding="utf-8")
-        self._process = subprocess.Popen(command, cwd=str(paths.root), stdout=self._log_file,
-                                         stderr=subprocess.STDOUT)
-        self._process_kind = "run"
+        self._launch(command, "run", stdout=self._log_file, stderr=subprocess.STDOUT)
         self._status.set(f"Procesando... salidas en {run_dir}")
-        self._set_running(True)
-        self.after(POLL_MS, self._poll_process)
+        self._refresh_step()
 
     def _confirm_video_matches(self, video, profile_video):
         """Avisa si el video elegido no tiene la resolución del video del perfil (las zonas no coincidirían)."""
@@ -124,32 +131,35 @@ class RunControlMixin:
             self.after(POLL_MS, self._poll_process)
             return
         kind, self._process = self._process_kind, None
-        if kind == "setup":
-            self._finish_setup(code)
-        else:
-            self._finish_run(code)
+        (self._finish_setup if kind == "setup" else self._finish_run)(code)
 
     def _finish_setup(self, code):
         config = self._selected_config.get()
-        saved = _mtime(config) is not None and _mtime(config) != self._setup_mtime
-        if saved:
+        saved = _mtime(config)
+        if saved is not None and saved != self._setup_mtime:
             self._status.set(f"Perfil guardado: {Path(config).name}")
         else:
             suffix = f" (código {code})" if code else ""
             self._status.set(f"El configurador se cerró sin guardar el perfil{suffix}")
-        if self._current_step == 2:
-            self._show_step(2)
+        self._refresh_step()
 
     def _cancel_run(self):
-        if self._busy():
-            self._process.terminate()
-            self._status.set("Cancelando...")
+        if not self._busy():
+            return
+        if self._process_kind == "setup" and not messagebox.askyesno(
+                "Cerrar el configurador",
+                "Se cerrará el configurador y se perderá lo que no hayas guardado. ¿Continuar?"):
+            return
+        process = self._process
+        terminate_group(process)
+        self._status.set("Cancelando...")
+        # Si ignora SIGTERM la corrida quedaría colgada y el wizard bloqueado
+        self.after(KILL_AFTER_MS, lambda: kill_group(process))
 
     def _finish_run(self, code):
         if self._log_file is not None:
             self._log_file.close()
             self._log_file = None
-        self._set_running(False)
         run_dir = self._run_dir
         log_path = run_dir / "run.log"
         if code == 0:
@@ -162,8 +172,7 @@ class RunControlMixin:
             self._status.set(f"El proceso terminó con código {code}; revisa {log_path}")
             messagebox.showerror("Error al procesar",
                                  f"Código {code}. Últimas líneas de {log_path}:\n\n{tail(log_path)}")
-        if self._current_step == 2:
-            self._show_step(2)
+        self._refresh_step()
 
     def _open_output_folder(self, folder):
         try:

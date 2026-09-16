@@ -2,22 +2,66 @@
 
 from collections import deque
 from datetime import datetime
-import json
 from pathlib import Path
+from typing import NamedTuple
 
+from carcounter.app_config import AppConfig
+from carcounter.config_io import load_config
 from carcounter.models import MODEL_CATALOG, get_model_path, is_valid_weights
 from carcounter.paths import paths
 
 PROFILE_MODEL = "__profile__"
 CUSTOM_MODEL = "__custom__"
+MODE_LABELS = {"zones": "zonas (origen a destino)", "lines": "líneas de cruce", "directions": "direcciones"}
 
 
-def load_profile(config_path):
-    """Contenido del perfil JSON, o {} si no existe o no se puede leer."""
+class ModelChoice(NamedTuple):
+    """Modelo elegido: args de main.py y modelo del configurador. Con error no se debe lanzar nada."""
+    args: list | None
+    setup_model: str | None
+    label: str
+    error: str | None
+
+
+def load_json(path):
+    """Contenido del JSON, o {} si no existe o no se puede leer."""
     try:
-        return json.loads(Path(config_path).read_text(encoding="utf-8"))
+        data = load_config(path)
     except (OSError, ValueError, TypeError):
         return {}
+    return data if isinstance(data, dict) else {}
+
+
+def profile_errors(config_path):
+    """Errores del perfil antes de gastar una corrida; main.py lo vuelve a validar al arrancar."""
+    try:
+        data = load_config(config_path)
+    except (OSError, ValueError, TypeError) as error:
+        return [f"No se pudo leer el perfil: {error}"]
+    if not isinstance(data, dict):
+        return ["El perfil no es un objeto JSON"]
+    return AppConfig.from_dict(data).validate()
+
+
+def profile_rows(profile):
+    """Filas (etiqueta, valor) con lo que el perfil manda en la corrida."""
+    if not profile:
+        return []
+    geometry = ", ".join(part for part in (
+        f"{len(profile.get('zones') or {})} zonas",
+        f"{len(profile.get('lines') or [])} líneas",
+        f"{len(profile.get('directions') or {})} direcciones",
+        f"{len(profile.get('exclusion_zones') or {})} exclusiones",
+    ) if not part.startswith("0 "))
+    mode = profile.get("counting_mode", "zones")
+    rows = [("Conteo", f"{MODE_LABELS.get(mode, mode)} · {geometry or 'sin geometría'}")]
+    for label, key in (("Video perfil", "video_path"), ("Modelo perfil", "model_path")):
+        if profile.get(key):
+            rows.append((label, Path(profile[key]).name))
+    roi = (profile.get("settings") or {}).get("inference_roi")
+    if roi:
+        rows.append(("Región", f"{list(roi)}: lo de fuera no se detecta"))
+    return rows
 
 
 def resolve_path(value):
@@ -25,10 +69,7 @@ def resolve_path(value):
 
 
 def resolve_model(choice, custom_path="", profile=None):
-    """Argumentos de main.py y modelo para el configurador; nunca cambia de modelo en silencio.
-
-    Devuelve dict(args, setup_model, label, error). Con error no se debe lanzar nada.
-    """
+    """Elección de modelo sin cambios silenciosos: el perfil, un archivo propio o el catálogo."""
     profile = profile or {}
     if choice == PROFILE_MODEL:
         model = resolve_path(profile.get("model_path", ""))
@@ -36,29 +77,28 @@ def resolve_model(choice, custom_path="", profile=None):
             return _model_error("El perfil no indica model_path: elige un modelo o un archivo")
         if not is_valid_weights(model):
             return _model_error(f"El modelo del perfil no existe o está incompleto:\n{model}")
-        return dict(args=[], setup_model=model, label=f"del perfil ({Path(model).name})", error=None)
+        return ModelChoice([], model, f"del perfil ({Path(model).name})", None)
     if choice == CUSTOM_MODEL:
         if not is_valid_weights(custom_path):
             return _model_error(f"El archivo de pesos no existe o está incompleto:\n{custom_path}")
         if custom_path.endswith(".pth"):
-            return dict(args=["--detector", "rfdetr", "--model", custom_path], setup_model=None,
-                        label=Path(custom_path).name, error=None)
-        return dict(args=["--model", custom_path], setup_model=custom_path,
-                    label=Path(custom_path).name, error=None)
+            return ModelChoice(["--detector", "rfdetr", "--model", custom_path], None,
+                               Path(custom_path).name, None)
+        return ModelChoice(["--model", custom_path], custom_path, Path(custom_path).name, None)
     info = MODEL_CATALOG.get(choice)
     if not info:
         return _model_error("Selecciona un modelo")
     if info["family"] == "rfdetr":
-        return dict(args=["--detector", "rfdetr", "--rfdetr-variant", info.get("variant", "base")],
-                    setup_model=None, label=choice, error=None)
+        return ModelChoice(["--detector", "rfdetr", "--rfdetr-variant", info.get("variant", "base")],
+                           None, choice, None)
     model = get_model_path(choice)
     if not model:
         return _model_error(f"{choice} no está descargado en models/{info['file']}")
-    return dict(args=["--model", model], setup_model=model, label=choice, error=None)
+    return ModelChoice(["--model", model], model, choice, None)
 
 
 def _model_error(message):
-    return dict(args=None, setup_model=None, label="", error=message)
+    return ModelChoice(None, None, "", message)
 
 
 def same_file(first, second):
@@ -111,7 +151,7 @@ def tail(path, lines=20):
 
 def results_summary(results_path):
     """Texto corto con frames, vehículos y rutas de results.json."""
-    data = load_profile(results_path)
+    data = load_json(results_path)
     if not data:
         return "Sin results.json"
     routes = data.get("routes", {})

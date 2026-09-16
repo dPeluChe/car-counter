@@ -129,20 +129,20 @@ class ModelStepMixin:
 
     def _select_model(self, name):
         choice = resolve_model(name)
-        if choice["error"]:
-            messagebox.showwarning("Modelo", choice["error"])
+        if choice.error:
+            messagebox.showwarning("Modelo", choice.error)
             return
         self._selected_model.set(name)
-        self._status.set(f"Modelo: {choice['label']}")
+        self._status.set(f"Modelo: {choice.label}")
         self._show_step(1)
 
     def _select_profile_model(self):
         choice = resolve_model(PROFILE_MODEL, profile=self._profile())
-        if choice["error"]:
-            messagebox.showwarning("Modelo del perfil", choice["error"])
+        if choice.error:
+            messagebox.showwarning("Modelo del perfil", choice.error)
             return
         self._selected_model.set(PROFILE_MODEL)
-        self._status.set(f"Modelo: {choice['label']}")
+        self._status.set(f"Modelo: {choice.label}")
         self._show_step(1)
 
     def _pick_model_file(self):
@@ -152,12 +152,12 @@ class ModelStepMixin:
         if not path:
             return
         choice = resolve_model(CUSTOM_MODEL, custom_path=path)
-        if choice["error"]:
-            messagebox.showwarning("Modelo", choice["error"])
+        if choice.error:
+            messagebox.showwarning("Modelo", choice.error)
             return
         self._custom_model_path = path
         self._selected_model.set(CUSTOM_MODEL)
-        self._status.set(f"Modelo: {choice['label']}")
+        self._status.set(f"Modelo: {choice.label}")
         self._show_step(1)
 
     def _download_threaded(self, name):
