@@ -135,9 +135,10 @@ class CalibrationMixin:
                                         relief="flat", pady=6)
         self.btn_add_sample.pack(fill="x", pady=2)
 
-        tk.Button(self.panel_step1, text="Probar muestras guardadas",
-                  command=self._test_saved_samples, bg="#313244", fg="#CDD6F4",
-                  relief="flat", pady=4).pack(fill="x", pady=2)
+        self.btn_samples_test = tk.Button(self.panel_step1, text="Probar muestras guardadas",
+                                          command=self._test_saved_samples, bg="#313244", fg="#CDD6F4",
+                                          relief="flat", pady=4)
+        self.btn_samples_test.pack(fill="x", pady=2)
 
         tk.Button(self.panel_step1, text="Aplicar filtros de las muestras",
                   command=self._apply_sample_constraints, bg="#313244", fg="#CDD6F4",

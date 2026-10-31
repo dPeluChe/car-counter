@@ -1,3 +1,4 @@
+import json
 from tkinter import messagebox
 
 import cv2
@@ -7,6 +8,7 @@ from carcounter.geometry import bbox_iou
 from carcounter.detection import detect_objects
 from carcounter.detector import filter_detections, detection_rejection
 from carcounter.runtime import resolve_runtime_config
+from setup_panels.background_job import BackgroundJob
 from types import SimpleNamespace
 
 
@@ -52,7 +54,29 @@ def infer_with_params(frame, params, diagnostics=False):
             for row, name in zip(rows, classes)]
 
 
+def match_saved_samples(video_path, samples, params, cancelled):
+    """Cuenta muestras detectadas por frame; devuelve None si se cancela entre frames."""
+    cap = cv2.VideoCapture(video_path)
+    matched = 0
+    try:
+        for frame_number in sorted({sample["frame"] for sample in samples}):
+            if cancelled.is_set():
+                return None
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+            ok, frame = cap.read()
+            if not ok:
+                raise RuntimeError(f"No se pudo leer el frame {frame_number}")
+            boxes = [sample["bbox"] for sample in samples if sample["frame"] == frame_number]
+            matched += count_sample_matches(infer_with_params(frame, params), boxes)
+    finally:
+        cap.release()
+    return matched
+
+
 class CalibTestsMixin:
+    """Las pruebas de calibración infieren en un hilo: la ventana responde y el resultado se
+    descarta si se cancela o cambia el video, el frame, el modelo o el perfil."""
+
     def _profile_inference_params(self):
         return profile_inference_params(self)
 
@@ -63,31 +87,81 @@ class CalibTestsMixin:
     def _predict_current_profile(self, frame):
         return infer_with_params(frame, profile_inference_params(self))
 
+    def _calib_context(self):
+        try:
+            profile = json.dumps(self._build_current_config(), sort_keys=True, default=str)
+        except Exception:
+            profile = None
+        return (self.video_path, self.current_frame_idx, id(self.model), profile)
+
+    def _calib_buttons(self):
+        return [self.btn_yolo_test, self.btn_global_test, self.btn_samples_test]
+
+    def _start_calib_job(self, button, status, work, on_success):
+        """Lanza la prueba; pulsar de nuevo el mismo botón (que dice Cancelar) la cancela."""
+        if not hasattr(self, "_calib_job"):
+            self._calib_job = BackgroundJob()
+        if self._calib_job.active:
+            self._calib_job.cancel()
+            self.status_var.set("Cancelando: el resultado se descartará.")
+            return
+        self._calib_job.start(self._calib_context(), work)
+        self._calib_label = (button, button.cget("text"))
+        for other in self._calib_buttons():
+            other.config(state="disabled")
+        button.config(state="normal", text="✖ Cancelar prueba")
+        self.status_var.set(status + " Puedes seguir usando la ventana; cancelar descarta el resultado.")
+        self.after(100, lambda: self._poll_calib_job(on_success))
+
+    def _poll_calib_job(self, on_success):
+        outcome = self._calib_job.poll(self._calib_context())
+        if outcome is None:
+            self.after(100, lambda: self._poll_calib_job(on_success))
+            return
+        button, text = self._calib_label
+        button.config(text=text)
+        for other in self._calib_buttons():
+            other.config(state="normal")
+        state, value = outcome
+        if state == "descartado":
+            self.status_var.set(f"Prueba descartada: {value}.")
+        elif state == "error":
+            self.status_var.set(f"No se pudo probar el perfil: {value}")
+        else:
+            try:
+                on_success(value)
+            except Exception as error:
+                self.status_var.set(f"No se pudo mostrar el resultado: {error}")
+
+    def _snapshot_for_test(self):
+        """Lee Tk (perfil y frame) en el hilo de Tk; el hilo de trabajo solo ve copias."""
+        return profile_inference_params(self), self.frame_orig.copy()
+
     def _run_global_detection_test(self):
         if self.model is None:
             messagebox.showwarning("Modelo", "El modelo no está cargado.")
             return
-        self.config(cursor="watch")
-        self.btn_global_test.config(state="disabled")
-        self.status_var.set("Probando el perfil de ejecución en este frame…")
-        self.update_idletasks()
         try:
-            detections = infer_with_params(self.frame_orig, profile_inference_params(self), diagnostics=True)
-            display = self._draw_detection_overlay(detections)
-            self.frame_rgb = cv2.cvtColor(display, cv2.COLOR_BGR2RGB)
-            self._redraw()
-            from collections import Counter
-            rejected = Counter(det["rejection"] for det in detections if det["rejection"])
-            accepted = len(detections) - sum(rejected.values())
-            reasons = ", ".join(f"{key}: {value}" for key, value in rejected.items()) or "ninguno"
-            self.lbl_calib_status.config(
-                text=f"Aceptadas: {accepted}. Descartes rojos: {reasons}.", fg="#A6E3A1")
-            self.status_var.set("Fuera de ROI no se infiere. Cajas bajo el umbral del modelo no están disponibles.")
+            params, frame = self._snapshot_for_test()
         except Exception as error:
             self.status_var.set(f"No se pudo probar el perfil: {error}")
-        finally:
-            self.config(cursor="")
-            self.btn_global_test.config(state="normal")
+            return
+        self._start_calib_job(
+            self.btn_global_test, "Probando el perfil de ejecución en este frame…",
+            lambda cancelled: infer_with_params(frame, params, diagnostics=True),
+            self._show_global_detection_result)
+
+    def _show_global_detection_result(self, detections):
+        display = self._draw_detection_overlay(detections)
+        self.frame_rgb = cv2.cvtColor(display, cv2.COLOR_BGR2RGB)
+        self._redraw()
+        from collections import Counter
+        rejected = Counter(det["rejection"] for det in detections if det["rejection"])
+        accepted = len(detections) - sum(rejected.values())
+        reasons = ", ".join(f"{key}: {value}" for key, value in rejected.items()) or "ninguno"
+        self.lbl_calib_status.config(
+            text=f"Aceptadas: {accepted}. Descartes rojos: {reasons}.", fg="#A6E3A1")
+        self.status_var.set("Fuera de ROI no se infiere. Cajas bajo el umbral del modelo no están disponibles.")
 
     def _run_calib_test(self):
         if self.model is None or not (self.calib_rect_start and self.calib_rect_end):
@@ -97,55 +171,51 @@ class CalibTestsMixin:
                     min(self.calib_rect_start[1], self.calib_rect_end[1]),
                     max(self.calib_rect_start[0], self.calib_rect_end[0]),
                     max(self.calib_rect_start[1], self.calib_rect_end[1]))
-        self.calib_test_passed = False
-        self.config(cursor="watch")
-        self.btn_yolo_test.config(state="disabled")
-        self.update_idletasks()
         try:
-            detections = self._predict_current_profile(self.frame_orig)
-            match = best_calibration_match(detections, selected)
-            self.calib_test_passed = match is not None
-            display = self._draw_detection_overlay(detections, highlight_box=selected)
-            cv2.rectangle(display, selected[:2], selected[2:], (255, 230, 0), 2)
-            self.frame_rgb = cv2.cvtColor(display, cv2.COLOR_BGR2RGB)
-            self._redraw()
-            message = (f"Coincidencia: {match['cls_name']} ({match['conf']:.2f}). Revisa más frames."
-                       if match else "El perfil actual no detecta el vehículo marcado con IoU >= 0.50.")
-            self.lbl_calib_status.config(text=message, fg="#A6E3A1" if match else "#F38BA8")
-            self.status_var.set(message)
+            params, frame = self._snapshot_for_test()
         except Exception as error:
             self.status_var.set(f"No se pudo probar el perfil: {error}")
-        finally:
-            self.config(cursor="")
-            self.btn_yolo_test.config(state="normal")
+            return
+        self.calib_test_passed = False
+        self._start_calib_job(
+            self.btn_yolo_test, "Probando el perfil en el vehículo marcado…",
+            lambda cancelled: infer_with_params(frame, params),
+            lambda detections: self._show_calib_result(detections, selected))
+
+    def _show_calib_result(self, detections, selected):
+        match = best_calibration_match(detections, selected)
+        self.calib_test_passed = match is not None
+        display = self._draw_detection_overlay(detections, highlight_box=selected)
+        cv2.rectangle(display, selected[:2], selected[2:], (255, 230, 0), 2)
+        self.frame_rgb = cv2.cvtColor(display, cv2.COLOR_BGR2RGB)
+        self._redraw()
+        message = (f"Coincidencia: {match['cls_name']} ({match['conf']:.2f}). Revisa más frames."
+                   if match else "El perfil actual no detecta el vehículo marcado con IoU >= 0.50.")
+        self.lbl_calib_status.config(text=message, fg="#A6E3A1" if match else "#F38BA8")
+        self.status_var.set(message)
 
     def _test_saved_samples(self):
-        samples = self.vehicle_samples
+        samples = [dict(sample) for sample in self.vehicle_samples]
         if self.model is None or not samples or any("frame" not in sample for sample in samples):
             self.status_var.set("Agrega muestras en varios frames del video antes de probarlas.")
             return
-        self.config(cursor="watch")
-        self.update_idletasks()
-        cap = cv2.VideoCapture(self.video_path)
-        matched = 0
-        self.calib_test_passed = False
         try:
-            for frame_number in sorted({sample["frame"] for sample in samples}):
-                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-                ok, frame = cap.read()
-                if not ok:
-                    raise RuntimeError(f"No se pudo leer el frame {frame_number}")
-                boxes = [sample["bbox"] for sample in samples if sample["frame"] == frame_number]
-                matched += count_sample_matches(self._predict_current_profile(frame), boxes)
-            self.calib_test_passed = matched == len(samples)
-            message = f"Muestras detectadas: {matched}/{len(samples)}. No mide falsos positivos ni precisión del aforo."
-            self.status_var.set(message)
-            self.lbl_calib_status.config(text=message, fg="#A6E3A1" if self.calib_test_passed else "#F38BA8")
+            params = profile_inference_params(self)
         except Exception as error:
             self.status_var.set(f"Error al probar muestras: {error}")
-        finally:
-            cap.release()
-            self.config(cursor="")
+            return
+        video_path = self.video_path
+        self.calib_test_passed = False
+        self._start_calib_job(
+            self.btn_samples_test, "Probando las muestras guardadas…",
+            lambda cancelled: match_saved_samples(video_path, samples, params, cancelled),
+            lambda matched: self._show_samples_result(matched, len(samples)))
+
+    def _show_samples_result(self, matched, total):
+        self.calib_test_passed = matched == total
+        message = f"Muestras detectadas: {matched}/{total}. No mide falsos positivos ni precisión del aforo."
+        self.status_var.set(message)
+        self.lbl_calib_status.config(text=message, fg="#A6E3A1" if self.calib_test_passed else "#F38BA8")
 
     def _restore_original_frame(self):
         self.frame_rgb = cv2.cvtColor(self.frame_orig, cv2.COLOR_BGR2RGB)
