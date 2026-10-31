@@ -8,6 +8,7 @@
 
 | Orden | Tarea | Resultado necesario |
 |---|---|---|
+| Previo | TODO-039 / TODO-040 | Colores correctos y mismo video/perfil/SAHI en preview y ejecución |
 | 1 | TODO-028 | Referencia humana y procedencia de imágenes/eventos |
 | 2 | TODO-032 | Medición y mejora de detección de autos |
 | 3 | TODO-030 | Continuidad de identidad y errores por evento |
@@ -22,6 +23,40 @@
 
 Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNTING_SCOPE.md](GUIDES/COUNTING_SCOPE.md). La aceptación se confirma con la primera referencia humana.
 
+## Auditoría de código y video: 2026-10-30
+
+395 pruebas aprobadas. Replay de 300 frames: 282 IDs y seis cruces; 150 tracks tienen diez observaciones o menos. Las medianas de ancho y alto de las cajas por track son 13 y 16.85 px: describen predicciones, no todos los vehículos ni su precisión. El recorte de la demo cubre un sector del anillo, no rutas completas. No hay un porcentaje humano de exactitud acreditado.
+
+Se conserva la arquitectura detector → tracker → eventos/OD. [SAHI](https://arxiv.org/abs/2202.06934) es pertinente para objetos pequeños; [ByteTrack](https://arxiv.org/abs/2110.06864) aprovecha cajas débiles para mantener identidad. Esos artículos no validan nuestros pesos ni videos. BoT-SORT aquí rechaza ReID y su compensación no transforma zonas. El zoom de pantalla no cambia la inferencia; recortar conserva escala pero no recupera detalle perdido.
+
+Orden de trabajo: corregir integración y perfiles; preparar referencia humana diversa; comparar detección; medir continuidad y rutas completas. Entrenar pesos o cambiar captura solo si los errores medidos lo justifican. No priorizar dashboards, infraestructura ni GPU antes de esa medición.
+
+## TODO-039: Orden de color en SAHI `added: 2026-10-30`
+
+**Prioridad:** P0. **Estado:** reproducido, pendiente de corrección.
+
+`SAHIDetector.infer` entrega directamente el frame BGR de OpenCV a SAHI, que espera RGB. La versión instalada invierte después los canales para Ultralytics: un píxel rojo BGR `[0,0,255]` termina como `[255,0,0]` ante YOLO. El efecto sobre precisión todavía no está medido.
+
+- [ ] Convertir BGR a RGB exclusivamente en la frontera SAHI, conservando el frame original y las coordenadas globales.
+- [ ] Añadir regresión con colores asimétricos y ROI, además de verificar que YOLO directo sigue recibiendo BGR.
+- [ ] Invalidar las cachés SAHI anteriores por cambio de preprocesamiento; conservar compatibilidad del replay sin SAHI.
+- [ ] Comparar inferencia real antes/después sobre los mismos frames sin presentar cambios de cajas como mejora de precisión humana.
+
+**Archivos:** `carcounter/detector.py`, `carcounter/detection_cache.py`, `tests/test_pipeline_profile.py`. **Cierre técnico:** contrato de color probado y cachés compatibles identificables. La aceptación de precisión depende de TODO-028/032.
+
+## TODO-040: Coherencia de video, perfil y activación de SAHI `added: 2026-10-30`
+
+**Prioridad:** P0. **Estado:** inconsistencias verificadas.
+
+`make run` fuerza por defecto `glorieta_test1min.mp4`, mientras el perfil local `config/config.json` referencia `glorieta_fast.MP4`, con otro encuadre. Además, sin `sahi.enabled`, GUI carga `false`, runtime y `AppConfig` asumen `true`. Un mismo perfil puede producir geometría incorrecta o distinta inferencia según el punto de entrada.
+
+- [ ] Respetar el video del perfil en `make run` y `make run-full` salvo override explícito; conservar ejemplos utilizables para los comandos que requieren video.
+- [ ] Unificar el valor por defecto de SAHI en GUI, CLI, evaluación, configuración tipada y replay; probar también `enabled=true` y `--no-sahi`.
+- [ ] Añadir regresiones de comandos Make y lectura/guardado del perfil.
+- [ ] Asociar geometría a video y frame de referencia para detectar un cambio de encuadre; coordinar con TODO-029/033, no asumir que igual resolución significa igual escena.
+
+**Cierre:** mismas opciones efectivas para el mismo perfil y ninguna sustitución implícita del video calibrado. La validación de encuadre requiere metadatos de referencia adicionales.
+
 ## TODO-028: Referencias humanas de detección y rutas
 
 **Prioridad:** P0. **Estado:** herramientas implementadas (ver [2609](TASK_COMPLETED/2609.md)), dataset humano no completado. Es requisito de aceptación para TODO-031, TODO-032 y TODO-030.
@@ -29,6 +64,7 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 **Objetivo:** medir detección y aforo por separado sobre el mismo material, con procedencia verificable. Una predicción del modelo nunca es automáticamente verdad humana.
 
 - [ ] Añadir manifiesto de extracción con SHA-256 de video, índice original desde 1, timestamp, imagen y FPS. Actualmente `frame_0000.jpg` es un índice de exportación y pierde esa correspondencia; no sirve para inferir el tiempo original.
+- [ ] Sustituir el descarte global por pHash como criterio por defecto: en 30 frames de `glorieta_test1min.mp4` separados por 60 frames conservó solo uno. El fondo fijo oculta cambios de vehículos. Preservar diversidad temporal, evitar sobrescribir anotaciones y probar la procedencia de cada imagen exportada.
 - [ ] Rechazar explícitamente formas no compatibles o convertirlas con una regla probada: el parser actual solo lee `shape_type=rectangle` e ignora polígonos/máscaras. No evaluar asistencia de segmentación como si fueran cajas revisadas.
 - [ ] Seleccionar escenas con autos pequeños, tráfico denso, oclusiones, bordes de ROI, fondo sin autos y vehículos estacionados; incluir más de un tramo.
 - [ ] Separar tramos usados para ajustar parámetros de los usados para aceptar el cambio; evitar usar imágenes casi iguales como validación independiente.
@@ -128,6 +164,7 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 - [ ] Guardar mapa de rutas permitidas, ROI y zonas en un perfil distinto al ejemplo de una línea.
 - [ ] Añadir validación de geometría que identifique zonas inalcanzables por la región de detección y destinos prematuros, con diagnóstico comprensible.
 - [ ] Reproducir A→B, paso junto a una salida sin tomarla y trayectoria incompleta con reglas documentadas.
+- [ ] Representar entradas y salidas por acceso/sentido y probar retornos. `_update_route` exige destino distinto de origen: A→exterior→A queda en `transit`, sin evento, incluso con observaciones suficientes. Separar zonas de entrada/salida o definir una política explícita; no contar ruido de borde como retorno.
 - [ ] Comparar eventos y matriz origen/destino contra revisión humana del mismo video y tramo.
 - [ ] Exportar la matriz origen/destino por grupo EPS también en CSV (hoy está en `routes_by_group` del JSON).
 - [ ] Entregar video, JSON con eventos, CSV de tracks/OD y reporte de rutas revisadas, sin presentar IDs como autos.
@@ -173,6 +210,8 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 **Prioridad:** P1, después de la referencia humana (TODO-028). **Estado:** medido, sin cambio aplicado. **Depende de:** TODO-028 para tener contra qué comparar que no sea la configuración actual.
 
 **Hallazgo:** SAHI reescala cada tile a `settings.imgsz` (1600 por defecto), así que un tile de 512 se amplía 3.1x. `carcounter/detection.py:detect_objects` reasigna `sahi_model.image_size` en cada frame y le gana a lo que fija `carcounter/runtime.py:load_sahi`.
+
+Auditoría 2026-10-30: el perfil local principal usa tiles 256 e `imgsz=1920` (7.5x por lado). Las mediciones históricas anteriores a TODO-039 usaron el contrato de color incorrecto: conservan valor como tiempos de aquella ejecución, no como validación de la precisión del flujo corregido.
 
 **Medido** (`glorieta_test1min`, VisDrone, tile 512, overlap 0.2, conf 0.10, una corrida por configuración, las tres seguidas en la misma sesión). Detalle, método y límites: [SAHI_IMAGE_SIZE_2026_09_15.md](RESEARCH/SAHI_IMAGE_SIZE_2026_09_15.md).
 
