@@ -149,7 +149,7 @@ El parser rechaza formas incompatibles y cajas inválidas en vez de omitirlas: [
 - [x] Probar sintéticamente A→B, salida sin permanencia suficiente y trayectoria incompleta; falta contrastar con video revisado.
 - [x] Entradas y salidas por acceso mediante `zone_roles`, editor en configurador y pruebas de retorno entre polígonos distintos del mismo acceso.
 - [ ] Comparar eventos y matriz origen/destino contra revisión humana del mismo video y tramo.
-- [ ] Exportar la matriz origen/destino por grupo EPS también en CSV (hoy está en `routes_by_group` del JSON).
+- [x] Matriz origen/destino por grupo EPS en CSV (`--output-od-group-csv`, `od_by_group.csv` en el wizard), derivada de los mismos eventos que `routes_by_group` ([avance](TASK_COMPLETED/2610.md)).
 - [ ] Entregar video, JSON con eventos, CSV de tracks/OD y reporte de rutas revisadas, sin presentar IDs como autos.
 
 **Pruebas manuales:** PRUEBA-04 y PRUEBA-06. **Cierre:** rutas del alcance revisadas, incidentes clasificados y umbrales acordados alcanzados; no basta conservar los cruces de una sola línea.
