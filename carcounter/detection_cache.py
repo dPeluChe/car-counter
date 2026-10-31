@@ -26,6 +26,8 @@ def cache_signature(cfg, detector_backend, use_sahi, variant="base", start_frame
                 if use_sahi else None,
     }
     # Solo se agrega al empezar después del frame 1 para no invalidar cachés existentes
+    if use_sahi:
+        signature["sahi_input_color"] = "RGB"
     if start_frame != 1:
         signature["start_frame"] = start_frame
     return signature

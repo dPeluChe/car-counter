@@ -8,7 +8,7 @@
 
 | Orden | Tarea | Resultado necesario |
 |---|---|---|
-| Previo | TODO-039 / TODO-040 | Colores correctos y mismo video/perfil/SAHI en preview y ejecución |
+| Previo | TODO-040 | Mismo video/perfil/SAHI en preview y ejecución; contrato de color corregido en [TODO-039](TASK_COMPLETED/2610.md) |
 | 1 | TODO-028 | Referencia humana y procedencia de imágenes/eventos |
 | 2 | TODO-032 | Medición y mejora de detección de autos |
 | 3 | TODO-030 | Continuidad de identidad y errores por evento |
@@ -30,19 +30,6 @@ Grupos, conteo origen/destino, tramo y propuesta de aceptación (±20 %): [COUNT
 Se conserva la arquitectura detector → tracker → eventos/OD. [SAHI](https://arxiv.org/abs/2202.06934) es pertinente para objetos pequeños; [ByteTrack](https://arxiv.org/abs/2110.06864) aprovecha cajas débiles para mantener identidad. Esos artículos no validan nuestros pesos ni videos. BoT-SORT aquí rechaza ReID y su compensación no transforma zonas. El zoom de pantalla no cambia la inferencia; recortar conserva escala pero no recupera detalle perdido.
 
 Orden de trabajo: corregir integración y perfiles; preparar referencia humana diversa; comparar detección; medir continuidad y rutas completas. Entrenar pesos o cambiar captura solo si los errores medidos lo justifican. No priorizar dashboards, infraestructura ni GPU antes de esa medición.
-
-## TODO-039: Orden de color en SAHI `added: 2026-10-30`
-
-**Prioridad:** P0. **Estado:** reproducido, pendiente de corrección.
-
-`SAHIDetector.infer` entrega directamente el frame BGR de OpenCV a SAHI, que espera RGB. La versión instalada invierte después los canales para Ultralytics: un píxel rojo BGR `[0,0,255]` termina como `[255,0,0]` ante YOLO. El efecto sobre precisión todavía no está medido.
-
-- [ ] Convertir BGR a RGB exclusivamente en la frontera SAHI, conservando el frame original y las coordenadas globales.
-- [ ] Añadir regresión con colores asimétricos y ROI, además de verificar que YOLO directo sigue recibiendo BGR.
-- [ ] Invalidar las cachés SAHI anteriores por cambio de preprocesamiento; conservar compatibilidad del replay sin SAHI.
-- [ ] Comparar inferencia real antes/después sobre los mismos frames sin presentar cambios de cajas como mejora de precisión humana.
-
-**Archivos:** `carcounter/detector.py`, `carcounter/detection_cache.py`, `tests/test_pipeline_profile.py`. **Cierre técnico:** contrato de color probado y cachés compatibles identificables. La aceptación de precisión depende de TODO-028/032.
 
 ## TODO-040: Coherencia de video, perfil y activación de SAHI `added: 2026-10-30`
 

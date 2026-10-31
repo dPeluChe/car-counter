@@ -2,6 +2,8 @@
 
 Revisión: 2026-09-15. Fuentes: código local, suite de pruebas y artefactos indicados. Implementado no significa validado en producción.
 
+Actualización 2026-10-30: contrato BGR/RGB corregido en SAHI, con invalidación de sus cachés anteriores y cuatro regresiones nuevas (399 pruebas aprobadas). Replay sin SAHI: eventos y CSV idénticos. Comparación real de tres frames y límites en [TODO-039](../TASK_COMPLETED/2610.md). Los resultados SAHI de septiembre corresponden al preprocesamiento anterior; no acreditan precisión del flujo corregido.
+
 ## Capacidades y evidencia
 
 | Área | Implementación existente | Evidencia y límite |
