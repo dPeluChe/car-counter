@@ -61,6 +61,18 @@ def profile_rows(profile):
     roi = (profile.get("settings") or {}).get("inference_roi")
     if roi:
         rows.append(("Región", f"{list(roi)}: lo de fuera no se detecta"))
+    settings = profile.get("settings") or {}
+    sahi = profile.get("sahi") or {}
+    rows.append(("Detección", f"Confianza {settings.get('conf_threshold', 0.10)} · imgsz {settings.get('imgsz', 1600)}"))
+    if settings.get("conf_per_class"):
+        rows.append(("Por clase", ", ".join(f"{key}: {value}" for key, value in settings["conf_per_class"].items())))
+    rows.append(("SAHI", (f"{sahi.get('slice_width', 512)}×{sahi.get('slice_height', 512)} px · "
+                         f"solape {sahi.get('overlap_ratio', 0.2)}") if sahi.get("enabled", False) else "Desactivado"))
+    reference = profile.get("geometry_reference")
+    rows.append(("Referencia", f"Frame {reference['frame_index']} · video vinculado" if reference
+                 else "Sin referencia guardada; confirma el encuadre en el configurador"))
+    drift = settings.get("camera_max_drift_px")
+    rows.append(("Cámara", f"Detener si deriva > {drift} px" if drift is not None else "Monitor desactivado"))
     return rows
 
 

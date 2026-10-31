@@ -5,7 +5,7 @@ import numpy as np
 
 from carcounter.geometry import bbox_iou
 from carcounter.detection import detect_objects
-from carcounter.detector import filter_detections
+from carcounter.detector import filter_detections, detection_rejection
 from carcounter.runtime import resolve_runtime_config
 from types import SimpleNamespace
 
@@ -29,7 +29,7 @@ def profile_inference_params(app):
     }
 
 
-def infer_with_params(frame, params):
+def infer_with_params(frame, params, diagnostics=False):
     """Inferencia pura: no toca Tk, asi que puede correr en otro hilo."""
     cfg = params["cfg"]
     raw = detect_objects(
@@ -40,6 +40,10 @@ def infer_with_params(frame, params):
         sahi_nms_threshold=cfg["sahi_nms"],
         inference_roi=cfg["settings"].get("inference_roi"),
     )
+    if diagnostics:
+        return [dict(det, rejection=detection_rejection(
+            det, lambda name: cfg["conf_per_class"].get(name, cfg["conf_threshold"]),
+            cfg["geo_constraints"], params["exclusion_np"])) for det in raw]
     rows, classes = filter_detections(
         raw, lambda name: cfg["conf_per_class"].get(name, cfg["conf_threshold"]),
         cfg["geo_constraints"], params["exclusion_np"],
@@ -68,12 +72,17 @@ class CalibTestsMixin:
         self.status_var.set("Probando el perfil de ejecución en este frame…")
         self.update_idletasks()
         try:
-            detections = self._predict_current_profile(self.frame_orig)
+            detections = infer_with_params(self.frame_orig, profile_inference_params(self), diagnostics=True)
             display = self._draw_detection_overlay(detections)
             self.frame_rgb = cv2.cvtColor(display, cv2.COLOR_BGR2RGB)
             self._redraw()
-            self.lbl_calib_status.config(text=f"{len(detections)} detecciones del perfil actual", fg="#A6E3A1")
-            self.status_var.set("Revisa vehículos omitidos y cajas incorrectas en varios frames.")
+            from collections import Counter
+            rejected = Counter(det["rejection"] for det in detections if det["rejection"])
+            accepted = len(detections) - sum(rejected.values())
+            reasons = ", ".join(f"{key}: {value}" for key, value in rejected.items()) or "ninguno"
+            self.lbl_calib_status.config(
+                text=f"Aceptadas: {accepted}. Descartes rojos: {reasons}.", fg="#A6E3A1")
+            self.status_var.set("Fuera de ROI no se infiere. Cajas bajo el umbral del modelo no están disponibles.")
         except Exception as error:
             self.status_var.set(f"No se pudo probar el perfil: {error}")
         finally:

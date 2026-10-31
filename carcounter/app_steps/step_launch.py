@@ -17,10 +17,24 @@ class LaunchStepMixin:
         f = self._content
         tk.Label(f, text="Perfil y ejecución", bg=BG, fg=FG_BRIGHT,
                  font=("Arial", 14, "bold"), anchor="w").pack(fill="x")
-        self._render_summary_card(f)
-        self._render_config_card(f)
-        self._render_tracker_card(f)
-        self._render_action_buttons(f)
+        actions = tk.Frame(f, bg=BG)
+        actions.pack(side="bottom", fill="x")
+        self._render_action_buttons(actions)
+        body = tk.Frame(f, bg=BG)
+        body.pack(fill="both", expand=True)
+        canvas = tk.Canvas(body, bg=BG, highlightthickness=0)
+        scrollbar = tk.Scrollbar(body, orient="vertical", command=canvas.yview)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        details = tk.Frame(canvas, bg=BG)
+        window = canvas.create_window((0, 0), window=details, anchor="nw")
+        details.bind("<Configure>", lambda event: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda event: canvas.itemconfigure(window, width=event.width))
+        self._bind_wheel(canvas)
+        self._render_summary_card(details)
+        self._render_config_card(details)
+        self._render_tracker_card(details)
 
     def _render_summary_card(self, parent):
         card = tk.Frame(parent, bg=BG_CARD, padx=16, pady=12)

@@ -127,25 +127,22 @@ class SAHIDetector(Detector):
         return detections
 
 
+def detection_rejection(det, conf_for, geo_constraints, exclusion_np):
+    x1, y1, x2, y2 = det["bbox"]
+    if det["cls_name"] not in VEHICLE_CLASSES:
+        return "clase"
+    if det["conf"] < conf_for(det["cls_name"]):
+        return "confianza"
+    if not passes_geometry_filter(x1, y1, x2, y2, geo_constraints):
+        return "tamaño"
+    if in_exclusion_zone((x1 + x2) / 2, (y1 + y2) / 2, exclusion_np):
+        return "exclusión"
+    return None
+
+
 def filter_detections(raw, conf_for, geo_constraints, exclusion_np):
-    det_list = []
-    det_classes = []
-    for det in raw:
-        x1, y1, x2, y2 = det["bbox"]
-        cls_name = det["cls_name"]
-        conf_val = det["conf"]
-
-        if cls_name not in VEHICLE_CLASSES:
-            continue
-        if conf_val < conf_for(cls_name):
-            continue
-        if not passes_geometry_filter(x1, y1, x2, y2, geo_constraints):
-            continue
-        if in_exclusion_zone((x1 + x2) / 2, (y1 + y2) / 2, exclusion_np):
-            continue
-
-        det_list.append([x1, y1, x2, y2, conf_val])
-        det_classes.append(cls_name)
-
-    detections = np.array(det_list) if det_list else np.empty((0, 5))
-    return detections, det_classes
+    accepted = [det for det in raw
+                if detection_rejection(det, conf_for, geo_constraints, exclusion_np) is None]
+    rows = [[*det["bbox"], det["conf"]] for det in accepted]
+    return (np.array(rows) if rows else np.empty((0, 5)),
+            [det["cls_name"] for det in accepted])
