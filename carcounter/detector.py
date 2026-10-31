@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 import cv2
 import numpy as np
 from carcounter.constants import VEHICLE_CLASSES, resolve_vehicle_classes
-from carcounter.geometry import passes_geometry_filter, in_exclusion_zone
+from carcounter.geometry import cross_class_duplicates, passes_geometry_filter, in_exclusion_zone
 from carcounter.logging_config import get_logger
 
 log = get_logger("detector")
@@ -140,9 +140,28 @@ def detection_rejection(det, conf_for, geo_constraints, exclusion_np):
     return None
 
 
-def filter_detections(raw, conf_for, geo_constraints, exclusion_np):
+def _duplicate_indices(dets, iou_threshold):
+    if not iou_threshold or not dets:
+        return set()
+    return cross_class_duplicates([[*d["bbox"], d["conf"]] for d in dets],
+                                  [d["cls_name"] for d in dets], iou_threshold)
+
+
+def filter_detections(raw, conf_for, geo_constraints, exclusion_np, cross_class_iou=0.0):
+    """Filtra cajas; con cross_class_iou > 0 quita duplicados de otra clase sobre el mismo vehiculo."""
     accepted = [det for det in raw
                 if detection_rejection(det, conf_for, geo_constraints, exclusion_np) is None]
+    dropped = _duplicate_indices(accepted, cross_class_iou)
+    accepted = [det for i, det in enumerate(accepted) if i not in dropped]
     rows = [[*det["bbox"], det["conf"]] for det in accepted]
     return (np.array(rows) if rows else np.empty((0, 5)),
             [det["cls_name"] for det in accepted])
+
+
+def mark_cross_class_duplicates(detections, cross_class_iou):
+    """Para el diagnostico del configurador: marca como 'duplicado' las cajas que filter_detections quitaria."""
+    candidates = [i for i, det in enumerate(detections) if det["rejection"] is None]
+    dropped = _duplicate_indices([detections[i] for i in candidates], cross_class_iou)
+    for position in dropped:
+        detections[candidates[position]]["rejection"] = "duplicado"
+    return detections
