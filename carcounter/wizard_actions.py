@@ -136,6 +136,7 @@ def build_run_command(python, config, video, profile_video, tracker, model_args,
     command = [python, "main.py", "--config", config, "--tracker", tracker, "--show-fps", *model_args,
                "--output", str(run_dir / "video.mp4"), "--output-json", str(run_dir / "results.json"),
                "--output-tracks-csv", str(run_dir / "tracks.csv"),
+               "--output-track-events-csv", str(run_dir / "track_events.csv"),
                "--output-od-csv", str(run_dir / "od_matrix.csv")]
     if video and not same_file(video, profile_video):
         command += ["--video", video]

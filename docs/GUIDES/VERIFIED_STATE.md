@@ -69,3 +69,10 @@ No hay porcentaje de precisión humana confirmado, nueva calibración de todas l
 ### Referencia geométrica
 
 Los perfiles guardados por el configurador incluyen `geometry_reference`: SHA-256 del video, frame base 1 y dimensiones. Al migrar un perfil antiguo, confirma que la geometría corresponde al frame visible. El mismo contenido puede cambiar de nombre; otro video requiere otro perfil. La referencia se comprueba antes de ejecutar. Si está habilitado el monitor de cámara, compara contra ese frame; esto no compensa movimiento ni acredita precisión humana.
+
+
+### Diagnóstico de continuidad
+
+El wizard exporta `track_events.csv`; CLI usa `--output-track-events-csv RUTA`. Es un registro de observaciones, no una certificación de identidad física. Una ausencia no demuestra que el vehículo salió de la glorieta. Los cambios de clase son los devueltos por tracking, antes del consenso de clase del contador. Comprueba que la corrida terminó correctamente antes de usar un CSV que puede quedar parcial.
+
+`frame` sigue siendo relativo al tramo. `source_frame` en eventos y `*_source_frame` en tracks son absolutos (base 1): relativo + `start_frame` - 1.

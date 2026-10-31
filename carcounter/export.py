@@ -100,6 +100,7 @@ TRACK_CSV_FIELDS = [
     "track_id", "class", "state", "origin", "direction",
     "destination", "counted_frame", "first_seen_frame", "observed_frames",
     "origin_confirmed", "class_votes",
+    "counted_source_frame", "first_seen_source_frame", "last_seen_source_frame",
     "first_x", "first_y", "last_x", "last_y", "first_bbox", "last_bbox",
     "trail_length", "last_seen_frame",
     "avg_width", "avg_height", "avg_area", "avg_aspect", "avg_elongation",

@@ -62,6 +62,7 @@ class VehicleCounter(LinesDirectionsMixin):
         self._crossing_history = {}  # {trk_id: {line_name: deque}}
         self._shape_metrics = {}  # {trk_id: {avg_width, avg_height, ...}}
         self.frame_count = 0
+        self.frame_offset = 0
 
     def set_frame(self, frame_count):
         """Actualiza el frame actual."""
@@ -196,7 +197,8 @@ class VehicleCounter(LinesDirectionsMixin):
         position = self.trails.get(trk_id)
         self.counting_events.append({
             "event_id": len(self.counting_events) + 1, "track_id": int(trk_id),
-            "frame": int(self.frame_count), "mode": mode, "route": route,
+            "frame": int(self.frame_count), "source_frame": int(self.frame_count + self.frame_offset),
+            "mode": mode, "route": route,
             "class": cls_name, "group": class_group(cls_name),
             "origin": origin, "destination": destination,
             "line": line, "direction": direction,
@@ -298,6 +300,9 @@ class VehicleCounter(LinesDirectionsMixin):
             "origin": info.get("origin", ""),
             "destination": info.get("destination", ""),
             "counted_frame": info.get("counted_frame", ""),
+            "counted_source_frame": info["counted_frame"] + self.frame_offset if "counted_frame" in info else "",
+            "first_seen_source_frame": observation["first_seen_frame"] + self.frame_offset if observation else "",
+            "last_seen_source_frame": info["last_seen_frame"] + self.frame_offset if "last_seen_frame" in info else "",
             "first_seen_frame": observation.get("first_seen_frame", ""),
             "observed_frames": observation.get("observed_frames", 0),
             "origin_confirmed": bool(info.get("origin")) and (
