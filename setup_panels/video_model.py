@@ -93,6 +93,7 @@ class VideoModelMixin:
     def _on_model_selected(self, name, path):
         """Callback cuando se selecciona un modelo en el dialogo."""
         if path:
+            self._stop_zone_preview()
             model = YOLO(path)
             self._model_path = path
             self.model = model
