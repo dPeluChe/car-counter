@@ -146,8 +146,8 @@ El parser rechaza formas incompatibles y cajas inválidas en vez de omitirlas: [
 
 - [ ] Guardar mapa de rutas permitidas, ROI y zonas en un perfil distinto al ejemplo de una línea.
 - [ ] Añadir validación de geometría que identifique zonas inalcanzables por la región de detección y destinos prematuros, con diagnóstico comprensible.
-- [ ] Reproducir A→B, paso junto a una salida sin tomarla y trayectoria incompleta con reglas documentadas.
-- [ ] Representar entradas y salidas por acceso/sentido y probar retornos. `_update_route` exige destino distinto de origen: A→exterior→A queda en `transit`, sin evento, incluso con observaciones suficientes. Separar zonas de entrada/salida o definir una política explícita; no contar ruido de borde como retorno.
+- [x] Probar sintéticamente A→B, salida sin permanencia suficiente y trayectoria incompleta; falta contrastar con video revisado.
+- [x] Entradas y salidas por acceso mediante `zone_roles`, editor en configurador y pruebas de retorno entre polígonos distintos del mismo acceso.
 - [ ] Comparar eventos y matriz origen/destino contra revisión humana del mismo video y tramo.
 - [ ] Exportar la matriz origen/destino por grupo EPS también en CSV (hoy está en `routes_by_group` del JSON).
 - [ ] Entregar video, JSON con eventos, CSV de tracks/OD y reporte de rutas revisadas, sin presentar IDs como autos.

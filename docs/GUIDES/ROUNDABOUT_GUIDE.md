@@ -59,3 +59,14 @@ La matriz OD solo corresponde a `zones`. `directions` clasifica desplazamiento p
 Sigue autos humanos completos y compara eventos, no solo el total de IDs. Conserva también omisiones, duplicaciones, destinos erróneos y casos incompletos. Procedimiento en [ROUTE_VALIDATION.md](ROUTE_VALIDATION.md): eventos por ruta/clase/tiempo como método principal y totales por ruta como resumen.
 
 La presentación debe identificar las rutas revisadas, intervalo, clases, referencia humana y errores medidos. No usar porcentajes de exactitud que provengan de otra cámara, modelo o prueba sintética.
+
+
+## Entradas y salidas explícitas por acceso
+
+En Paso 2, dibuja polígonos separados para cada carril de entrada y salida. Usa **Definir entradas y salidas por acceso** para asignar a cada zona su rol y acceso. Por ejemplo, las zonas `Norte entrada` y `Norte salida` comparten acceso `Norte`, con roles distintos.
+
+El perfil guarda `zone_roles`, un objeto por nombre de zona con `role` (`entry` o `exit`) y `access`. Debe incluir todas las zonas y al menos una entrada y una salida. Una entrada confirmada inicia la ruta; únicamente una salida confirmada la termina. Visitar otra entrada durante el tránsito no completa ni cambia el origen. Dos polígonos del mismo acceso permiten contar `Norte → Norte`. Cada ID completa como máximo una ruta; una vuelta interna sin salida no cuenta como retorno.
+
+La confirmación sigue usando `min_origin_frames` y `min_dest_frames`; huecos de observación reinician confirmaciones pendientes. La geometría debe separar carriles y evitar solapamientos: el motor aún escoge la primera zona que contiene el centro. Un polígono mal colocado puede producir un destino prematuro; la semántica no sustituye revisar el encuadre.
+
+Perfiles sin `zone_roles` conservan la regla anterior: cualquier zona distinta del origen puede completar el destino. **Usar zonas sin roles** vuelve a ese comportamiento. Los eventos explícitos conservan `origin_zone` y `destination_zone`, mientras la matriz OD usa los nombres de acceso.

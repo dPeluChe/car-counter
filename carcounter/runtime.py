@@ -215,6 +215,7 @@ def build_counter_and_lines(cfg, vid_w, vid_h):
         frame_size=(vid_w, vid_h),
         directions=cfg["directions_config"],
         min_crossing_frames=settings.get("min_crossing_frames", 2),
+        zone_roles=cfg["raw_config"].get("zone_roles") if cfg["counting_mode"] == "zones" else None,
     )
     return counter, zones_np, exclusion_np, counting_lines
 

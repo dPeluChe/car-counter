@@ -61,6 +61,11 @@ def profile_rows(profile):
     roi = (profile.get("settings") or {}).get("inference_roi")
     if roi:
         rows.append(("Región", f"{list(roi)}: lo de fuera no se detecta"))
+    roles = profile.get("zone_roles")
+    if roles:
+        rows.append(("Rutas", "Entrada confirmada → salida confirmada, agrupadas por acceso"))
+    elif mode == "zones":
+        rows.append(("Rutas", "Zonas libres: cualquier zona distinta puede completar destino"))
     settings = profile.get("settings") or {}
     sahi = profile.get("sahi") or {}
     rows.append(("Detección", f"Confianza {settings.get('conf_threshold', 0.10)} · imgsz {settings.get('imgsz', 1600)}"))
