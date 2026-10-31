@@ -134,6 +134,7 @@ class AppConfig:
     tracker: TrackerConfig = field(default_factory=TrackerConfig)
     video_path: str = ""
     model_path: str = ""
+    geometry_reference: Optional[dict] = None
 
     def validate(self) -> list[str]:
         """Validate entire config, returns list of error messages."""
@@ -159,6 +160,8 @@ class AppConfig:
         errors.extend(self.settings.validate())
         errors.extend(self.sahi.validate())
         errors.extend(self.tracker.validate())
+        from carcounter.profile_reference import reference_errors
+        errors.extend(reference_errors(self.geometry_reference))
 
         return errors
 
@@ -225,6 +228,7 @@ class AppConfig:
             tracker=tracker,
             video_path=d.get("video_path", ""),
             model_path=d.get("model_path", ""),
+            geometry_reference=d.get("geometry_reference"),
         )
 
     def to_dict(self) -> dict:
@@ -272,6 +276,9 @@ class AppConfig:
 
         if self.directions:
             config["directions"] = self.directions
+
+        if self.geometry_reference is not None:
+            config["geometry_reference"] = dict(self.geometry_reference)
 
         return config
 

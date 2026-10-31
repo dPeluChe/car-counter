@@ -64,3 +64,8 @@ Los máximos estimados de deriva fueron 7.8113 px en el normal y 85.2845 px en e
 La última ejecución de `env/bin/python -m pytest -q` (2026-09-15, con `fastapi`, `httpx` y `libsql-experimental` instalados en `env/`) aprobó 395 pruebas sin omisiones. Sin esas dependencias se omiten las de DB/API. Las de API usan `TestClient`: no validan el servicio durante un procesamiento real.
 
 No hay porcentaje de precisión humana confirmado, nueva calibración de todas las entradas/salidas, estabilización automática, entrenamiento de pesos, benchmark de ONNX/TensorRT ni despliegue verificado. Sus criterios están en el backlog.
+
+
+### Referencia geométrica
+
+Los perfiles guardados por el configurador incluyen `geometry_reference`: SHA-256 del video, frame base 1 y dimensiones. Al migrar un perfil antiguo, confirma que la geometría corresponde al frame visible. El mismo contenido puede cambiar de nombre; otro video requiere otro perfil. La referencia se comprueba antes de ejecutar. Si está habilitado el monitor de cámara, compara contra ese frame; esto no compensa movimiento ni acredita precisión humana.

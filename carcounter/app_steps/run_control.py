@@ -92,6 +92,12 @@ class RunControlMixin:
                                    + "\n".join(errors))
             return
         profile = load_json(config)
+        from carcounter.profile_reference import validate_profile_video
+        try:
+            validate_profile_video(profile, video)
+        except (OSError, ValueError) as error:
+            messagebox.showwarning("Perfil incompatible", str(error))
+            return
         model = resolve_model(self._selected_model.get(), self._custom_model_path, profile)
         if model.error:
             messagebox.showwarning("Modelo", model.error)
