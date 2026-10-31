@@ -79,3 +79,15 @@ Una fila por incidencia con: video/tramo, frame, ID previo/nuevo, observado (omi
 Conserva originales, perfil de cada variante, comando, salidas, anotaciones y reporte. Conversión entre frames y tiempo: [ROUTE_VALIDATION.md](ROUTE_VALIDATION.md#qué-exporta-el-conteo).
 
 Una mejora se cierra con reproducción del fallo, comparación antes/después con el mismo alcance y sin regresión. Los umbrales de precisión, recall y F1 por ruta/clase se acuerdan antes de elegir ganador. La aprobación dice qué tramo, región, clases y rutas revisó quién.
+
+## PRUEBA-09: recorrido completo de la interfaz
+
+Prueba de escritorio con ventana visible, sobre una copia del perfil y un clip corto. Marca cada punto y anota lo que falle.
+
+1. `python -m carcounter`: elegir modelo, video y perfil. Con Tab recorre los controles: cada botón muestra un contorno blanco al recibir el foco, Enter lo activa y en la lista de modelos el foco desplaza la lista hasta el botón.
+2. "Configurar zonas": se abre el configurador con el video y el modelo del perfil. Dibuja o ajusta una zona y guarda. Con una zona fuera de la ROI, cubierta por una exclusión o solapada, el guardado debe explicar qué corregir.
+3. Cierra y reabre el perfil: comparar modelo, ROI, zonas, filtros y SAHI con lo guardado. "Probar YOLO" y "Vista Global" deben dejar la ventana libre y "Cancelar prueba" descartar el resultado.
+4. "Ejecutar": sin perfil, con perfil inválido o con otro video avisa el motivo antes de lanzar. Con un perfil bueno crea la carpeta de corrida y muestra el estado.
+5. "Cancelar" a mitad de una corrida: el estado dice "Cancelado" con las salidas parciales, sin ventana de error, y el botón Ejecutar vuelve a estar activo.
+6. Una corrida completa: el diálogo final muestra frames, conteos y, si hay rutas, el desglose por grupo EPS. "Ver resumen" lo repite y "Abrir última salida" abre la carpeta con `results.json`, `tracks.csv`, `track_events.csv`, `od_matrix.csv`, `od_by_group.csv` y `run.log`.
+7. Redimensiona la ventana a su tamaño mínimo y confirma que los botones del paso 3 siguen a la vista.
