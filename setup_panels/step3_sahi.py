@@ -185,6 +185,9 @@ class SAHIMixin:
         config["tracker"].update({key: getattr(self, key).get() for key in (
             "track_low_thresh", "track_high_thresh", "new_track_thresh", "track_buffer", "fuse_score")})
         config["settings"]["vehicle_samples"] = list(self.vehicle_samples)
+        reference = getattr(self, "geometry_reference", None)
+        if reference is not None:
+            config["geometry_reference"] = dict(reference)
         return config
 
     def _save_config(self):
@@ -198,10 +201,22 @@ class SAHIMixin:
             messagebox.showwarning("Perfil inválido", "No se guardó:\n\n" + "\n".join(errors))
             return
         try:
+            from carcounter.profile_reference import make_geometry_reference, validate_profile_video
+            if getattr(self, "geometry_reference", None) is None:
+                if not messagebox.askyesno("Referencia geométrica",
+                        "Confirma que las zonas, líneas y ROI corresponden al frame visible. "
+                        "Este frame quedará vinculado al perfil."):
+                    return
+                config["geometry_reference"] = make_geometry_reference(
+                    self.video_path, self.current_frame_idx + 1)
+            else:
+                config["geometry_reference"] = dict(self.geometry_reference)
+            validate_profile_video(config, self.video_path)
             save_config(self._output_config, config)
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo guardar:\n{e}")
             return
+        self.geometry_reference = config["geometry_reference"]
         self._loaded_config = config
         if hasattr(self, "_autosave"):
             self._autosave.mark_clean()

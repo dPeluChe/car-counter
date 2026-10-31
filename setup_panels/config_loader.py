@@ -18,6 +18,24 @@ class ConfigLoaderMixin:
         except Exception as e:
             messagebox.showerror("Error cargando config", str(e))
             return
+        from carcounter.profile_reference import validate_profile_video
+        cfg_video = cfg.get("video_path", "")
+        target = self.video_path
+        if cfg_video and os.path.isfile(cfg_video) and target == self._default_video:
+            target = cfg_video
+        try:
+            validate_profile_video(cfg, target)
+        except (OSError, ValueError) as error:
+            messagebox.showerror("Perfil incompatible", str(error))
+            return
+        if target != self.video_path:
+            self._release_nav_cap()
+            self.video_path = target
+            self._load_frame()
+        self.geometry_reference = cfg.get("geometry_reference")
+        if self.geometry_reference:
+            self._load_frame_at(self.geometry_reference["frame_index"] - 1, fit=True)
+        self.exclusion_zones = parse_exclusion_zones(cfg)
         self._loaded_config = cfg
 
         cfg_model = cfg.get("model_path")
@@ -38,14 +56,6 @@ class ConfigLoaderMixin:
         self.inference_roi = inference_roi(cfg)
         self._update_roi_label()
 
-        cfg_video = cfg.get("video_path", "")
-        if cfg_video and cfg_video != self.video_path \
-                and os.path.isfile(cfg_video) and self.video_path == self._default_video:
-            self._release_nav_cap()
-            self.video_path = cfg_video
-            self._load_frame()
-
-        self.exclusion_zones = parse_exclusion_zones(cfg)
         self._invalidate_excl_cache()
         self._refresh_excl_list()
         n = len(self.exclusion_zones) + 1

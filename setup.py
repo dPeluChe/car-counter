@@ -244,6 +244,11 @@ class SetupApp(CanvasMixin, VideoModelMixin, ConfigLoaderMixin, ExclusionMixin,
         if self.pan_mode:
             self.drag_start = (event.x, event.y)
             return
+        reference = self.geometry_reference
+        if reference and (self.current_step in (0, 2) or self.roi_drawing) and self.current_frame_idx + 1 != reference["frame_index"]:
+            self._load_frame_at(reference["frame_index"] - 1)
+            self.status_var.set("Regresaste al frame de referencia. Dibuja aquí la geometría.")
+            return
         if self.current_step == 0:
             self._on_excl_press(event)
         elif self.current_step == 1:

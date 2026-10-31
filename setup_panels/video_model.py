@@ -72,6 +72,14 @@ class VideoModelMixin:
             title="Seleccionar video",
             filetypes=[("Video", "*.mp4 *.avi *.mov *.mkv *.MOV"), ("Todos", "*.*")])
         if path:
+            from carcounter.profile_reference import validate_profile_video
+            try:
+                validate_profile_video(self._build_current_config(), path)
+            except (OSError, ValueError) as error:
+                messagebox.showerror("Video incompatible",
+                    f"{error}\nAbre un perfil nuevo para calibrar otro video.")
+                return
+            self._stop_zone_preview()
             self._release_nav_cap()
             self.video_path = path
             self._load_frame()

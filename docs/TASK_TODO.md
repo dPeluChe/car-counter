@@ -33,11 +33,11 @@ Orden de trabajo: corregir integración y perfiles; preparar referencia humana d
 
 ## TODO-040: Coherencia de video, perfil y activación de SAHI `added: 2026-10-30`
 
-**Prioridad:** P0. **Estado:** video por defecto y activación SAHI corregidos en rama; falta vincular geometría con el frame calibrado. Evidencia en [2610](TASK_COMPLETED/2610.md).
+**Prioridad:** P0. **Estado:** video, SAHI y referencia geométrica corregidos; ver avance técnico en el archivo mensual. Evidencia en [2610](TASK_COMPLETED/2610.md).
 
 `make run` fuerza por defecto `glorieta_test1min.mp4`, mientras el perfil local `config/config.json` referencia `glorieta_fast.MP4`, con otro encuadre. Además, sin `sahi.enabled`, GUI carga `false`, runtime y `AppConfig` asumen `true`. Un mismo perfil puede producir geometría incorrecta o distinta inferencia según el punto de entrada.
 
-- [ ] Asociar geometría a video y frame de referencia para detectar un cambio de encuadre; coordinar con TODO-029/033, no asumir que igual resolución significa igual escena.
+- [x] Perfil vinculado por SHA-256 al video y al frame calibrado; rechaza otra escena aunque tenga igual resolución. El monitor usa ese frame cuando está habilitado.
 
 **Cierre:** mismas opciones efectivas para el mismo perfil y ninguna sustitución implícita del video calibrado. La validación de encuadre requiere metadatos de referencia adicionales.
 
@@ -98,7 +98,7 @@ El parser rechaza formas incompatibles y cajas inválidas en vez de omitirlas: [
 - [ ] Verificar muestras de distintos frames, correspondencia uno a uno y aplicación explícita de filtros desde cinco muestras.
 - [ ] Guardar/reabrir una copia y comparar modelo, ROI, muestras, confianza, clases, SAHI y parámetros de tracker; registrar cualquier campo perdido.
 - [ ] Verificar limpieza de muestras/filtros y cambio de modelo sin reutilizar resultados visuales de otro detector.
-- [ ] Registrar frame de referencia de la calibración geométrica y su relación con el primer frame procesado; detectar desalineación si se calibra otro encuadre de cámara.
+- [x] Registrar y restaurar el frame calibrado; el monitor habilitado compara contra esa referencia. Compensación de movimiento sigue en TODO-029.
 - [ ] Contrastar preview y ejecución con idéntico perfil y frames, sin confundir una muestra parcial con recall de toda la escena.
 
 **Prueba manual:** PRUEBA-05. **Cierre:** recorrido visual reproducible, persistencia comprobada y perfil usado en runtime identificable. No se afirma que haya controles GUI para todos los flags de CLI.

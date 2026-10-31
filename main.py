@@ -91,6 +91,11 @@ def main():
 
     # ── Inicializacion ─────────────────────────────────────
     cfg = load_runtime_config(args)
+    from carcounter.profile_reference import validate_profile_video
+    try:
+        calibrated_frame = validate_profile_video(cfg["raw_config"], cfg["video_path"])
+    except (OSError, ValueError) as error:
+        raise SystemExit(f"Perfil incompatible: {error}") from error
     config_errors = AppConfig.from_dict(cfg["raw_config"]).validate()
     if config_errors:
         for error in config_errors:
@@ -234,7 +239,8 @@ def main():
             if camera_limit is not None:
                 from carcounter.camera_motion import CameraMotionMonitor, counting_anchors
                 if camera_monitor is None:
-                    camera_monitor = CameraMotionMonitor(frame, anchors=counting_anchors(cfg["raw_config"]),
+                    camera_monitor = CameraMotionMonitor(calibrated_frame if calibrated_frame is not None else frame,
+                        anchors=counting_anchors(cfg["raw_config"]),
                         inference_roi=cfg["settings"].get("inference_roi"), max_drift_px=camera_limit)
                 camera_result = camera_monitor.check(frame)
                 camera_summary["checks"] += 1
