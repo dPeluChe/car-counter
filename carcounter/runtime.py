@@ -130,7 +130,7 @@ def load_detector(args, cfg, device):
 
 def load_sahi(args, cfg, detector_backend, device):
     """Retorna (sahi_model, sahi_predict_fn, use_sahi)."""
-    if args.no_sahi or not cfg["sahi_cfg"].get("enabled", True):
+    if args.no_sahi or not cfg["sahi_cfg"].get("enabled", False):
         return None, None, False
     if detector_backend == "rfdetr":
         log.warning("SAHI + RF-DETR no soportado aun — fallback a modo rapido")

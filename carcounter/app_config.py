@@ -64,7 +64,7 @@ class SettingsConfig:
 @dataclass
 class SAHIConfig:
     """SAHI tiling parameters."""
-    enabled: bool = True
+    enabled: bool = False
     slice_width: int = 512
     slice_height: int = 512
     overlap_ratio: float = 0.2
@@ -187,7 +187,7 @@ class AppConfig:
 
         sahi_d = d.get("sahi", {})
         sahi = SAHIConfig(
-            enabled=sahi_d.get("enabled", True),
+            enabled=sahi_d.get("enabled", False),
             slice_width=sahi_d.get("slice_width", 512),
             slice_height=sahi_d.get("slice_height", 512),
             overlap_ratio=sahi_d.get("overlap_ratio", 0.2),

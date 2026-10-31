@@ -33,13 +33,10 @@ Orden de trabajo: corregir integración y perfiles; preparar referencia humana d
 
 ## TODO-040: Coherencia de video, perfil y activación de SAHI `added: 2026-10-30`
 
-**Prioridad:** P0. **Estado:** inconsistencias verificadas.
+**Prioridad:** P0. **Estado:** video por defecto y activación SAHI corregidos en rama; falta vincular geometría con el frame calibrado. Evidencia en [2610](TASK_COMPLETED/2610.md).
 
 `make run` fuerza por defecto `glorieta_test1min.mp4`, mientras el perfil local `config/config.json` referencia `glorieta_fast.MP4`, con otro encuadre. Además, sin `sahi.enabled`, GUI carga `false`, runtime y `AppConfig` asumen `true`. Un mismo perfil puede producir geometría incorrecta o distinta inferencia según el punto de entrada.
 
-- [ ] Respetar el video del perfil en `make run` y `make run-full` salvo override explícito; conservar ejemplos utilizables para los comandos que requieren video.
-- [ ] Unificar el valor por defecto de SAHI en GUI, CLI, evaluación, configuración tipada y replay; probar también `enabled=true` y `--no-sahi`.
-- [ ] Añadir regresiones de comandos Make y lectura/guardado del perfil.
 - [ ] Asociar geometría a video y frame de referencia para detectar un cambio de encuadre; coordinar con TODO-029/033, no asumir que igual resolución significa igual escena.
 
 **Cierre:** mismas opciones efectivas para el mismo perfil y ninguna sustitución implícita del video calibrado. La validación de encuadre requiere metadatos de referencia adicionales.

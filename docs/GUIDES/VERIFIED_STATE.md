@@ -4,6 +4,8 @@ Revisión: 2026-09-15. Fuentes: código local, suite de pruebas y artefactos ind
 
 Actualización 2026-10-30: contrato BGR/RGB corregido en SAHI, con invalidación de sus cachés anteriores y cuatro regresiones nuevas (399 pruebas aprobadas). Replay sin SAHI: eventos y CSV idénticos. Comparación real de tres frames y límites en [TODO-039](../TASK_COMPLETED/2610.md). Los resultados SAHI de septiembre corresponden al preprocesamiento anterior; no acreditan precisión del flujo corregido.
 
+Segunda actualización 2026-10-30: `make run`/`run-full` conservan el video del perfil salvo override explícito; SAHI omitido equivale a desactivado en GUI, CLI, evaluación y replay. Suite completa: 416 pruebas aprobadas. Esto no valida automáticamente el encuadre geométrico; ese punto sigue pendiente en TODO-040.
+
 ## Capacidades y evidencia
 
 | Área | Implementación existente | Evidencia y límite |
