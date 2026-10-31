@@ -48,7 +48,7 @@ Orden de trabajo: corregir integración y perfiles; preparar referencia humana d
 **Objetivo:** medir detección y aforo por separado sobre el mismo material, con procedencia verificable. Una predicción del modelo nunca es automáticamente verdad humana.
 
 Muestreo temporal, manifiesto de procedencia y protección de anotaciones implementados: [avance 2026-10-31](TASK_COMPLETED/2610.md). Tiempo nominal por FPS; no equivale a PTS en video de FPS variable. La referencia humana continúa pendiente.
-- [ ] Rechazar explícitamente formas no compatibles o convertirlas con una regla probada: el parser actual solo lee `shape_type=rectangle` e ignora polígonos/máscaras. No evaluar asistencia de segmentación como si fueran cajas revisadas.
+El parser rechaza formas incompatibles y cajas inválidas en vez de omitirlas: [avance 2026-10-31](TASK_COMPLETED/2610.md). La conversión de polígonos requiere revisión humana en el editor.
 - [ ] Seleccionar escenas con autos pequeños, tráfico denso, oclusiones, bordes de ROI, fondo sin autos y vehículos estacionados; incluir más de un tramo.
 - [ ] Separar tramos usados para ajustar parámetros de los usados para aceptar el cambio; evitar usar imágenes casi iguales como validación independiente.
 - [ ] Corregir todas las cajas/clases del alcance en LabelMe u otro editor compatible; añadir también autos omitidos. Registrar revisor, fecha y alcance antes de marcar `flags.reviewed=true`.

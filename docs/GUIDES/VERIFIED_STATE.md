@@ -8,6 +8,8 @@ Segunda actualización 2026-10-30: `make run`/`run-full` conservan el video del 
 
 Actualización 2026-10-31: extractor con muestreo temporal por defecto, manifiesto de procedencia y rechazo de carpetas no vacías. 431 pruebas aprobadas. En el clip de referencia conserva 30/30 muestras frente a 1/30 con pHash opcional. El tiempo exportado es nominal por FPS, no PTS. La revisión humana de imágenes y rutas sigue pendiente; procedimiento en [DETECTION_VALIDATION.md](DETECTION_VALIDATION.md).
 
+Segunda actualización 2026-10-31: la lectura LabelMe rechaza formas incompatibles y cajas inválidas con archivo/forma identificables, en vez de omitir objetos silenciosamente. Mantiene referencias explícitamente vacías y etiquetas originales. Suite completa: 461 pruebas aprobadas. No acredita nueva precisión humana.
+
 ## Capacidades y evidencia
 
 | Área | Implementación existente | Evidencia y límite |

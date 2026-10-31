@@ -38,7 +38,8 @@ La confianza baja puede añadir muchas cajas falsas. Corrige también los autos 
 
 Abre imágenes y JSON en LabelMe o un editor compatible. La interfaz y las funciones opcionales de asistencia deben comprobarse en tu escritorio; no se asume una versión o automatización específica.
 
-- Usa **rectángulos** con clase y dos esquinas. El parser actual solo acepta `shape_type=rectangle`; ignora polígonos y máscaras. No marques una imagen como revisada si sus vehículos quedaron únicamente en esos formatos.
+- Usa **rectángulos** con clase y exactamente dos esquinas numéricas finitas. El parser rechaza polígonos, máscaras, etiquetas vacías y cajas sin área en píxeles enteros, indicando archivo y número de forma. Convierte y revisa esos casos en el editor antes de evaluar; no se convierten automáticamente ni se omiten objetos.
+- Una imagen revisada sin vehículos debe tener `shapes=[]` explícito. Un documento sin `shapes` no se considera una referencia vacía válida. Se mantiene la normalización de esquinas invertidas y la conversión existente a coordenadas enteras.
 - Corrige posición, clase, omisiones y duplicaciones; registra también imágenes sin vehículos del alcance.
 - Mantén `imagePath` apuntando al JPG/PNG correspondiente. No agregues resultados de evaluación ni otros JSON ajenos a la carpeta de anotaciones.
 - Usa clases acordadas del modelo; no interpretes IDs de VisDrone como IDs COCO. Los alias `motor`, `motorbike` y `motorcycle` se normalizan a `motorcycle` al evaluar.
