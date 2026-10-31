@@ -6,6 +6,7 @@ e implementar infer().
 """
 
 from abc import ABC, abstractmethod
+import cv2
 import numpy as np
 from carcounter.constants import VEHICLE_CLASSES, resolve_vehicle_classes
 from carcounter.geometry import passes_geometry_filter, in_exclusion_zone
@@ -108,7 +109,7 @@ class SAHIDetector(Detector):
     def infer(self, frame, conf_threshold, **kwargs):
         self.sahi_model.confidence_threshold = conf_threshold
         result = self.sahi_predict_fn(
-            frame, self.sahi_model,
+            cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), self.sahi_model,
             slice_height=self.slice_h, slice_width=self.slice_w,
             overlap_height_ratio=self.overlap, overlap_width_ratio=self.overlap,
             postprocess_type="NMS", postprocess_match_threshold=0.5,
