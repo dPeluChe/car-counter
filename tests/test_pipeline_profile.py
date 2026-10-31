@@ -154,7 +154,8 @@ def test_new_parameters_survive_config_roundtrip():
 
 
 @pytest.mark.parametrize("fail", [None, "tracker", "camera"])
-def test_cli_replay_counts_without_loading_model_and_rejects_failed_run(tmp_path, monkeypatch, fail):
+@pytest.mark.parametrize("sahi_config", [{}, {"enabled": False}])
+def test_cli_replay_counts_without_loading_model_and_rejects_failed_run(tmp_path, monkeypatch, fail, sahi_config):
     import cv2
     import json
     import sys
@@ -174,7 +175,7 @@ def test_cli_replay_counts_without_loading_model_and_rejects_failed_run(tmp_path
     weights.write_bytes(b"cached model; replay must never load these bytes")
     config = dict(counting_mode="lines", lines=[dict(name="Gate", points=[[0, 50], [100, 50]], tolerance=0)],
                   settings=dict(conf_threshold=0.1, min_crossing_frames=1, imgsz=640),
-                  sahi=dict(enabled=False), tracker=dict(fuse_score=False),
+                  sahi=sahi_config, tracker=dict(fuse_score=False),
                   video_path=str(video), model_path=str(weights))
     config_path = tmp_path / "config.json"
     config_path.write_text(json.dumps(config))
@@ -244,7 +245,8 @@ def test_evaluation_requires_review_and_rejects_duplicate_frames(tmp_path):
         load_labelme_annotations(tmp_path, require_reviewed=True)
 
 
-def test_evaluator_uses_profile_and_penalizes_cancelling_frame_errors(tmp_path, monkeypatch):
+@pytest.mark.parametrize("sahi_config", [{}, {"enabled": False}])
+def test_evaluator_uses_profile_and_penalizes_cancelling_frame_errors(tmp_path, monkeypatch, sahi_config):
     import cv2
     import json
     import ultralytics
@@ -261,7 +263,7 @@ def test_evaluator_uses_profile_and_penalizes_cancelling_frame_errors(tmp_path, 
         data["flags"]["reviewed"] = True
         (annotations / f"{name}.json").write_text(json.dumps(data))
     config = dict(model_path="visdrone.pt", settings=dict(imgsz=640, conf_threshold=0.1,
-                  inference_roi=[10, 10, 90, 90]), sahi=dict(enabled=False))
+                  inference_roi=[10, 10, 90, 90]), sahi=sahi_config)
     config_path = tmp_path / "config.json"
     config_path.write_text(json.dumps(config))
     def box(x):

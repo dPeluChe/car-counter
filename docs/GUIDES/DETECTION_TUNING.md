@@ -4,6 +4,10 @@ Cómo calibrar el perfil, comparar variantes y repetir pruebas sin volver a corr
 
 Perfil de referencia: [aerial_counting.example.json](aerial_counting.example.json), un caso de prueba y no una recomendación universal. Los flags `--tracker`, `--imgsz`, `--model`, `--video` y `--no-sahi` sobreescriben el perfil.
 
+`make run` y `make run-full` usan el video guardado en el perfil. Para sustituirlo explícitamente, usa `VIDEO=assets/otro.mp4` y comprueba que la geometría corresponde al nuevo encuadre. Setup, extracción, segmentación y benchmark mantienen el video de ejemplo si no reciben `VIDEO`.
+
+SAHI solo se activa con `sahi.enabled=true`; omitir el campo equivale a `false` tanto en GUI como en CLI, evaluación y replay. Los perfiles antiguos que dependían de activación implícita necesitan guardar ese valor explícitamente. `--no-sahi` lo desactiva incluso si el perfil lo activa. Las cachés SAHI anteriores a la corrección BGR/RGB son incompatibles y requieren nueva inferencia; las cachés sin SAHI siguen siendo reutilizables.
+
 ## Calibrar en el configurador
 
 ```bash

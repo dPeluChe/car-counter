@@ -105,7 +105,7 @@ def main():
     if args.replay_detections:
         model_yolo = rfdetr_model = sahi_model = sahi_predict_fn = None
         detector_backend = args.detector
-        use_sahi = not args.no_sahi and cfg["sahi_cfg"].get("enabled", True)
+        use_sahi = not args.no_sahi and cfg["sahi_cfg"].get("enabled", False)
     else:
         model_yolo, rfdetr_model, detector_backend = load_detector(args, cfg, device)
         sahi_model, sahi_predict_fn, use_sahi = load_sahi(args, cfg, detector_backend, device)
