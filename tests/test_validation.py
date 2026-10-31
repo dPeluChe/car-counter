@@ -96,14 +96,15 @@ def test_labelme_to_detections_round_trip():
     assert back == dets
 
 
-def test_labelme_to_detections_skips_non_rectangle():
+def test_labelme_to_detections_rejects_non_rectangle():
     data = {
         "shapes": [
             {"shape_type": "polygon", "points": [[0, 0], [10, 0], [5, 10]], "label": "zone"},
             {"shape_type": "rectangle", "points": [[1, 2], [3, 4]], "label": "car"},
         ]
     }
-    assert labelme_to_detections(data) == [(1, 2, 3, 4, "car")]
+    with pytest.raises(ValueError, match="Forma 1.*rectangle"):
+        labelme_to_detections(data)
 
 
 def test_labelme_to_detections_normalizes_corner_order():

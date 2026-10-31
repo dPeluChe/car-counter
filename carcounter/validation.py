@@ -9,6 +9,7 @@ Tres bloques de logica pura (testables sin GPU/video):
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Iterable
 
@@ -104,18 +105,30 @@ def detections_to_labelme(
 
 def labelme_to_detections(labelme_json: dict) -> list[tuple[int, int, int, int, str]]:
     """Extrae detecciones (x1,y1,x2,y2,label) de un JSON LabelMe."""
+    if not isinstance(labelme_json, dict) or not isinstance(labelme_json.get("shapes"), list):
+        raise ValueError("La anotación requiere una lista shapes explícita")
     out = []
-    for shape in labelme_json.get("shapes", []):
-        if shape.get("shape_type") != "rectangle":
-            continue
-        pts = shape.get("points", [])
-        if len(pts) < 2:
-            continue
+    for index, shape in enumerate(labelme_json["shapes"], 1):
+        context = f"Forma {index}"
+        if not isinstance(shape, dict) or shape.get("shape_type") != "rectangle":
+            raise ValueError(f"{context}: solo se admite rectangle; convierte y revisa la anotación")
+        pts = shape.get("points")
+        if (not isinstance(pts, list) or len(pts) != 2
+                or any(not isinstance(point, list) or len(point) != 2 for point in pts)):
+            raise ValueError(f"{context}: se requieren exactamente dos puntos [x, y]")
+        if any(type(value) not in (int, float) or not math.isfinite(value)
+               for point in pts for value in point):
+            raise ValueError(f"{context}: coordenadas numéricas finitas requeridas")
+        label = shape.get("label")
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError(f"{context}: label debe ser texto no vacío")
         (x1, y1), (x2, y2) = pts[0], pts[1]
         # Normalizar: (x1,y1) esquina superior-izquierda
-        xmin, xmax = sorted([x1, x2])
-        ymin, ymax = sorted([y1, y2])
-        out.append((int(xmin), int(ymin), int(xmax), int(ymax), shape.get("label", "")))
+        xmin, xmax = sorted([int(x1), int(x2)])
+        ymin, ymax = sorted([int(y1), int(y2)])
+        if xmin >= xmax or ymin >= ymax:
+            raise ValueError(f"{context}: caja sin área positiva en píxeles enteros")
+        out.append((xmin, ymin, xmax, ymax, label))
     return out
 
 
@@ -128,15 +141,19 @@ def load_labelme_annotations(annotations_dir: str | Path, require_reviewed=False
     annotations_dir = Path(annotations_dir)
     out: dict[str, list[tuple]] = {}
     for json_file in annotations_dir.glob("*.json"):
-        with open(json_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        try:
+            with open(json_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            detections = labelme_to_detections(data)
+        except ValueError as error:
+            raise ValueError(f"{json_file.name}: {error}") from error
         if require_reviewed and data.get("flags", {}).get("reviewed") is not True:
             raise ValueError(f"Anotación sin revisión humana confirmada: {json_file.name}; marca flags.reviewed=true después de revisar")
         image_name = data.get("imagePath", json_file.stem)
         stem = Path(image_name).stem
         if stem in out:
             raise ValueError(f"Anotaciones duplicadas para el frame {stem}")
-        out[stem] = labelme_to_detections(data)
+        out[stem] = detections
     return out
 
 
