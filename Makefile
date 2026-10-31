@@ -69,7 +69,7 @@ validate-routes: ## Compara RESULTS vs conteo humano (TRUTH) por ruta; ARGS extr
 	$(PYTHON) scripts/validate_routes.py --results $(RESULTS) --truth $(TRUTH) $(ARGS)
 
 # --- Validacion de deteccion por frame (flujo LabelMe) ---
-val-extract: ## Paso 1: extrae y dedupe frames del video
+val-extract: ## Paso 1: extrae muestras temporales y manifiesto del video
 	$(PYTHON) scripts/extract_validation_frames.py --video "$(or $(VIDEO),$(DEMO_VIDEO))"
 
 val-prelabel: ## Paso 2: pre-etiqueta frames con YOLO teacher

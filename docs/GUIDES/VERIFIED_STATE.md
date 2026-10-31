@@ -6,6 +6,8 @@ Actualización 2026-10-30: contrato BGR/RGB corregido en SAHI, con invalidación
 
 Segunda actualización 2026-10-30: `make run`/`run-full` conservan el video del perfil salvo override explícito; SAHI omitido equivale a desactivado en GUI, CLI, evaluación y replay. Suite completa: 416 pruebas aprobadas. Esto no valida automáticamente el encuadre geométrico; ese punto sigue pendiente en TODO-040.
 
+Actualización 2026-10-31: extractor con muestreo temporal por defecto, manifiesto de procedencia y rechazo de carpetas no vacías. 431 pruebas aprobadas. En el clip de referencia conserva 30/30 muestras frente a 1/30 con pHash opcional. El tiempo exportado es nominal por FPS, no PTS. La revisión humana de imágenes y rutas sigue pendiente; procedimiento en [DETECTION_VALIDATION.md](DETECTION_VALIDATION.md).
+
 ## Capacidades y evidencia
 
 | Área | Implementación existente | Evidencia y límite |
