@@ -54,7 +54,7 @@ def build_parser():
     cache.add_argument("--record-detections", metavar="SQLITE", help="Guardar cajas para repetir tracking sin inferencia")
     cache.add_argument("--replay-detections", metavar="SQLITE", help="Reutilizar cajas de una grabación completa")
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda", "mps"])
-    parser.add_argument("--camera-max-drift-px", type=float, help="Detener si el fondo se desplaza más de este umbral respecto al primer frame")
+    parser.add_argument("--camera-max-drift-px", type=float, help="Detener si el fondo se desplaza más de este umbral respecto al frame calibrado (o primero procesado sin referencia)")
     parser.add_argument("--show-fps", dest="show_fps", action="store_true")
     parser.add_argument("--benchmark", action="store_true")
     parser.add_argument("--output", default=str(paths.default_output_video))
@@ -72,6 +72,8 @@ def build_parser():
     parser.add_argument("--no-output-json", dest="no_output_json", action="store_true")
     parser.add_argument("--output-csv", default=None)
     parser.add_argument("--output-tracks-csv", default=None)
+    parser.add_argument("--output-track-events-csv", default=None,
+                        help="Registrar apariciones, ausencias y cambios de clase de IDs observados")
     parser.add_argument("--output-od-csv", default=None)
     parser.add_argument("--heatmap", action="store_true")
     parser.add_argument("--demo-mode", dest="demo_mode", action="store_true")
@@ -217,6 +219,9 @@ def main():
     fps_avg = 0.0
     tracked_boxes = []
 
+    counter.frame_offset = args.start_frame - 1
+    from carcounter.track_events import TrackObservationLog
+    track_log = TrackObservationLog(args.output_track_events_csv, args.start_frame) if args.output_track_events_csv else None
     camera_monitor = None
     camera_limit = args.camera_max_drift_px if args.camera_max_drift_px is not None else cfg["settings"].get("camera_max_drift_px")
     camera_summary = {"checks": 0, "max_drift_px": 0.0, "threshold_px": camera_limit}
@@ -262,6 +267,8 @@ def main():
                 heatmap=heatmap, vid_w=vid_w, total_frames=planned_frames,
             )
 
+            if track_log:
+                track_log.update(frame_count, tracked_boxes)
             if writer:
                 profiler.start("writing")
                 writer.write(frame)
@@ -317,6 +324,8 @@ def main():
             "routes": sum(counter.routes_matrix.values()),
         })
 
+    if track_log:
+        track_log.close()
     if writer:
         writer.release()
     cap.release()

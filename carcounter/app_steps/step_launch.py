@@ -88,7 +88,7 @@ class LaunchStepMixin:
             ).pack(side="left", padx=4)
 
     def _render_action_buttons(self, parent):
-        tk.Label(parent, text="Cada ejecución guarda video, results.json, tracks.csv, od_matrix.csv y run.log "
+        tk.Label(parent, text="Cada ejecución guarda video, results.json, tracks.csv, track_events.csv, od_matrix.csv y run.log "
                               "en una carpeta nueva dentro de output/.",
                  bg=BG, fg=FG_DIM, font=("Arial", 9), anchor="w", wraplength=740, justify="left"
                  ).pack(fill="x", pady=(14, 0))
