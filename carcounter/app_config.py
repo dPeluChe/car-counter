@@ -165,8 +165,17 @@ class AppConfig:
         errors.extend(reference_errors(self.geometry_reference))
         from carcounter.access_routes import zone_role_errors
         errors.extend(zone_role_errors(self.zones, self.zone_roles))
+        errors.extend(self.geometry_findings()[0])
 
         return errors
+
+    def geometry_findings(self) -> tuple[list[str], list[str]]:
+        """(errores, avisos) geométricos: ROI, exclusiones y solapes; cada texto dice qué corregir."""
+        from carcounter.geometry_validation import geometry_findings
+        try:
+            return geometry_findings(self)
+        except (TypeError, ValueError):
+            return [], []
 
     @classmethod
     def from_dict(cls, d: dict) -> AppConfig:

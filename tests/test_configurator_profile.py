@@ -3,7 +3,6 @@ import time
 from carcounter import autosave
 from carcounter.config_io import build_config, parse_directions, parse_settings
 from carcounter.geometry import inference_roi
-from setup_panels.geometry_checks import elements_outside_roi
 from setup_panels.state import SCALAR_VARS
 from setup_panels.step3_sahi import conf_per_class
 
@@ -53,12 +52,8 @@ def test_checkpoint_is_per_profile_and_checks_video(tmp_path, monkeypatch):
     assert not autosave.checkpoint_path(first).exists()
 
 
-def test_elements_outside_roi():
+def test_inference_roi_reader():
     roi = [100, 100, 500, 400]
-    zones = {"Dentro": [[100, 100], [500, 400], [300, 200]], "Fuera": [[90, 150], [200, 200], [300, 300]]}
-    lines = {"L1": [[150, 150], [600, 200]]}
-    assert elements_outside_roi(roi, zones, lines) == ["zona Fuera", "línea L1"]
-    assert elements_outside_roi(None, zones, lines) == []
     assert inference_roi({"settings": {"inference_roi": roi}}) == roi
     assert inference_roi(None) is None
 

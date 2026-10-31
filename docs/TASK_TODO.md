@@ -145,7 +145,8 @@ El parser rechaza formas incompatibles y cajas inválidas en vez de omitirlas: [
 **Archivos relevantes:** `setup_panels/step2_zones.py`, `carcounter/config_io.py`, `carcounter/runtime.py`, `carcounter/counting.py`, `tests/test_counting_regressions.py`.
 
 - [ ] Guardar mapa de rutas permitidas, ROI y zonas en un perfil distinto al ejemplo de una línea.
-- [ ] Añadir validación de geometría que identifique zonas inalcanzables por la región de detección y destinos prematuros, con diagnóstico comprensible.
+- [x] Validación geométrica (`carcounter/geometry_validation.py`): zonas, líneas o direcciones fuera de la ROI, cubiertas por exclusiones y zonas solapadas, con qué corregir; los casos sin salida bloquean `validate()`, los parciales avisan ([avance](TASK_COMPLETED/2610.md)).
+- [ ] Destinos prematuros: detectar una zona de salida que se alcanza antes de completar el tránsito esperado; la validación geométrica actual no lo cubre.
 - [x] Probar sintéticamente A→B, salida sin permanencia suficiente y trayectoria incompleta; falta contrastar con video revisado.
 - [x] Entradas y salidas por acceso mediante `zone_roles`, editor en configurador y pruebas de retorno entre polígonos distintos del mismo acceso.
 - [ ] Comparar eventos y matriz origen/destino contra revisión humana del mismo video y tramo.
