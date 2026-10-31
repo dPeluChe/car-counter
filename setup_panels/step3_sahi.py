@@ -185,6 +185,8 @@ class SAHIMixin:
         config["tracker"].update({key: getattr(self, key).get() for key in (
             "track_low_thresh", "track_high_thresh", "new_track_thresh", "track_buffer", "fuse_score")})
         config["settings"]["vehicle_samples"] = list(self.vehicle_samples)
+        if getattr(self, "zone_roles", None):
+            config["zone_roles"] = self.zone_roles
         reference = getattr(self, "geometry_reference", None)
         if reference is not None:
             config["geometry_reference"] = dict(reference)

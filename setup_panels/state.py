@@ -27,6 +27,7 @@ def init_state(app, *, video_path: str, model_path: str, output_config: str):
     app.total_frames = 0
     app.current_frame_idx = 0
     app.geometry_reference = None
+    app.zone_roles = {}
     app._nav_cap = None  # VideoCapture persistente para navegacion
 
     # Zoom / pan

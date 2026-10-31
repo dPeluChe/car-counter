@@ -69,6 +69,9 @@ class ZonesMixin:
                                         bg="#313244", fg="#F9E2AF", relief="flat", pady=4,
                                         state="disabled")
         self.btn_undo_point.pack(fill="x", pady=2)
+        from setup_panels.access_roles import edit_access_roles
+        tk.Button(self.subpanel_zones, text="Definir entradas y salidas por acceso",
+                  command=lambda: edit_access_roles(self)).pack(fill="x", pady=4)
         self.subpanel_zones.pack(fill="x")
 
         # ── Subpanel líneas ──
@@ -253,6 +256,7 @@ class ZonesMixin:
         if name and name in self.zones:
             if messagebox.askyesno("Eliminar", f"¿Eliminar zona '{name}'?"):
                 del self.zones[name]
+                getattr(self, "zone_roles", {}).pop(name, None)
                 self._refresh_zones_list()
                 self._redraw_zones()
 

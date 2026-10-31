@@ -26,7 +26,12 @@ class VehicleCounter(LinesDirectionsMixin):
 
     def __init__(self, zones_np, counting_lines, min_origin_frames=3, min_dest_frames=3,
                  frame_size=None, directions=None, min_crossing_frames=2,
-                 trail_length=64):
+                 trail_length=64, zone_roles=None):
+        from carcounter.access_routes import zone_role_errors
+        errors = zone_role_errors(zones_np, zone_roles)
+        if errors:
+            raise ValueError("; ".join(errors))
+        self.zone_roles = zone_roles or {}
         self.zones_np = zones_np
         self.zone_names = list(zones_np.keys())
         self.counting_lines = counting_lines
@@ -123,6 +128,10 @@ class VehicleCounter(LinesDirectionsMixin):
     def _update_route(self, trk_id, cx, cy, cls_name):
         """Maquina de estados para tracking de rutas A->B."""
         current_zone = self.get_zone_for_point(cx, cy)
+        if self.zone_roles:
+            from carcounter.access_routes import update_access_route
+            update_access_route(self, trk_id, current_zone, cls_name)
+            return
 
         if trk_id not in self.tracks_info:
             self.total_vehicles_ever += 1
@@ -206,8 +215,14 @@ class VehicleCounter(LinesDirectionsMixin):
         })
 
     def _register_route(self, trk_id, origin, destination, cls_name):
+        origin_zone, destination_zone = origin, destination
+        if self.zone_roles:
+            origin = self.zone_roles[origin]["access"].strip()
+            destination = self.zone_roles[destination]["access"].strip()
         route_key = f"{origin} → {destination}"
         self._record_count(trk_id, "zones", route_key, cls_name, origin=origin, destination=destination)
+        if self.zone_roles:
+            self.counting_events[-1].update(origin_zone=origin_zone, destination_zone=destination_zone)
         self.tracks_info[trk_id]["state"] = "done"
         self.tracks_info[trk_id]["destination"] = destination
 
@@ -297,7 +312,7 @@ class VehicleCounter(LinesDirectionsMixin):
             "track_id": tid,
             "class": info.get("class", ""),
             "state": info.get("state", ""),
-            "origin": info.get("origin", ""),
+            "origin": self.zone_roles.get(info.get("origin"), {}).get("access", info.get("origin", "")),
             "destination": info.get("destination", ""),
             "counted_frame": info.get("counted_frame", ""),
             "counted_source_frame": info["counted_frame"] + self.frame_offset if "counted_frame" in info else "",

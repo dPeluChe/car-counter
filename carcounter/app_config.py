@@ -135,6 +135,7 @@ class AppConfig:
     video_path: str = ""
     model_path: str = ""
     geometry_reference: Optional[dict] = None
+    zone_roles: dict = field(default_factory=dict)
 
     def validate(self) -> list[str]:
         """Validate entire config, returns list of error messages."""
@@ -162,6 +163,8 @@ class AppConfig:
         errors.extend(self.tracker.validate())
         from carcounter.profile_reference import reference_errors
         errors.extend(reference_errors(self.geometry_reference))
+        from carcounter.access_routes import zone_role_errors
+        errors.extend(zone_role_errors(self.zones, self.zone_roles))
 
         return errors
 
@@ -229,6 +232,7 @@ class AppConfig:
             video_path=d.get("video_path", ""),
             model_path=d.get("model_path", ""),
             geometry_reference=d.get("geometry_reference"),
+            zone_roles=d.get("zone_roles", {}),
         )
 
     def to_dict(self) -> dict:
@@ -277,6 +281,8 @@ class AppConfig:
         if self.directions:
             config["directions"] = self.directions
 
+        if self.zone_roles:
+            config["zone_roles"] = self.zone_roles
         if self.geometry_reference is not None:
             config["geometry_reference"] = dict(self.geometry_reference)
 

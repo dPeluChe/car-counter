@@ -32,6 +32,7 @@ class ConfigLoaderMixin:
             self._release_nav_cap()
             self.video_path = target
             self._load_frame()
+        self.zone_roles = cfg.get("zone_roles", {})
         self.geometry_reference = cfg.get("geometry_reference")
         if self.geometry_reference:
             self._load_frame_at(self.geometry_reference["frame_index"] - 1, fit=True)

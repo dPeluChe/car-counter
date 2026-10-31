@@ -110,6 +110,7 @@ class AutoSaveManager:
         state = dict(
             current_step=app.current_step, video_path=app.video_path, model_path=app._model_path,
             geometry_reference=getattr(app, "geometry_reference", None),
+            zone_roles=getattr(app, "zone_roles", {}),
             counting_mode=app.counting_mode.get(),
             exclusion_zones=_geometry(app.exclusion_zones), zones=_geometry(app.zones),
             counting_lines=_geometry(app.counting_lines), directions=_geometry(app.directions),
@@ -126,6 +127,7 @@ class AutoSaveManager:
         """Reemplaza por completo geometría y parámetros con los del checkpoint."""
         from carcounter.profile_reference import validate_profile_video
         validate_profile_video(state, app.video_path)
+        app.zone_roles = state.get("zone_roles", {})
         app.geometry_reference = state.get("geometry_reference")
         if app.geometry_reference:
             app._load_frame_at(app.geometry_reference["frame_index"] - 1)
