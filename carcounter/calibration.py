@@ -83,6 +83,8 @@ def draw_detection_overlay(frame_orig, detections, constraints=None,
         thickness = 2
         accepted = (passes_sample_constraints((x1, y1, x2, y2), constraints)
                     and not in_exclusion_zone((x1 + x2) / 2, (y1 + y2) / 2, excl_np))
+        if "rejection" in det:
+            accepted = det["rejection"] is None
         if not accepted:
             color = (70, 70, 180)
             thickness = 1
@@ -92,6 +94,7 @@ def draw_detection_overlay(frame_orig, detections, constraints=None,
                 color = (0, 255, 80)
                 thickness = 3
         cv2.rectangle(display, (x1, y1), (x2, y2), color, thickness)
-        cv2.putText(display, f"{det['cls_name']} {det['conf']:.2f} ({area}px²)",
+        reason = f" [{det['rejection']}]" if det.get("rejection") else ""
+        cv2.putText(display, f"{det['cls_name']} {det['conf']:.2f} ({area}px²){reason}",
                     (x1, max(0, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
     return display

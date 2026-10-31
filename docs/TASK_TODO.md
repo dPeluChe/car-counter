@@ -183,7 +183,8 @@ El parser rechaza formas incompatibles y cajas inválidas en vez de omitirlas: [
 - [ ] Configurador en pasos EPS: perfil y fuente, exclusiones, zonas de entrada/salida por acceso, validar detección (opcional), tracking y reglas de conteo, resumen y guardar. La región de inferencia ya se dibuja y se edita desde el Paso 1 (ronda 2).
 - [ ] Controles para campos que hoy solo se copian del perfil: `camera_max_drift_px`, `min_origin_frames`, `min_dest_frames`, `min_crossing_frames`, `match_thresh`, tolerancia por línea.
 - [ ] Confianza por clase generada desde las clases del modelo cargado (incluye bicycle, tricycle) en vez de sliders fijos car/moto/bus/truck/van.
-- [ ] Mostrar detecciones descartadas (ROI, exclusión, filtros de muestras) con otro color y contador; cuadrícula SAHI calculada sobre la ROI.
+- [x] Prueba global muestra descartes por clase, confianza, tamaño y exclusión, con motivo y contador. Fuera de ROI no hay inferencia ni cajas que mostrar.
+- [ ] Verificar visualmente la cuadrícula SAHI calculada sobre la ROI.
 - [ ] Sidebar con scroll de rueda y acciones principales fijas fuera del scroll; seleccionar un elemento carga su nombre y permite renombrar; deshacer también en exclusiones y `Command-z` en macOS.
 - [ ] Wizard: paso de perfil al inicio con resumen y `AppConfig.validate()`; paso de resultados con resumen, "Abrir carpeta", "Revisar tracks" (`review_incomplete_tracks.py`) y "Validar rutas" (`validate_routes.py`).
 - [ ] Wizard: opciones de corrida faltantes (inicio y máximo de frames, SAHI, dispositivo, sin ventana, grabar o repetir caché, deriva de cámara); cubre también TODO-036.
