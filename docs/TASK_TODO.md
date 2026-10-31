@@ -47,8 +47,7 @@ Orden de trabajo: corregir integración y perfiles; preparar referencia humana d
 
 **Objetivo:** medir detección y aforo por separado sobre el mismo material, con procedencia verificable. Una predicción del modelo nunca es automáticamente verdad humana.
 
-- [ ] Añadir manifiesto de extracción con SHA-256 de video, índice original desde 1, timestamp, imagen y FPS. Actualmente `frame_0000.jpg` es un índice de exportación y pierde esa correspondencia; no sirve para inferir el tiempo original.
-- [ ] Sustituir el descarte global por pHash como criterio por defecto: en 30 frames de `glorieta_test1min.mp4` separados por 60 frames conservó solo uno. El fondo fijo oculta cambios de vehículos. Preservar diversidad temporal, evitar sobrescribir anotaciones y probar la procedencia de cada imagen exportada.
+Muestreo temporal, manifiesto de procedencia y protección de anotaciones implementados: [avance 2026-10-31](TASK_COMPLETED/2610.md). Tiempo nominal por FPS; no equivale a PTS en video de FPS variable. La referencia humana continúa pendiente.
 - [ ] Rechazar explícitamente formas no compatibles o convertirlas con una regla probada: el parser actual solo lee `shape_type=rectangle` e ignora polígonos/máscaras. No evaluar asistencia de segmentación como si fueran cajas revisadas.
 - [ ] Seleccionar escenas con autos pequeños, tráfico denso, oclusiones, bordes de ROI, fondo sin autos y vehículos estacionados; incluir más de un tramo.
 - [ ] Separar tramos usados para ajustar parámetros de los usados para aceptar el cambio; evitar usar imágenes casi iguales como validación independiente.

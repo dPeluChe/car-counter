@@ -12,12 +12,14 @@ CARCOUNTER_DATASET_DIR=$(mktemp -d "$PWD/data/validation/manual.XXXXXX")
 env/bin/python scripts/extract_validation_frames.py \
   --video assets/glorieta_test1min.mp4 \
   --output-dir "$CARCOUNTER_DATASET_DIR" \
-  --n-candidates 200 --hash-threshold 5
+  --n-candidates 200
 ```
 
-El extractor recorre el video completo y deduplica imágenes. No garantiza obtener 50/80/200 imágenes útiles ni muestrea únicamente los primeros 300 frames. Revisa variedad de escenas; el número de candidatos es aproximado. Repetirlo en la misma carpeta puede sobrescribir JPG: usa una carpeta nueva.
+El extractor distribuye como máximo 200 frames por todo el video, incluidos el primero y el último cuando se solicitan al menos dos. Conserva las muestras temporales aunque compartan fondo. No garantiza que todas sean útiles: revisa variedad de escenas. Solo acepta una carpeta nueva o vacía para proteger imágenes y anotaciones existentes.
 
-**Límite actual:** `frame_0000.jpg` identifica el orden de exportación, no el frame original. El script no guarda un manifiesto con tiempo/hash/índice de origen. Registra video y comando de extracción; no derives referencias temporales de rutas a partir del nombre. Para evidencia temporal usa el video original y registra explícitamente su frame. El manifiesto está pendiente en TODO-028.
+`frame_00000001.jpg` corresponde al frame original 1. `metadata/manifest.json` registra SHA-256 y nombre del video, FPS, índice original desde 1, imagen y tiempo nominal `(frame_index - 1) / FPS`. Ese tiempo no es un PTS decodificado y no debe interpretarse como tiempo exacto de un video con FPS variable. El manifiesto queda en una subcarpeta para no confundirse con anotaciones LabelMe; `reviewed=false` no cambia hasta revisión humana. Si falla la extracción, no se genera manifiesto de éxito: usa otra carpeta al repetir.
+
+La opción `--hash-threshold 5` conserva el comportamiento anterior de deduplicación global por pHash solo si se solicita. Puede eliminar escenas con autos distintos cuando domina el fondo fijo; no es el valor por defecto.
 
 ## Preetiquetas opcionales
 
