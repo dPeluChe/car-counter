@@ -1,3 +1,4 @@
+import pytest
 import re
 
 from carcounter.app_config import AppConfig
@@ -38,13 +39,10 @@ def test_zone_partially_outside_roi_is_a_warning():
     assert errors == [] and len(warnings) == 1 and "'B'" in warnings[0] and 48 <= percent(warnings[0]) <= 52
 
 
-def test_lines_and_directions_use_the_same_roi_rule():
+def test_lines_use_the_roi_rule():
     lines = [{"name": "L", "points": [[700, 50], [800, 50]], "tolerance": 15}]
     errors, _ = config("lines", roi=[0, 0, 300, 300], lines=lines).geometry_findings()
     assert "Línea 'L'" in errors[0]
-    _, warnings = config("directions", roi=[0, 0, 150, 300],
-                         directions={"D": [[100, 50], [300, 50]]}).geometry_findings()
-    assert "Dirección 'D'" in warnings[0] and 22 <= percent(warnings[0]) <= 30
 
 
 def test_zone_covered_by_exclusion_is_an_error_and_partial_cover_a_warning():
@@ -80,8 +78,71 @@ def test_validate_blocks_on_errors_but_not_on_warnings():
     assert config(zones=ZONES, roi=[0, 0, 450, 300]).validate() == []
 
 
-def test_malformed_geometry_does_not_crash_the_findings():
+def test_too_few_points_do_not_crash_the_findings():
     assert config(zones={"A": [[0, 0]], "B": box(0, 0, 10, 10)}).geometry_findings() == ([], [])
+
+
+@pytest.mark.parametrize("bad", [
+    [["bad", 0], [10, 0], [10, 10]],
+    [[0, 0], [10, 0], [float("nan"), 10]],
+    [[0, 0], [10, 0], [float("inf"), 10]],
+    [[0, 0], [10, 0], [10]],
+    [[0, 0], [10, 0], None],
+    [[0, 0], [10, 0], [True, 10]],
+])
+def test_invalid_coordinates_are_an_error_naming_the_element(bad):
+    errors = config(zones={"A": bad, "B": box(20, 0, 30, 10)}).validate()
+    assert any("Zona 'A'" in error and "coordenadas inválidas" in error for error in errors)
+
+
+def test_invalid_coordinates_in_every_section_are_reported():
+    bad = [["x", 1], [2, 3]]
+    lines = [{"name": "L", "points": bad, "tolerance": 15}]
+    errors, _ = config("lines", lines=lines, directions={"D": bad},
+                       exclusions={"E": [[0, 0], [1, 1], ["z", 2]]}).geometry_findings()
+    assert [kind for kind in ("Línea 'L'", "Dirección 'D'", "Exclusión 'E'")
+            if any(kind in error for error in errors)] == ["Línea 'L'", "Dirección 'D'", "Exclusión 'E'"]
+
+
+def test_direction_vectors_are_not_spatial_regions():
+    east = {"Este": [[500, 500], [600, 500]]}
+    assert config("directions", roi=[0, 0, 100, 100], directions=east).geometry_findings() == ([], [])
+    assert config("directions", exclusions={"x": box(400, 400, 700, 700)},
+                  directions=east).geometry_findings() == ([], [])
+
+
+def test_translating_a_direction_does_not_change_validity():
+    for dx in (0, 300, 5000):
+        direction = {"Este": [[10 + dx, 10], [60 + dx, 10]]}
+        assert config("directions", roi=[0, 0, 100, 100], directions=direction).validate() == []
+
+
+def test_a_short_line_crossing_the_roi_between_old_samples_is_valid():
+    lines = [{"name": "L", "points": [[0, 0], [100, 0]], "tolerance": 15}]
+    errors, warnings = config("lines", roi=[2, 0, 3, 10], lines=lines).geometry_findings()
+    assert errors == [] and "Línea 'L'" in warnings[0] and "1% dentro" in warnings[0]
+
+
+def test_a_zone_touching_the_roi_with_a_thin_overlap_is_valid():
+    errors, warnings = config(zones={"A": box(0, 0, 100, 100), "B": box(200, 0, 300, 100)},
+                              roi=[99, 0, 400, 100]).geometry_findings()
+    assert errors == [] and "Zona 'A'" in warnings[0]
+
+
+def test_a_small_unexcluded_remainder_is_not_declared_fully_covered():
+    lines = [{"name": "L", "points": [[0, 50], [1000, 50]], "tolerance": 15}]
+    gap = {"left": box(-1, 0, 499, 100), "right": box(501, 0, 1001, 100)}
+    errors, warnings = config("lines", exclusions=gap, lines=lines).geometry_findings()
+    assert errors == [] and "Línea 'L'" in warnings[0]
+    sliver = {"top": box(100, 100, 200, 149), "bottom": box(100, 151, 200, 200)}
+    assert config(zones=ZONES, exclusions=sliver).geometry_findings()[0] == []
+
+
+def test_a_line_split_across_exclusions_is_fully_covered():
+    lines = [{"name": "L", "points": [[0, 50], [1000, 50]], "tolerance": 15}]
+    cover = {"left": box(-1, 0, 500, 100), "right": box(500, 0, 1001, 100)}
+    errors, _ = config("lines", exclusions=cover, lines=lines).geometry_findings()
+    assert "Línea 'L'" in errors[0]
 
 
 def test_wizard_blocks_a_bad_profile_and_summarises_warnings(tmp_path):
