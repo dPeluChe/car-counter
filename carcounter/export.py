@@ -140,6 +140,30 @@ def export_od_matrix_csv(path, od_matrix):
     log.info("OD Matrix CSV: %s", path)
 
 
+OD_GROUP_FIELDS = ["origen", "destino", "grupo", "conteo"]
+
+
+def od_by_group_rows(counting_events):
+    """Filas (origen, destino, grupo, conteo) de los eventos de zonas; la misma fuente que routes_by_group."""
+    counts = {}
+    for event in counting_events:
+        if event.get("origin") is None or event.get("destination") is None:
+            continue
+        key = (event["origin"], event["destination"], event.get("group") or "sin_grupo")
+        counts[key] = counts.get(key, 0) + 1
+    return [(*key, count) for key, count in sorted(counts.items())]
+
+
+def export_od_by_group_csv(path, counting_events):
+    """Guarda la matriz origen/destino por grupo EPS; sin rutas de zonas solo escribe el encabezado."""
+    rows = od_by_group_rows(counting_events)
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(OD_GROUP_FIELDS)
+        w.writerows(rows)
+    log.info("OD por grupo CSV: %s (%d filas)", path, len(rows))
+
+
 def export_benchmark(benchmarks_dir, *, video_path, config_path, use_sahi,
                      total_time, avg_fps, routes_matrix, benchmark_data):
     """Guarda metricas de rendimiento."""
