@@ -8,6 +8,7 @@ torch>=1.7.0
 torchvision>=0.8.1
 tqdm>=4.64.0
 scipy>=1.10.0
+shapely>=2.0
 
 # Tracking
 filterpy==1.4.5

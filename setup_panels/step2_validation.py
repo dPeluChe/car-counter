@@ -6,7 +6,7 @@ from tkinter import messagebox
 import cv2
 import numpy as np
 
-from setup_panels.geometry_checks import elements_outside_roi
+from carcounter.app_config import AppConfig
 
 
 class ZoneValidationMixin:
@@ -64,13 +64,11 @@ class ZoneValidationMixin:
                 if len(pts) < 2:
                     return False, f"La direccion '{name}' no tiene 2 puntos definidos."
 
-        # Aviso no bloqueante: fuera de la ROI no hay detecciones y ese elemento no contará
-        elements = {"zones": (self.zones, None, None), "lines": (None, self.counting_lines, None),
-                    "directions": (None, None, self.directions)}[mode]
-        outside = elements_outside_roi(self.inference_roi, *elements)
-        if outside:
-            return True, "Fuera de la ROI de inferencia (no detectará ahí): " + ", ".join(outside)
-        return True, ""
+        # Los errores bloquean; los avisos (parciales o ambiguos) se muestran y se puede seguir
+        errors, warnings = AppConfig.from_dict(self._build_current_config()).geometry_findings()
+        if errors:
+            return False, "\n".join(errors)
+        return True, "\n".join(warnings)
 
     def _confirm_zones(self):
         ok, msg = self._validate_zones()

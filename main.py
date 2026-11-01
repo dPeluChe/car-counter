@@ -75,6 +75,7 @@ def build_parser():
     parser.add_argument("--output-track-events-csv", default=None,
                         help="Registrar apariciones, ausencias y cambios de clase de IDs observados")
     parser.add_argument("--output-od-csv", default=None)
+    parser.add_argument("--output-od-group-csv", default=None)
     parser.add_argument("--heatmap", action="store_true")
     parser.add_argument("--demo-mode", dest="demo_mode", action="store_true")
     parser.add_argument("--serve", action="store_true", help="Start FastAPI server")
@@ -98,7 +99,10 @@ def main():
         calibrated_frame = validate_profile_video(cfg["raw_config"], cfg["video_path"])
     except (OSError, ValueError) as error:
         raise SystemExit(f"Perfil incompatible: {error}") from error
-    config_errors = AppConfig.from_dict(cfg["raw_config"]).validate()
+    profile_config = AppConfig.from_dict(cfg["raw_config"])
+    for warning in profile_config.geometry_findings()[1]:
+        log.warning("Geometría: %s", warning)
+    config_errors = profile_config.validate()
     if config_errors:
         for error in config_errors:
             log.error("Perfil inválido: %s", error)
@@ -210,6 +214,7 @@ def main():
             sahi_overlap=cfg["sahi_overlap"], sahi_nms_threshold=cfg["sahi_nms"],
             device=device, detector_backend=detector_backend, rfdetr_model=rfdetr_model,
             inference_roi=cfg["settings"].get("inference_roi"),
+            cross_class_iou=cfg["cross_class_iou"],
         ),
         "consecutive_errors": 0,
     }

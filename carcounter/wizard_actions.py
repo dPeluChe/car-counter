@@ -77,6 +77,9 @@ def profile_rows(profile):
     rows.append(("Referencia", f"Frame {reference['frame_index']} · video vinculado" if reference
                  else "Sin referencia guardada; confirma el encuadre en el configurador"))
     drift = settings.get("camera_max_drift_px")
+    warnings = AppConfig.from_dict(profile).geometry_findings()[1]
+    if warnings:
+        rows.append(("Avisos", " ".join(warnings)))
     rows.append(("Cámara", f"Detener si deriva > {drift} px" if drift is not None else "Monitor desactivado"))
     return rows
 
@@ -142,7 +145,8 @@ def build_run_command(python, config, video, profile_video, tracker, model_args,
                "--output", str(run_dir / "video.mp4"), "--output-json", str(run_dir / "results.json"),
                "--output-tracks-csv", str(run_dir / "tracks.csv"),
                "--output-track-events-csv", str(run_dir / "track_events.csv"),
-               "--output-od-csv", str(run_dir / "od_matrix.csv")]
+               "--output-od-csv", str(run_dir / "od_matrix.csv"),
+               "--output-od-group-csv", str(run_dir / "od_by_group.csv")]
     if video and not same_file(video, profile_video):
         command += ["--video", video]
     return command

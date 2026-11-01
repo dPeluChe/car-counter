@@ -135,9 +135,10 @@ class CalibrationMixin:
                                         relief="flat", pady=6)
         self.btn_add_sample.pack(fill="x", pady=2)
 
-        tk.Button(self.panel_step1, text="Probar muestras guardadas",
-                  command=self._test_saved_samples, bg="#313244", fg="#CDD6F4",
-                  relief="flat", pady=4).pack(fill="x", pady=2)
+        self.btn_samples_test = tk.Button(self.panel_step1, text="Probar muestras guardadas",
+                                          command=self._test_saved_samples, bg="#313244", fg="#CDD6F4",
+                                          relief="flat", pady=4)
+        self.btn_samples_test.pack(fill="x", pady=2)
 
         tk.Button(self.panel_step1, text="Aplicar filtros de las muestras",
                   command=self._apply_sample_constraints, bg="#313244", fg="#CDD6F4",
@@ -310,10 +311,11 @@ class CalibrationMixin:
         x1, y1, x2, y2 = box
         return x1 <= px <= x2 and y1 <= py <= y2
 
-    def _ensure_sahi_model(self, conf):
+    def _sahi_model_for(self, conf, imgsz):
+        """Sin variables de Tk: la llama el hilo de trabajo bajo INFERENCE_LOCK."""
         if self.sahi_model is not None:
             self.sahi_model.confidence_threshold = conf
-            self.sahi_model.image_size = self.infer_imgsz.get()
+            self.sahi_model.image_size = imgsz
             return self.sahi_model
         try:
             from sahi import AutoDetectionModel
@@ -324,7 +326,7 @@ class CalibrationMixin:
             model_path=self._model_path,
             confidence_threshold=conf,
             device="cpu",
-            image_size=self.infer_imgsz.get(),
+            image_size=imgsz,
         )
         return self.sahi_model
 

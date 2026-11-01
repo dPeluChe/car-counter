@@ -37,6 +37,8 @@ Las exclusiones descartan detecciones por su centro. Un auto estacionado sigue s
 
 ## Revisar, guardar y ejecutar
 
+Antes de guardar o ejecutar, el perfil se valida. **Bloquea** (el texto dice qué corregir) un elemento que nunca puede contar: sin ningún punto dentro de la ROI de inferencia, cubierto por las exclusiones, o dos zonas que se solapan 50 % o más de la menor. **Avisa** sin bloquear un elemento parcialmente fuera de la ROI, excluido en 50 % o más, o dos zonas con solape de 5 % a 50 %. Los porcentajes son aproximados.
+
 Usa preview para comprobar correspondencia de zonas, movimiento y cajas. Guarda, cierra y reabre la copia para verificar persistencia. Si la cámara cambia de encuadre, revisa la geometría contra el frame de referencia; el monitor de deriva no estabiliza la imagen.
 
 Ejemplo para el video de referencia completo, después de guardar un perfil de zonas apropiado:
@@ -47,12 +49,13 @@ env/bin/python main.py --config "$CARCOUNTER_REVIEW_DIR/profile.json" \
   --output "$CARCOUNTER_REVIEW_DIR/routes.mp4" \
   --output-json "$CARCOUNTER_REVIEW_DIR/routes.json" \
   --output-tracks-csv "$CARCOUNTER_REVIEW_DIR/routes_tracks.csv" \
-  --output-od-csv "$CARCOUNTER_REVIEW_DIR/routes_od.csv"
+  --output-od-csv "$CARCOUNTER_REVIEW_DIR/routes_od.csv" \
+  --output-od-group-csv "$CARCOUNTER_REVIEW_DIR/routes_od_by_group.csv"
 ```
 
 El comando ejecuta inferencia, no utiliza la caché parcial anterior. Revisa el log para confirmar video, modo y tracker efectivos. Si el JSON del perfil sigue en modo `lines`, la salida seguirá siendo aforo por línea.
 
-La matriz OD solo corresponde a `zones`. `directions` clasifica desplazamiento por vector y `lines` cuenta cruces por línea/sentido; ninguno equivale a rutas completas entre bocacalles.
+La matriz OD solo corresponde a `zones`. `--output-od-group-csv` la desglosa por grupo EPS en formato largo (`origen,destino,grupo,conteo`) con los mismos eventos que `routes_by_group` del JSON; sin rutas de zonas solo escribe el encabezado. `directions` clasifica desplazamiento por vector y `lines` cuenta cruces por línea/sentido; ninguno equivale a rutas completas entre bocacalles.
 
 ## Validación para presentar
 

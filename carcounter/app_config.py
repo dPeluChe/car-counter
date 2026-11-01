@@ -39,6 +39,7 @@ class SettingsConfig:
     min_crossing_frames: int = 2
     inference_roi: Optional[list[int]] = None
     camera_max_drift_px: Optional[float] = None
+    cross_class_nms_iou: float = 0.0
     vehicle_samples: list[dict] = field(default_factory=list)
 
     def validate(self) -> list[str]:
@@ -58,6 +59,8 @@ class SettingsConfig:
         drift = self.camera_max_drift_px
         if drift is not None and (type(drift) not in (int, float) or drift <= 0):
             errors.append(f"camera_max_drift_px debe ser un numero positivo, got {drift}")
+        if not 0.0 <= self.cross_class_nms_iou <= 1.0:
+            errors.append(f"cross_class_nms_iou debe estar entre 0 y 1, got {self.cross_class_nms_iou}")
         return errors
 
 
@@ -165,8 +168,14 @@ class AppConfig:
         errors.extend(reference_errors(self.geometry_reference))
         from carcounter.access_routes import zone_role_errors
         errors.extend(zone_role_errors(self.zones, self.zone_roles))
+        errors.extend(self.geometry_findings()[0])
 
         return errors
+
+    def geometry_findings(self) -> tuple[list[str], list[str]]:
+        """(errores, avisos) geométricos: ROI, exclusiones y solapes; cada texto dice qué corregir."""
+        from carcounter.geometry_validation import geometry_findings
+        return geometry_findings(self)
 
     @classmethod
     def from_dict(cls, d: dict) -> AppConfig:
@@ -188,6 +197,7 @@ class AppConfig:
             min_crossing_frames=settings_d.get("min_crossing_frames", 2),
             inference_roi=settings_d.get("inference_roi"),
             camera_max_drift_px=settings_d.get("camera_max_drift_px"),
+            cross_class_nms_iou=settings_d.get("cross_class_nms_iou", 0.0),
             vehicle_samples=settings_d.get("vehicle_samples", []),
         )
 
@@ -269,6 +279,9 @@ class AppConfig:
 
         if self.settings.camera_max_drift_px is not None:
             config["settings"]["camera_max_drift_px"] = self.settings.camera_max_drift_px
+
+        if self.settings.cross_class_nms_iou:
+            config["settings"]["cross_class_nms_iou"] = self.settings.cross_class_nms_iou
 
         if self.settings.inference_roi is not None:
             config["settings"]["inference_roi"] = list(self.settings.inference_roi)
