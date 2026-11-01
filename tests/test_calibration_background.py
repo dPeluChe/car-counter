@@ -87,7 +87,7 @@ def test_sample_test_stops_between_frames_when_cancelled(monkeypatch, tmp_path):
         def release(self): reads.append("release")
 
     monkeypatch.setattr(calib_tests.cv2, "VideoCapture", FakeCapture)
-    monkeypatch.setattr(calib_tests, "infer_with_params", lambda frame, params: [])
+    monkeypatch.setattr(calib_tests, "infer_with_params", lambda frame, params, cancelled=None: [])
     samples = [{"frame": 3, "bbox": (0, 0, 2, 2)}, {"frame": 9, "bbox": (0, 0, 2, 2)}]
     cancelled = threading.Event()
     assert match_saved_samples("v.mp4", samples, {}, cancelled) == 0
@@ -109,6 +109,9 @@ class FakeApp:
         self.scheduled = []
         self._redraw = Mock()
         self.vehicle_samples = []
+        self.calib_rect_start = self.calib_rect_end = None
+        self.exclusion_zones = {}
+        self.sahi_loads = []
 
     def after(self, ms, callback):
         self.scheduled.append(callback)
@@ -121,7 +124,8 @@ class FakeApp:
 
 
 def bind(app):
-    for name in ("_calib_context", "_calib_buttons", "_start_calib_job", "_poll_calib_job"):
+    for name in ("_calib_context", "_calib_buttons", "_start_calib_job", "_poll_calib_job",
+                 "_cancel_calib_if_active"):
         setattr(app, name, getattr(CalibTestsMixin, name).__get__(app))
     return app
 
@@ -151,7 +155,7 @@ def test_ui_stays_free_and_shows_cancel_while_a_test_runs():
 def test_pressing_the_button_again_cancels_and_drops_the_result():
     app, release, shown = bind(FakeApp()), threading.Event(), []
     app._start_calib_job(app.btn_yolo_test, "Probando.", blocked(release, "ok"), shown.append)
-    app._start_calib_job(app.btn_yolo_test, "Probando.", lambda cancelled: None, shown.append)
+    assert app._cancel_calib_if_active()
     release.set()
     run_until_idle(app)
     assert shown == []
@@ -163,6 +167,8 @@ def test_pressing_the_button_again_cancels_and_drops_the_result():
     lambda app: setattr(app, "video_path", "otro.mp4"),
     lambda app: app.profile.update(conf=0.9),
     lambda app: setattr(app, "model", object()),
+    lambda app: setattr(app, "calib_rect_start", (5, 5)),
+    lambda app: setattr(app, "calib_rect_end", (7, 7)),
 ])
 def test_ui_drops_the_result_when_context_changes_mid_run(change):
     app, release, shown = bind(FakeApp()), threading.Event(), []
@@ -180,3 +186,99 @@ def test_worker_error_is_shown_without_raising():
     app._start_calib_job(app.btn_yolo_test, "Probando.", lambda cancelled: 1 / 0, shown.append)
     run_until_idle(app)
     assert shown == [] and "No se pudo probar el perfil" in app.status_var.set.call_args[0][0]
+
+
+def test_redrawing_or_resetting_the_selection_discards_the_old_result():
+    app, release, shown = bind(FakeApp()), threading.Event(), []
+    app.calib_rect_start, app.calib_rect_end = (0, 0), (2, 2)
+    app._start_calib_job(app.btn_yolo_test, "Probando.", blocked(release, "ok"), shown.append)
+    app.calib_rect_start, app.calib_rect_end = (5, 5), (7, 7)
+    app.tick()
+    release.set()
+    run_until_idle(app)
+    assert shown == [] and "Prueba descartada" in app.status_var.set.call_args[0][0]
+    app._start_calib_job(app.btn_yolo_test, "Probando.", blocked(release, "ok"), shown.append)
+    app.calib_rect_start = app.calib_rect_end = None
+    app.tick()
+    run_until_idle(app)
+    assert shown == []
+
+
+def test_pressing_cancel_does_not_prepare_the_profile_again():
+    app, release = bind(FakeApp()), threading.Event()
+    app._snapshot_for_test = Mock(side_effect=AssertionError("no debe preparar al cancelar"))
+    app._calib_job = BackgroundJob()
+    app._calib_job.start(app._calib_context(), blocked(release, "ok"))
+    for name in ("_run_global_detection_test", "_run_calib_test", "_test_saved_samples"):
+        getattr(CalibTestsMixin, name)(app)
+    app._snapshot_for_test.assert_not_called()
+    assert "Cancelando" in app.status_var.set.call_args[0][0]
+    release.set()
+
+
+def sahi_params(loads, delay):
+    def load():
+        loads.append(threading.current_thread())
+        time.sleep(delay)
+        return "sahi-model"
+    cfg = {"effective_conf": 0.1, "imgsz": 320, "sahi_slice_w": 1, "sahi_slice_h": 1, "sahi_overlap": 0.1,
+           "sahi_nms": 0.3, "settings": {}, "conf_per_class": {}, "conf_threshold": 0.1, "geo_constraints": {}}
+    return {"cfg": cfg, "use_sahi": True, "sahi_model": None, "predict_fn": object(),
+            "load_sahi": load, "model": None, "exclusion_np": {}}
+
+
+def test_taking_the_snapshot_never_loads_sahi(monkeypatch):
+    app = bind(FakeApp())
+    app.profile = {"sahi": {"enabled": True}, "settings": {}}
+    app._sahi_model_for = lambda conf, imgsz: app.sahi_loads.append("cargado")
+    monkeypatch.setattr(calib_tests, "resolve_runtime_config",
+                        lambda config, args: {"effective_conf": 0.1, "imgsz": 320})
+    params = calib_tests.profile_inference_params(app)
+    assert app.sahi_loads == [] and params["sahi_model"] is None
+    params["load_sahi"]()
+    assert app.sahi_loads == ["cargado"]
+
+
+def test_cold_sahi_load_runs_in_the_worker_and_can_be_cancelled(monkeypatch):
+    seen = []
+    monkeypatch.setattr(calib_tests, "detect_objects", lambda *a, **kw: seen.append(kw["sahi_model"]) or [])
+    loads, app = [], bind(FakeApp())
+    params = sahi_params(loads, 0.2)
+    app._start_calib_job(app.btn_global_test, "Probando.",
+                         lambda cancelled: calib_tests.infer_with_params(
+                             np.zeros((4, 4, 3), np.uint8), params, cancelled=cancelled), lambda value: None)
+    started = time.time()
+    app.tick()
+    assert time.time() - started < 0.1 and app._calib_job.active
+    run_until_idle(app)
+    assert loads and loads[0] is not threading.current_thread() and seen == ["sahi-model"]
+    cancelled = threading.Event()
+    cancelled.set()
+    loads.clear()
+    assert calib_tests.infer_with_params(np.zeros((4, 4, 3), np.uint8), params, cancelled=cancelled) is None
+    assert loads == []
+
+
+def test_calibration_and_preview_never_infer_at_the_same_time(monkeypatch):
+    active, peak, lock = [0], [0], threading.Lock()
+
+    def slow(*args, **kwargs):
+        with lock:
+            active[0] += 1
+            peak[0] = max(peak[0], active[0])
+        time.sleep(0.05)
+        with lock:
+            active[0] -= 1
+        return []
+
+    monkeypatch.setattr(calib_tests, "detect_objects", slow)
+    params = sahi_params([], 0)
+    params["use_sahi"], params["load_sahi"] = False, None
+    frame = np.zeros((4, 4, 3), np.uint8)
+    entries = [calib_tests.infer_with_params, CalibTestsMixin._infer_with_params]
+    consumers = [threading.Thread(target=entries[i % 2], args=(frame, params)) for i in range(4)]
+    for consumer in consumers:
+        consumer.start()
+    for consumer in consumers:
+        consumer.join()
+    assert peak[0] == 1

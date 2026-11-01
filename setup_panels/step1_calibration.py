@@ -311,10 +311,11 @@ class CalibrationMixin:
         x1, y1, x2, y2 = box
         return x1 <= px <= x2 and y1 <= py <= y2
 
-    def _ensure_sahi_model(self, conf):
+    def _sahi_model_for(self, conf, imgsz):
+        """Sin variables de Tk: la llama el hilo de trabajo bajo INFERENCE_LOCK."""
         if self.sahi_model is not None:
             self.sahi_model.confidence_threshold = conf
-            self.sahi_model.image_size = self.infer_imgsz.get()
+            self.sahi_model.image_size = imgsz
             return self.sahi_model
         try:
             from sahi import AutoDetectionModel
@@ -325,7 +326,7 @@ class CalibrationMixin:
             model_path=self._model_path,
             confidence_threshold=conf,
             device="cpu",
-            image_size=self.infer_imgsz.get(),
+            image_size=imgsz,
         )
         return self.sahi_model
 
