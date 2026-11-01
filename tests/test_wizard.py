@@ -75,7 +75,8 @@ def test_run_command_outputs_and_video_override(tmp_path):
     same = build_run_command("py", "p.json", str(profile_video), str(profile_video), "botsort", ["--model", "m.pt"], run_dir)
     assert "--video" not in same
     for flag, name in (("--output", "video.mp4"), ("--output-json", "results.json"),
-                       ("--output-tracks-csv", "tracks.csv"), ("--output-od-csv", "od_matrix.csv")):
+                       ("--output-tracks-csv", "tracks.csv"), ("--output-od-csv", "od_matrix.csv"),
+                       ("--output-od-group-csv", "od_by_group.csv")):
         assert same[same.index(flag) + 1] == str(run_dir / name)
     assert same[:6] == ["py", "main.py", "--config", "p.json", "--tracker", "botsort"]
     other = build_run_command("py", "p.json", "otro.mp4", str(profile_video), "bytetrack", [], run_dir)
