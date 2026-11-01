@@ -33,6 +33,7 @@ class CarCounterApp(ModelStepMixin, VideoStepMixin, LaunchStepMixin, RunControlM
         self._process_kind = None
         self._run_dir = None
         self._log_file = None
+        self._cancel_requested = False
         self._setup_mtime = None
         self._cancel_btn = None
 

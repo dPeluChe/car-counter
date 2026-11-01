@@ -19,6 +19,23 @@ _FAMILIES = [
 ]
 
 
+def reveal_in_view(canvas, inner, widget):
+    """Desplaza canvas lo justo para que widget (hijo de inner) quede visible."""
+    try:
+        if not str(widget).startswith(str(inner)):
+            return
+        total = max(inner.winfo_height(), 1)
+        top = widget.winfo_rooty() - inner.winfo_rooty()
+        bottom = top + widget.winfo_height()
+        first, last = canvas.yview()
+        if top < first * total:
+            canvas.yview_moveto(top / total)
+        elif bottom > last * total:
+            canvas.yview_moveto((bottom - canvas.winfo_height()) / total)
+    except tk.TclError:
+        pass
+
+
 class ModelStepMixin:
     """Construccion del paso 1 (seleccion de modelo) + acciones."""
 
@@ -42,6 +59,7 @@ class ModelStepMixin:
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
         self._bind_wheel(canvas)
+        self._reveal_focus_in(canvas, inner)
 
         self._model_btns = {}
         for label, belongs, desc in _FAMILIES:
@@ -74,8 +92,12 @@ class ModelStepMixin:
         for event in _WHEEL_EVENTS:
             canvas.bind_all(event, _on_mousewheel)
 
+    def _reveal_focus_in(self, canvas, inner):
+        """Con Tab el foco puede caer en un botón fuera de la vista: desplaza la lista hasta mostrarlo."""
+        canvas.bind_all("<FocusIn>", lambda event: reveal_in_view(canvas, inner, event.widget))
+
     def _unbind_wheel(self):
-        for event in _WHEEL_EVENTS:
+        for event in _WHEEL_EVENTS + ("<FocusIn>",):
             self.unbind_all(event)
 
     def _render_model_family(self, parent, family_label, belongs, desc):

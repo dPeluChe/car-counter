@@ -21,8 +21,11 @@ BTN_BG = "#313244"
 
 
 def btn(parent, text, command, bg=BTN_BG, fg=FG, font=("Arial", 10), **kw):
-    """Boton con theme consistente (macOS compatible)."""
-    return tk.Button(parent, text=text, command=command, bg=bg, fg=fg,
-                     font=font, relief="flat", padx=14, pady=6,
-                     activebackground=bg, activeforeground=fg,
-                     highlightbackground=bg, highlightcolor=bg, bd=0, **kw)
+    """Boton con theme consistente (macOS compatible); el foco de teclado se ve y Enter lo activa."""
+    button = tk.Button(parent, text=text, command=command, bg=bg, fg=fg,
+                       font=font, relief="flat", padx=14, pady=6,
+                       activebackground=bg, activeforeground=fg,
+                       highlightbackground=bg, highlightcolor=FG_BRIGHT, highlightthickness=2,
+                       bd=0, **kw)
+    button.bind("<Return>", lambda event: button.invoke())
+    return button

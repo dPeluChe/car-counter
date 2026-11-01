@@ -98,6 +98,9 @@ class LaunchStepMixin:
         if self._run_dir is not None:
             btn(actions, "Abrir última salida", font=("Arial", 9),
                 command=lambda: self._open_output_folder(self._run_dir)).pack(side="left", padx=(8, 0))
+            if (self._run_dir / "results.json").is_file():
+                btn(actions, "Ver resumen", font=("Arial", 9),
+                    command=self._show_run_summary).pack(side="left", padx=(8, 0))
         self._cancel_btn = btn(actions, "Cancelar", bg=RED, fg=BG_DARK, font=("Arial", 11, "bold"),
                                command=self._cancel_run,
                                state="normal" if self._busy() else "disabled")

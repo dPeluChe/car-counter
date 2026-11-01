@@ -42,9 +42,23 @@ class RunControlMixin:
             self._show_step(2)
 
     def _launch(self, command, kind, **kwargs):
-        self._process = subprocess.Popen(command, cwd=str(paths.root), start_new_session=True, **kwargs)
+        """Inicia el subproceso; si no arranca lo dice en pantalla y devuelve False."""
+        self._cancel_requested = False
+        try:
+            self._process = subprocess.Popen(command, cwd=str(paths.root), start_new_session=True, **kwargs)
+        except OSError as error:
+            self._close_log()
+            self._status.set(f"No se pudo iniciar el proceso: {error}")
+            messagebox.showerror("No se pudo iniciar", f"{error}\n\nComando: {command[0]}")
+            return False
         self._process_kind = kind
         self.after(POLL_MS, self._poll_process)
+        return True
+
+    def _close_log(self):
+        if self._log_file is not None:
+            self._log_file.close()
+            self._log_file = None
 
     def _open_setup(self):
         if self._busy():
@@ -71,8 +85,8 @@ class RunControlMixin:
                 return
             self._selected_config.set(config)
         self._setup_mtime = _mtime(config)
-        self._launch(build_setup_command(sys.executable, video, config, model.setup_model), "setup")
-        self._status.set("Configurador abierto: guarda el perfil y ciérralo para volver")
+        if self._launch(build_setup_command(sys.executable, video, config, model.setup_model), "setup"):
+            self._status.set("Configurador abierto: guarda el perfil y ciérralo para volver")
         self._refresh_step()
 
     def _run_processing(self):
@@ -113,8 +127,8 @@ class RunControlMixin:
         (run_dir / "command.txt").write_text(shlex.join(command) + "\n", encoding="utf-8")
         self._run_dir = run_dir
         self._log_file = open(run_dir / "run.log", "w", encoding="utf-8")
-        self._launch(command, "run", stdout=self._log_file, stderr=subprocess.STDOUT)
-        self._status.set(f"Procesando... salidas en {run_dir}")
+        if self._launch(command, "run", stdout=self._log_file, stderr=subprocess.STDOUT):
+            self._status.set(f"Procesando... salidas en {run_dir}")
         self._refresh_step()
 
     def _confirm_video_matches(self, video, profile_video):
@@ -157,18 +171,19 @@ class RunControlMixin:
                 "Se cerrará el configurador y se perderá lo que no hayas guardado. ¿Continuar?"):
             return
         process = self._process
+        self._cancel_requested = True
         terminate_group(process)
         self._status.set("Cancelando...")
         # Si ignora SIGTERM la corrida quedaría colgada y el wizard bloqueado
         self.after(KILL_AFTER_MS, lambda: kill_group(process))
 
     def _finish_run(self, code):
-        if self._log_file is not None:
-            self._log_file.close()
-            self._log_file = None
+        self._close_log()
         run_dir = self._run_dir
         log_path = run_dir / "run.log"
-        if code == 0:
+        if code != 0 and self._cancel_requested:
+            self._status.set(f"Cancelado: quedan salidas parciales en {run_dir}")
+        elif code == 0:
             self._status.set(f"Terminado: {run_dir}")
             if messagebox.askyesno("Procesamiento terminado",
                                    f"Salidas en:\n{run_dir}\n\n{results_summary(run_dir / 'results.json')}"
@@ -179,6 +194,13 @@ class RunControlMixin:
             messagebox.showerror("Error al procesar",
                                  f"Código {code}. Últimas líneas de {log_path}:\n\n{tail(log_path)}")
         self._refresh_step()
+
+    def _show_run_summary(self):
+        """Vuelve a mostrar el resumen de la última corrida sin tener que abrir la carpeta."""
+        if self._run_dir is None:
+            return
+        messagebox.showinfo("Resumen de la última corrida",
+                            f"{self._run_dir}\n\n{results_summary(self._run_dir / 'results.json')}")
 
     def _open_output_folder(self, folder):
         try:

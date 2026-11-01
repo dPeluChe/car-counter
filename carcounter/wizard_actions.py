@@ -178,8 +178,12 @@ def results_summary(results_path):
         return "Sin results.json"
     routes = data.get("routes", {})
     top = ", ".join(f"{route}: {count}" for route, count in list(routes.items())[:5])
+    groups = "".join(
+        f"\n{route}: " + ", ".join(f"{group} {count}" for group, count in counts.items())
+        for route, counts in list((data.get("routes_by_group") or {}).items())[:5])
     return (f"Frames: {data.get('frames_processed', '?')}  |  IDs: {data.get('total_vehicles_tracked', '?')}  |  "
-            f"Conteos: {data.get('total_routes_completed', '?')}" + (f"\n{top}" if top else ""))
+            f"Conteos: {data.get('total_routes_completed', '?')}" + (f"\n{top}" if top else "")
+            + (f"\nPor grupo EPS:{groups}" if groups else ""))
 
 
 def open_folder_command(folder, platform):

@@ -94,6 +94,7 @@ def test_tail_and_results_summary(tmp_path):
     results.write_text(json.dumps({"frames_processed": 300, "total_vehicles_tracked": 282,
                                    "total_routes_completed": 6, "routes": {"Anillo oeste ↓": 6}}))
     assert "Conteos: 6" in results_summary(results) and "Anillo oeste ↓: 6" in results_summary(results)
+    assert "Por grupo EPS" not in results_summary(results)
 
 
 def test_profile_errors_reports_unreadable_json_and_missing_geometry(tmp_path):
@@ -257,12 +258,85 @@ def test_run_processing_writes_outputs_and_shows_log_on_error(listo, tmp_path):
     assert process.command[process.command.index("--output-tracks-csv") + 1] == str(run_dir / "tracks.csv")
     assert (run_dir / "command.txt").exists()
     assert str(wizard._cancel_btn.cget("state")) == "normal"
-    wizard._cancel_run()
-    assert process.terminated
     process.codes[0] = 1
     wizard._poll_process()
     errors = [args for name, args in wizard.calls if name == "showerror"]
     assert errors and "perfil inválido" in errors[-1][1]
+
+
+def test_cancelling_a_run_says_cancelled_without_an_error_dialog(listo):
+    wizard, _, _ = listo
+    wizard._run_processing()
+    process = FakeProcess.instances[-1]
+    wizard._cancel_run()
+    assert process.terminated
+    process.codes[0] = -15
+    wizard._poll_process()
+    assert wizard._status.get().startswith("Cancelado: quedan salidas parciales")
+    assert not [name for name, _ in wizard.calls if name == "showerror"]
+    assert not wizard._busy()
+    wizard._run_processing()
+    FakeProcess.instances[-1].codes[0] = 1
+    wizard._poll_process()
+    assert [name for name, _ in wizard.calls if name == "showerror"], "un fallo posterior sí es un error"
+
+
+def test_a_process_that_cannot_start_is_reported_and_leaves_the_wizard_free(listo, monkeypatch):
+    wizard, _, _ = listo
+    import carcounter.app_steps.run_control as run_control
+
+    def broken(*args, **kwargs):
+        raise FileNotFoundError("python no existe")
+    monkeypatch.setattr(run_control.subprocess, "Popen", broken)
+    wizard._run_processing()
+    assert not wizard._busy() and wizard._log_file is None
+    assert "No se pudo iniciar" in wizard._status.get() and "python no existe" in wizard._status.get()
+    assert wizard.calls[-1][0] == "showerror"
+
+
+def test_last_run_summary_can_be_reopened_from_the_wizard(listo):
+    wizard, _, _ = listo
+    assert "Ver resumen" not in _labels(wizard._content)
+    wizard._run_processing()
+    FakeProcess.instances[-1].codes[0] = 0
+    (wizard._run_dir / "results.json").write_text(json.dumps({
+        "frames_processed": 20, "total_vehicles_tracked": 5, "total_routes_completed": 3,
+        "routes": {"Norte → Sur": 3}, "routes_by_group": {"Norte → Sur": {"ligeros": 2, "pesados": 1}}}))
+    wizard._poll_process()
+    wizard._show_step(2)
+    assert "Ver resumen" in _labels(wizard._content)
+    wizard.calls.clear()
+    wizard._show_run_summary()
+    name, args = wizard.calls[-1]
+    assert name == "showinfo" and "Conteos: 3" in args[1] and "Norte → Sur: ligeros 2, pesados 1" in args[1]
+
+
+def test_buttons_show_keyboard_focus_and_bind_enter(listo):
+    wizard, _, _ = listo
+    from carcounter.app_theme import btn
+    button = btn(wizard._content, "Probar", lambda: None)
+    assert str(button.cget("highlightcolor")) != str(button.cget("highlightbackground"))
+    assert int(str(button.cget("highlightthickness"))) >= 2
+    assert button.bind("<Return>")
+
+
+def test_focus_scrolls_the_model_list_to_a_button_below_the_fold(wizard):
+    from carcounter.app_steps.step_model import reveal_in_view
+    wizard.geometry("820x420")
+    wizard.deiconify()
+    wizard._show_step(0)
+    wizard.update()
+    downloads = [w for w in wizard._model_btns.values() if str(w.cget("state")) == "normal"]
+    canvas = next(w for w in wizard._content.winfo_children()[-1].winfo_children() if w.winfo_class() == "Canvas")
+    inner = downloads[-1].master
+    while inner.master is not canvas:
+        inner = inner.master
+    assert downloads and canvas.yview()[0] == 0.0
+    reveal_in_view(canvas, inner, downloads[-1])
+    wizard.update()
+    assert canvas.yview()[0] > 0.0
+    assert 0 <= downloads[-1].winfo_rooty() - canvas.winfo_rooty() <= canvas.winfo_height()
+    wizard.withdraw()
 
 
 def test_cancelling_the_configurator_asks_before_closing_it(listo):
