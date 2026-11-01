@@ -75,6 +75,7 @@ def build_parser():
     parser.add_argument("--output-track-events-csv", default=None,
                         help="Registrar apariciones, ausencias y cambios de clase de IDs observados")
     parser.add_argument("--output-od-csv", default=None)
+    parser.add_argument("--output-od-group-csv", default=None)
     parser.add_argument("--heatmap", action="store_true")
     parser.add_argument("--demo-mode", dest="demo_mode", action="store_true")
     parser.add_argument("--serve", action="store_true", help="Start FastAPI server")
@@ -213,6 +214,7 @@ def main():
             sahi_overlap=cfg["sahi_overlap"], sahi_nms_threshold=cfg["sahi_nms"],
             device=device, detector_backend=detector_backend, rfdetr_model=rfdetr_model,
             inference_roi=cfg["settings"].get("inference_roi"),
+            cross_class_iou=cfg["cross_class_iou"],
         ),
         "consecutive_errors": 0,
     }

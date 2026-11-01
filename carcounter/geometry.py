@@ -82,6 +82,23 @@ def apply_nms(det_list, det_classes, iou_threshold):
     return [det_list[k] for k in keep], [det_classes[k] for k in keep]
 
 
+def cross_class_duplicates(boxes, classes, iou_threshold):
+    """Indices suprimidos: caja de otra clase sobre el mismo vehiculo que una de mayor confianza.
+
+    boxes: filas [x1, y1, x2, y2, conf]. Cajas de la misma clase no se tocan.
+    """
+    order = sorted(range(len(boxes)), key=lambda i: -boxes[i][4])
+    suppressed = set()
+    for pos, i in enumerate(order):
+        if i in suppressed:
+            continue
+        for j in order[pos + 1:]:
+            if (j not in suppressed and classes[j] != classes[i]
+                    and bbox_iou(boxes[i][:4], boxes[j][:4]) > iou_threshold):
+                suppressed.add(j)
+    return suppressed
+
+
 # ── Geometry filters ──────────────────────────
 
 def passes_geometry_filter(x1, y1, x2, y2, constraints):

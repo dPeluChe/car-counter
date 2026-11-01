@@ -49,12 +49,13 @@ env/bin/python main.py --config "$CARCOUNTER_REVIEW_DIR/profile.json" \
   --output "$CARCOUNTER_REVIEW_DIR/routes.mp4" \
   --output-json "$CARCOUNTER_REVIEW_DIR/routes.json" \
   --output-tracks-csv "$CARCOUNTER_REVIEW_DIR/routes_tracks.csv" \
-  --output-od-csv "$CARCOUNTER_REVIEW_DIR/routes_od.csv"
+  --output-od-csv "$CARCOUNTER_REVIEW_DIR/routes_od.csv" \
+  --output-od-group-csv "$CARCOUNTER_REVIEW_DIR/routes_od_by_group.csv"
 ```
 
 El comando ejecuta inferencia, no utiliza la caché parcial anterior. Revisa el log para confirmar video, modo y tracker efectivos. Si el JSON del perfil sigue en modo `lines`, la salida seguirá siendo aforo por línea.
 
-La matriz OD solo corresponde a `zones`. `directions` clasifica desplazamiento por vector y `lines` cuenta cruces por línea/sentido; ninguno equivale a rutas completas entre bocacalles.
+La matriz OD solo corresponde a `zones`. `--output-od-group-csv` la desglosa por grupo EPS en formato largo (`origen,destino,grupo,conteo`) con los mismos eventos que `routes_by_group` del JSON; sin rutas de zonas solo escribe el encabezado. `directions` clasifica desplazamiento por vector y `lines` cuenta cruces por línea/sentido; ninguno equivale a rutas completas entre bocacalles.
 
 ## Validación para presentar
 
