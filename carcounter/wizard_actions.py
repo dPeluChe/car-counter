@@ -77,6 +77,9 @@ def profile_rows(profile):
     rows.append(("Referencia", f"Frame {reference['frame_index']} · video vinculado" if reference
                  else "Sin referencia guardada; confirma el encuadre en el configurador"))
     drift = settings.get("camera_max_drift_px")
+    warnings = AppConfig.from_dict(profile).geometry_findings()[1]
+    if warnings:
+        rows.append(("Avisos", " ".join(warnings)))
     rows.append(("Cámara", f"Detener si deriva > {drift} px" if drift is not None else "Monitor desactivado"))
     return rows
 

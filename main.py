@@ -99,7 +99,10 @@ def main():
         calibrated_frame = validate_profile_video(cfg["raw_config"], cfg["video_path"])
     except (OSError, ValueError) as error:
         raise SystemExit(f"Perfil incompatible: {error}") from error
-    config_errors = AppConfig.from_dict(cfg["raw_config"]).validate()
+    profile_config = AppConfig.from_dict(cfg["raw_config"])
+    for warning in profile_config.geometry_findings()[1]:
+        log.warning("Geometría: %s", warning)
+    config_errors = profile_config.validate()
     if config_errors:
         for error in config_errors:
             log.error("Perfil inválido: %s", error)

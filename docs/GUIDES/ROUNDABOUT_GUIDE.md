@@ -37,6 +37,8 @@ Las exclusiones descartan detecciones por su centro. Un auto estacionado sigue s
 
 ## Revisar, guardar y ejecutar
 
+Antes de guardar o ejecutar, el perfil se valida. **Bloquea** (el texto dice qué corregir) un elemento que nunca puede contar: sin ningún punto dentro de la ROI de inferencia, cubierto por las exclusiones, o dos zonas que se solapan 50 % o más de la menor. **Avisa** sin bloquear un elemento parcialmente fuera de la ROI, excluido en 50 % o más, o dos zonas con solape de 5 % a 50 %. Los porcentajes son aproximados.
+
 Usa preview para comprobar correspondencia de zonas, movimiento y cajas. Guarda, cierra y reabre la copia para verificar persistencia. Si la cámara cambia de encuadre, revisa la geometría contra el frame de referencia; el monitor de deriva no estabiliza la imagen.
 
 Ejemplo para el video de referencia completo, después de guardar un perfil de zonas apropiado:
