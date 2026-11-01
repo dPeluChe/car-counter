@@ -99,7 +99,7 @@ def evaluate(frames_dir, annotations_dir, model_path=None, iou_threshold=0.5,
                              sahi_overlap=cfg["sahi_overlap"], sahi_nms_threshold=cfg["sahi_nms"],
                              inference_roi=roi, device=device)
         rows, classes = filter_detections(raw, lambda name: cfg["conf_per_class"].get(name, cfg["conf_threshold"]),
-                                          cfg["geo_constraints"], exclusion)
+                                          cfg["geo_constraints"], exclusion, cfg["cross_class_iou"])
         preds = [(*map(int, row[:4]), canonical_vehicle_label(name)) for row, name in zip(rows, classes)]
         gt_dets = scoped_ground_truth(gt_dets, roi, exclusion)
         match = match_detections(preds, gt_dets, iou_threshold=iou_threshold, class_aware=True)

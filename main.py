@@ -211,6 +211,7 @@ def main():
             sahi_overlap=cfg["sahi_overlap"], sahi_nms_threshold=cfg["sahi_nms"],
             device=device, detector_backend=detector_backend, rfdetr_model=rfdetr_model,
             inference_roi=cfg["settings"].get("inference_roi"),
+            cross_class_iou=cfg["cross_class_iou"],
         ),
         "consecutive_errors": 0,
     }

@@ -99,6 +99,7 @@ def resolve_runtime_config(config, args):
         "sahi_slice_h": sahi_cfg.get("slice_height", 512),
         "sahi_overlap": sahi_cfg.get("overlap_ratio", 0.2),
         "sahi_nms": sahi_cfg.get("nms_threshold", 0.3),
+        "cross_class_iou": settings.get("cross_class_nms_iou", 0.0),
     }
 
 
