@@ -29,15 +29,15 @@ install: ## Instala dependencias en el entorno env/
 setup: ## Abre el configurador GUI para dibujar zonas (genera CONFIG)
 	$(PYTHON) setup.py --video "$(or $(VIDEO),$(DEMO_VIDEO))" --config $(CONFIG)
 
-run: ## Corre el pipeline en un clip corto (FRAMES frames) -> results.json + od_matrix.csv + tracks.csv
+run: ## Corre el pipeline en un clip corto (FRAMES frames) -> results.json + od_matrix.csv + od_by_group.csv + tracks.csv
 	$(PYTHON) main.py --config $(CONFIG) $(VIDEO_ARG) --max-frames $(FRAMES) \
 		--output-json $(OUTDIR)/results.json --output-od-csv $(OUTDIR)/od_matrix.csv \
-		--output-tracks-csv $(TRACKS)
+		--output-od-group-csv $(OUTDIR)/od_by_group.csv --output-tracks-csv $(TRACKS)
 
 run-full: ## Corre el pipeline sobre el video completo
 	$(PYTHON) main.py --config $(CONFIG) $(VIDEO_ARG) \
 		--output-json $(OUTDIR)/results.json --output-od-csv $(OUTDIR)/od_matrix.csv \
-		--output-tracks-csv $(TRACKS)
+		--output-od-group-csv $(OUTDIR)/od_by_group.csv --output-tracks-csv $(TRACKS)
 
 review-tracks: ## Tracks sin destino y posibles cambios de ID con recortes (REVIEW_DIR nuevo)
 	@test -n "$(REVIEW_DIR)" || (echo "REVIEW_DIR requerido: directorio nuevo para el reporte"; exit 1)

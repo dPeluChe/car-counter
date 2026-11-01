@@ -10,7 +10,8 @@ def detect_and_track(frame, *, model, sahi_model, sahi_predict_fn, sort_tracker,
                      geo_constraints, exclusion_np,
                      sahi_slice_w, sahi_slice_h, sahi_overlap, sahi_nms_threshold,
                      device="cpu", detector_backend="yolo", rfdetr_model=None,
-                     inference_roi=None, raw_detections=None, on_detections=None):
+                     inference_roi=None, raw_detections=None, on_detections=None,
+                     cross_class_iou=0.0):
     """Ejecuta deteccion + tracking y retorna lista de (x1,y1,x2,y2,id,cls_name)."""
     if sort_tracker is None:
         raise RuntimeError("No hay tracker disponible; no se pueden asignar IDs persistentes")
@@ -25,7 +26,7 @@ def detect_and_track(frame, *, model, sahi_model, sahi_predict_fn, sort_tracker,
     if on_detections is not None:
         on_detections(raw)
     from carcounter.detector import filter_detections
-    detections, classes = filter_detections(raw, conf_for, geo_constraints, exclusion_np)
+    detections, classes = filter_detections(raw, conf_for, geo_constraints, exclusion_np, cross_class_iou)
     if hasattr(sort_tracker, "update_detections"):
         return sort_tracker.update_detections(frame, detections, classes)
     return _track_with_sort(sort_tracker, detections, classes)

@@ -35,6 +35,7 @@ Los valores están en el perfil de referencia.
 | `exclusion_zones` | Descarte por centro de la caja | No ocultar vehículos válidos para mejorar métricas |
 | `sahi.enabled`, tiles y solapamiento | Inferencia por recortes con fusión global | Revisar bordes y autos próximos; un duplicado no es recuperación |
 | `sahi.nms_threshold` | Supresión global tras SAHI | Excesiva fusiona autos distintos |
+| `settings.cross_class_nms_iou` | Quita duplicados de otra clase sobre el mismo vehículo (0 = apagado) | Se aplica sobre la caché: no exige otra grabación. Compara con `scripts/compare_cross_class_nms.py` ([informe](../RESEARCH/CROSS_CLASS_NMS_2026_10_31.md)) |
 | `settings.min_origin_frames`, `min_dest_frames` | Confirmación de zonas | Subirlos pierde autos rápidos; corregir primero la geometría |
 | `settings.min_crossing_frames` | Confirmación del cambio de lado | Mueve el frame del evento |
 

@@ -30,8 +30,8 @@ from carcounter.drawing import (
     draw_zones,
 )
 from carcounter.export import (
-    export_benchmark, export_csv, export_json, export_od_matrix_csv,
-    export_tracks_csv, print_summary,
+    export_benchmark, export_csv, export_json, export_od_by_group_csv,
+    export_od_matrix_csv, export_tracks_csv, print_summary,
 )
 from carcounter.logging_config import get_logger
 from carcounter.paths import paths
@@ -99,6 +99,7 @@ def resolve_runtime_config(config, args):
         "sahi_slice_h": sahi_cfg.get("slice_height", 512),
         "sahi_overlap": sahi_cfg.get("overlap_ratio", 0.2),
         "sahi_nms": sahi_cfg.get("nms_threshold", 0.3),
+        "cross_class_iou": settings.get("cross_class_nms_iou", 0.0),
     }
 
 
@@ -366,6 +367,8 @@ def export_results(args, cfg, counter, *, frame_count, total_frames, duration,
         export_tracks_csv(args.output_tracks_csv, counter.get_track_data())
     if args.output_od_csv:
         export_od_matrix_csv(args.output_od_csv, counter.od_matrix)
+    if args.output_od_group_csv:
+        export_od_by_group_csv(args.output_od_group_csv, counter.counting_events)
 
     if args.benchmark and benchmark_data:
         export_benchmark(

@@ -7,7 +7,7 @@ import numpy as np
 
 from carcounter.geometry import bbox_iou
 from carcounter.detection import detect_objects
-from carcounter.detector import filter_detections, detection_rejection
+from carcounter.detector import filter_detections, detection_rejection, mark_cross_class_duplicates
 from carcounter.runtime import resolve_runtime_config
 from setup_panels.background_job import BackgroundJob
 from types import SimpleNamespace
@@ -63,12 +63,12 @@ def infer_with_params(frame, params, diagnostics=False, cancelled=None):
             inference_roi=cfg["settings"].get("inference_roi"),
         )
     if diagnostics:
-        return [dict(det, rejection=detection_rejection(
+        return mark_cross_class_duplicates([dict(det, rejection=detection_rejection(
             det, lambda name: cfg["conf_per_class"].get(name, cfg["conf_threshold"]),
-            cfg["geo_constraints"], params["exclusion_np"])) for det in raw]
+            cfg["geo_constraints"], params["exclusion_np"])) for det in raw], cfg["cross_class_iou"])
     rows, classes = filter_detections(
         raw, lambda name: cfg["conf_per_class"].get(name, cfg["conf_threshold"]),
-        cfg["geo_constraints"], params["exclusion_np"],
+        cfg["geo_constraints"], params["exclusion_np"], cfg["cross_class_iou"],
     )
     return [dict(bbox=tuple(map(int, row[:4])), conf=float(row[4]), cls_name=name)
             for row, name in zip(rows, classes)]

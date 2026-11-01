@@ -125,7 +125,7 @@ El parser rechaza formas incompatibles y cajas inválidas en vez de omitirlas: [
 - [ ] Revisar pérdidas de ID en oclusiones, cambios de ID cerca de líneas/zonas y IDs duplicados del mismo auto.
 - [ ] Con zonas del tramo oficial, correr `make review-tracks` y clasificar a mano la causa de cada track perdido y de los primeros candidatos a cambio de ID (oclusión, imagen poco clara, geometría o tracker).
 - [ ] Reducir la fragmentación ([cifra actual](GUIDES/VERIFIED_STATE.md)): comparar `track_buffer`, umbrales y BoT-SORT midiendo fragmentación y rutas completas con `make review-tracks`.
-- [ ] NMS sin clase en YOLO: `carcounter/detector.py` llama al modelo sin `agnostic_nms`, así que una caja `car` y otra `van` sobre el mismo vehículo sobreviven; ByteTrack asocia por IoU y la segunda caja puede crear un ID nuevo. Solo aplica a la ruta sin SAHI: con SAHI, `carcounter/geometry.py:apply_nms` suprime por IoU sin mirar la clase y ese duplicado no sobrevive. Es la causa probable del mejor candidato del replay (ID 385 `car` → ID 397 `van`, mismo lugar, un frame): en ese replay 38 de los 83 candidatos cambian de clase. Medir con replay antes y después: candidatos con cambio de clase, fragmentación y eventos.
+- [x] NMS sin clase: `settings.cross_class_nms_iou` (apagado por defecto) quita la caja de menor confianza de otra clase sobre el mismo vehículo, con pruebas y `scripts/compare_cross_class_nms.py`. Replay de 300 frames: 282 a 120 tracks, 150 a 5 cortos, 83 a 0 candidatos de cambio de ID y los mismos seis eventos con umbrales de 0.2 a 0.8. Sin referencia humana no demuestra exactitud; candidato 0.7 pendiente de TODO-028 ([informe](RESEARCH/CROSS_CLASS_NMS_2026_10_31.md)).
 - [ ] Registrar desde `UltralyticsTracker` los tracks perdidos, removidos y creados por frame, para detectar cambios de ID sin heurística de distancia.
 - [x] Exportar `source_frame` en eventos y campos `*_source_frame` en tracks; conservar los frames relativos para compatibilidad.
 - [ ] Comparar ByteTrack y BoT-SORT sobre una caché común; variar un parámetro por experimento y registrar parámetros efectivos. `with_reid=true` no está soportado en el wrapper actual.
@@ -147,11 +147,12 @@ El parser rechaza formas incompatibles y cajas inválidas en vez de omitirlas: [
 **Archivos relevantes:** `setup_panels/step2_zones.py`, `carcounter/config_io.py`, `carcounter/runtime.py`, `carcounter/counting.py`, `tests/test_counting_regressions.py`.
 
 - [ ] Guardar mapa de rutas permitidas, ROI y zonas en un perfil distinto al ejemplo de una línea.
-- [ ] Añadir validación de geometría que identifique zonas inalcanzables por la región de detección y destinos prematuros, con diagnóstico comprensible.
+- [x] Validación geométrica (`carcounter/geometry_validation.py`): zonas y líneas fuera de la ROI (las direcciones solo validan coordenadas), coordenadas inválidas, cubiertas por exclusiones y zonas solapadas, con qué corregir; los casos sin salida bloquean `validate()`, los parciales avisan ([avance](TASK_COMPLETED/2610.md)).
+- [ ] Destinos prematuros: detectar una zona de salida que se alcanza antes de completar el tránsito esperado; la validación geométrica actual no lo cubre.
 - [x] Probar sintéticamente A→B, salida sin permanencia suficiente y trayectoria incompleta; falta contrastar con video revisado.
 - [x] Entradas y salidas por acceso mediante `zone_roles`, editor en configurador y pruebas de retorno entre polígonos distintos del mismo acceso.
 - [ ] Comparar eventos y matriz origen/destino contra revisión humana del mismo video y tramo.
-- [ ] Exportar la matriz origen/destino por grupo EPS también en CSV (hoy está en `routes_by_group` del JSON).
+- [x] Matriz origen/destino por grupo EPS en CSV (`--output-od-group-csv`, `od_by_group.csv` en el wizard), derivada de los mismos eventos que `routes_by_group` ([avance](TASK_COMPLETED/2610.md)).
 - [ ] Entregar video, JSON con eventos, CSV de tracks/OD y reporte de rutas revisadas, sin presentar IDs como autos.
 
 **Pruebas manuales:** PRUEBA-04 y PRUEBA-06. **Cierre:** rutas del alcance revisadas, incidentes clasificados y umbrales acordados alcanzados; no basta conservar los cruces de una sola línea.
