@@ -40,6 +40,8 @@ Repetir pruebas sin inferencia, ajustar tracker y vigilar la cámara: [DETECTION
 
 La demo aérea necesita los archivos locales `assets/glorieta_test1min.mp4` y `models/yolo/yolov8l-visdrone.pt`, y usa [aerial_counting.example.json](docs/GUIDES/aerial_counting.example.json).
 
+Los videos completos (de 2 a 3.4 GB) pueden vivir en un disco externo y enlazarse desde `assets/` con `ln -s <ruta_del_disco>/<video> assets/<video>`, así los perfiles siguen apuntando a `assets/`. Con el disco desconectado el enlace queda roto y el pipeline falla al abrir el video; la lectura es más lenta pero sirve para las pruebas. Los videos pequeños de demo (`glorieta_test1min.mp4`) conviene dejarlos en local.
+
 ## Modos de conteo
 
 | Modo | Config | Resultado |
